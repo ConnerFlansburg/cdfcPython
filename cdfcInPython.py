@@ -16,7 +16,7 @@ from tkinter.filedialog import askFile
 # TODO change appends so they use pointers
 # TODO write main
 
-#################### Constants! Do not change any of these ######################
+##################### Constants/Globals ######################
 
 # CROSSOVER_RATE is the crossover rate
 CROSSOVER_RATE = 0.8
@@ -45,6 +45,11 @@ FEATURE_NUMBER = None
 # the population size
 POPULATION_SIZE = None
 
+# the number of instances in the training data
+INSTANCES_NUMBER = 0
+
+# this will store the number of times a class occurs in the training data in a dictionary keyed by it's classId
+occurences = {}
 
 # *** set values below for every new dataset *** #
 
@@ -63,7 +68,7 @@ FN = None
 # PS (pop size) is the population size (equal to number of features * beta)
 PS = None
 
-############################# End of Constants ###############################
+######################### End of Constants/Globals ###############################
 
 ####################### Namespaces/Structs & Objects #########################
 
@@ -124,6 +129,9 @@ def main():
     Tk().withdraw()  # prevent root window caused by Tkinter
     path = askFile()  # prompt user for file path
 
+    classes = []  # this will hold classIds and how often they occur
+    classSet = set()  # this will hold how many classes there are
+
     with open(path) as filePath:  # open selected file
         # create a reader using the file
         reader = csv.reader(filePath, delimiter=',')
@@ -134,10 +142,18 @@ def main():
             else:  # otherwise parse file
                 # reader[0] = classId, reader[1:] = attribute values
                 rows.append(row(line[0], line[1:]))  # parse file
+                classes.append(line[0])
+                classSet.add(line[0])
+                INSTANCES_NUMBER += 1
 
     # get the number of features in the dataset
     FEATURE_NUMBER = len(rows[0].attribute)
     POPULATION_SIZE = FEATURE_NUMBER * BETA  # set the pop size
+
+    # loop over the class set - each classId will be id only once because classSet is a set
+    for id in classSet:
+        # finds out how many times a class occurs in training data and add to dictionary
+        occurences[id] = classes.count(id)
 
 
 def valuesInClass(classId, attribute):
@@ -215,8 +231,16 @@ def fitness(h):
     # loop over all features & get their info gain
     gainSum = 0  # the info gain of the hypothesis
     for f in h.features:
-        # ? what do I need to send these as input?
-        f.infoGain = stats.entropy() - stats.entropy()
+
+        # find the number of +/- occurences of the class
+        pPos = occurences.get(f.className)
+        pNeg = INSTANCES_NUMBER - pPos
+
+        def entropy(pos, neg):
+            return -pos*math.log(pos, 2)-neg*math.log(neg, 2)
+
+        # ? is this correct or should it be this - entropy(C|f)?
+        f.infoGain = entropy(pPos, pNeg)
         gainSum += f.infoGain  # update the info sum
 
         # updates the max info gain of the hypothesis if needed
