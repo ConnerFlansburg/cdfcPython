@@ -48,8 +48,15 @@ POPULATION_SIZE = None
 # the number of instances in the training data
 INSTANCES_NUMBER = 0
 
+# *** the next 3 variables are used to compute entropy *** #
 # this will store the number of times a class occurs in the training data in a dictionary keyed by it's classId
-occurences = {}
+Occurences = {}
+
+# stores the number of times a value occurs in the training data (occurences keyed value)
+Values = {}
+
+# the number of times a value occurs keyed by class
+fGivenC = {}
 
 # *** set values below for every new dataset *** #
 
@@ -131,6 +138,8 @@ def main():
 
     classes = []  # this will hold classIds and how often they occur
     classSet = set()  # this will hold how many classes there are
+    vals = []  # holds all the that occur in the training data
+    valuesSet = set()  # same as values but with no repeated values
 
     with open(path) as filePath:  # open selected file
         # create a reader using the file
@@ -150,10 +159,21 @@ def main():
     FEATURE_NUMBER = len(rows[0].attribute)
     POPULATION_SIZE = FEATURE_NUMBER * BETA  # set the pop size
 
+    ######### The Code Below is Used to Calculated Entropy  ##########
+    for v in valuesSet:
+        # find out how many times a value occurred and store it in a dictionary keyed by value
+        Values[v] = vals.count(v)
+        if Values[v] > 1:  # if the value occurs more than once
+            for r in rows:  # loop over rows
+                # if the value appears in this instance
+                if r.attributes.contains(v):
+                    # update the dictionary's amount of occurences
+                    #! BUG this won't work because dictionaries can't reuse keys
+                    fGivenC[r.className] += 1
     # loop over the class set - each classId will be id only once because classSet is a set
     for id in classSet:
         # finds out how many times a class occurs in training data and add to dictionary
-        occurences[id] = classes.count(id)
+        Occurences[id] = classes.count(id)
 
 
 def valuesInClass(classId, attribute):
@@ -228,19 +248,27 @@ def terminals(classId):
 
 def fitness(h):
 
+    def entropy(pos, neg):
+        return -pos*math.log(pos, 2)-neg*math.log(neg, 2)
+
     # loop over all features & get their info gain
     gainSum = 0  # the info gain of the hypothesis
     for f in h.features:
 
-        # find the number of +/- occurences of the class
-        pPos = occurences.get(f.className)
+        # find the +/- probabilities of a class
+        pPos = Occurences.get(f.className)
         pNeg = INSTANCES_NUMBER - pPos
+        entClass = entropy(pPos, pNeg)
 
-        def entropy(pos, neg):
-            return -pos*math.log(pos, 2)-neg*math.log(neg, 2)
+        # find the +/- probabilites of a feature given a class
+        # TODO use Baye's Theorem to compute
+        pPos = None
+        # TODO use Baye's Theorem to compute
+        pNeg = None
+        entFeature = entropy(pPos, pNeg)
 
-        # ? is this correct or should it be this - entropy(C|f)?
-        f.infoGain = entropy(pPos, pNeg)
+        # H(class) - H(class|f)
+        f.infoGain = entClass - entFeature
         gainSum += f.infoGain  # update the info sum
 
         # updates the max info gain of the hypothesis if needed
