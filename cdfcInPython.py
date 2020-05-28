@@ -16,7 +16,7 @@ from tkinter.filedialog import askFile
 # TODO change appends so they use pointers
 # TODO write main
 
-##################### Constants/Globals ######################
+# ******************** Constants/Globals ******************** #
 
 # CROSSOVER_RATE is the crossover rate
 CROSSOVER_RATE = 0.8
@@ -40,19 +40,21 @@ ALPHA = 0.8
 BETA = 2
 
 # the number of features in the dataset
-FEATURE_NUMBER = None
+FEATURE_NUMBER = 0
 
 # the population size
-POPULATION_SIZE = None
+POPULATION_SIZE = 0
 
 # the number of instances in the training data
 INSTANCES_NUMBER = 0
 
 # *** the next 3 variables are used to compute entropy *** #
-# this will store the number of times a class occurs in the training data in a dictionary keyed by it's classId
+# this will store the number of times a class occurs in the training data in
+# a dictionary keyed by it's classId
 Occurences = {}
 
-# stores the number of times a value occurs in the training data (occurences keyed value)
+# stores the number of times a value occurs in the training data
+# (occurences keyed value)
 Values = {}
 
 # the number of times a value occurs keyed by class
@@ -63,7 +65,8 @@ fGivenC = {}
 # C is the number of classes in the data
 C = 3
 
-# R is the ratio of number of constructed features to the number of classes  (features/classes)
+# R is the ratio of number of constructed features to the number of classes
+# (features/classes)
 R = 2
 
 # M is the number of constructed features
@@ -75,9 +78,9 @@ FN = None
 # PS (pop size) is the population size (equal to number of features * beta)
 PS = None
 
-######################### End of Constants/Globals ###############################
+# ************************ End of Constants/Globals ************************ #
 
-####################### Namespaces/Structs & Objects #########################
+# ********************** Namespaces/Structs & Objects *********************** #
 
 # a single line in the csv, representing a record/instance
 row = collect.namedtuple('row', ['className', 'attributes'])
@@ -130,11 +133,18 @@ class Hypothesis:
     fitness = None  # the fitness score
 
 
-#################### End of Namespaces/Structs & Objects #######################
+# ***************** End of Namespaces/Structs & Objects ******************* #
 
 def main():
     Tk().withdraw()  # prevent root window caused by Tkinter
     path = askFile()  # prompt user for file path
+
+    # makes sure we're using global variables
+    global FEATURE_NUMBER
+    global POPULATION_SIZE
+    global INSTANCES_NUMBER
+    global rows
+    global row
 
     classes = []  # this will hold classIds and how often they occur
     classSet = set()  # this will hold how many classes there are
@@ -159,29 +169,34 @@ def main():
     FEATURE_NUMBER = len(rows[0].attribute)
     POPULATION_SIZE = FEATURE_NUMBER * BETA  # set the pop size
 
-    ######### The Code Below is Used to Calculated Entropy  ##########
+    # ********* The Code Below is Used to Calculated Entropy  ********* #
     for v in valuesSet:
-        # find out how many times a value occurred and store it in a dictionary keyed by value
+        # find out how many times a value occurred and store it
+        # in a dictionary keyed by value
         Values[v] = vals.count(v)
         if Values[v] > 1:  # if the value occurs more than once
             for r in rows:  # loop over rows
                 # if the value appears in this instance
                 if r.attributes.contains(v):
                     # update the dictionary's amount of occurences
-                    #! BUG this won't work because dictionaries can't reuse keys
+                    # !BUG this won't work: dictionaries can't reuse keys
                     fGivenC[r.className] += 1
-    # loop over the class set - each classId will be id only once because classSet is a set
+    # loop over the class set - each classId will be id only once
     for id in classSet:
-        # finds out how many times a class occurs in training data and add to dictionary
+        # finds out how many times a class occurs in data and add to dictionary
         Occurences[id] = classes.count(id)
 
 
 def valuesInClass(classId, attribute):
-    """valuesInClass determines what values of an attribute occur in a class and what values do not
+    """valuesInClass determines what values of an attribute occur in a class
+        and what values do not
 
     Arguments:
-        classId {String or int} -- This is the identifier for the class that should be examined
-        attribute {int} -- this is the attribute to be investigated. It should be the index of the attribute in the row namedtuple in the rows list
+        classId {String or int} -- This is the identifier for the class that
+                                    should be examined
+        attribute {int} -- this is the attribute to be investigated. It should
+                            be the index of the attribute in the row
+                            namedtuple in the rows list
 
     Returns:
         inClass -- This holds the values in the class.
@@ -193,7 +208,8 @@ def valuesInClass(classId, attribute):
 
     # loop over all the rows, where value is the row at the current index
     for value in rows:
-        if value.className == classId:  # if the class is the same as the class given
+        # if the class is the same as the class given
+        if value.className == classId:
             # add the feature's value to in
             inClass.append(value.attributes[attribute])
         else:  # if the class is not the same as the class given
@@ -207,10 +223,13 @@ def terminals(classId):
     """terminals creates the list of relevant terminals for a given class.
 
     Arguments:
-        classId {String} -- classId is the identifier for the class for which we want a terminal set
+        classId {String} -- classId is the identifier for the class for
+                             which we want a terminal set
 
     Returns:
-        list -- terminals returns the highest scoring features as a list. The list will have a length of FEATURE_NUMBER/2, and will hold the indexes of the features. 
+        list -- terminals returns the highest scoring features as a list.
+                The list will have a length of FEATURE_NUMBER/2, and will
+                hold the indexes of the features.
     """
 
     Score = collect.namedtuple('Score', ['Attribute', 'Relevancy'])
@@ -276,7 +295,7 @@ def fitness(h):
             h.maxInfoGain = f.infoGain
 
     # calculate the average info gain using formula 3
-    #* create more correct citation later *#
+    # * create more correct citation later * #
     h.averageInfoGain = (gainSum + h.maxInfoGain)/((M+1)*(math.log(C, 2)))
 
     # set size
