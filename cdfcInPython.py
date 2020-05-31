@@ -73,10 +73,10 @@ R = 2
 M = R*C
 
 # FN (feature num) is number of features in the dataset
-FN = None
+FN = 0
 
 # PS (pop size) is the population size (equal to number of features * beta)
-PS = None
+PS = FN * BETA
 
 # ************************ End of Constants/Globals ************************ #
 
@@ -86,7 +86,8 @@ PS = None
 row = collect.namedtuple('row', ['className', 'attributes'])
 
 # this will store all of the records read in (list is a list of rows)
-rows = []
+# this also makes it the set of all training data
+S = []
 
 
 class Tree:
@@ -129,7 +130,7 @@ class Hypothesis:
     size = 0  # the number of nodes in all the cfs
     maxInfoGain = None  # the max info gain in the hypothesis
     averageInfoGain = None  # the average info gain of the hypothesis
-    distance = None  # the distance function score
+    distance = 0  # the distance function score
     fitness = None  # the fitness score
 
 
@@ -143,7 +144,7 @@ def main():
     global FEATURE_NUMBER
     global POPULATION_SIZE
     global INSTANCES_NUMBER
-    global rows
+    global S
     global row
 
     classes = []  # this will hold classIds and how often they occur
@@ -160,13 +161,13 @@ def main():
                 counter += 1  # skip
             else:  # otherwise parse file
                 # reader[0] = classId, reader[1:] = attribute values
-                rows.append(row(line[0], line[1:]))  # parse file
+                S.append(row(line[0], line[1:]))  # parse file
                 classes.append(line[0])
                 classSet.add(line[0])
                 INSTANCES_NUMBER += 1
 
     # get the number of features in the dataset
-    FEATURE_NUMBER = len(rows[0].attribute)
+    FEATURE_NUMBER = len(S[0].attribute)
     POPULATION_SIZE = FEATURE_NUMBER * BETA  # set the pop size
 
     # ********* The Code Below is Used to Calculated Entropy  ********* #
@@ -175,7 +176,7 @@ def main():
         # in a dictionary keyed by value
         Values[v] = vals.count(v)
         if Values[v] > 1:  # if the value occurs more than once
-            for r in rows:  # loop over rows
+            for r in S:  # loop over S
                 # if the value appears in this instance
                 if r.attributes.contains(v):
                     # update the dictionary's amount of occurences
@@ -196,7 +197,7 @@ def valuesInClass(classId, attribute):
                                     should be examined
         attribute {int} -- this is the attribute to be investigated. It should
                             be the index of the attribute in the row
-                            namedtuple in the rows list
+                            namedtuple in the S list
 
     Returns:
         inClass -- This holds the values in the class.
@@ -206,8 +207,8 @@ def valuesInClass(classId, attribute):
     inClass = None  # attribute values that appear in the class
     notInClass = None  # attribute values that do not appear in the class
 
-    # loop over all the rows, where value is the row at the current index
-    for value in rows:
+    # loop over all the S, where value is the row at the current index
+    for value in S:
         # if the class is the same as the class given
         if value.className == classId:
             # add the feature's value to in
@@ -294,17 +295,44 @@ def fitness(h):
         if h.maxInfoGain < f.infoGain:
             h.maxInfoGain = f.infoGain
 
+        # ? this computes the distance for each constructed feature &
+        # ? adds it to the distance of all the other features. Is this correct?
+        h.distance += Distance(f.className)
+
     # calculate the average info gain using formula 3
     # * create more correct citation later * #
-    h.averageInfoGain = (gainSum + h.maxInfoGain)/((M+1)*(math.log(C, 2)))
+    h.averageInfoGain += (gainSum + h.maxInfoGain)/((M+1)*(math.log(C, 2)))
 
     # set size
 
-    # exit loop
 
-    # get average info gain
+# TODO check that I'm computing distance correctly
+def Distance():
+    return 1 / (1 + math.pow(math.e, -5*(Db() - Dw())))
 
-    # get the distance
+
+def Db(classId):
+    DbSum = 0
+    # loop over all the training instances where the class occurs
+    for i in S:
+        if i.className == classId:
+            Vi, Vj = valuesInClass(classId, i.attributes)
+            DbSum += min(Czekanowski(Vi, Vj))
+    return (1/len(S))*DbSum
+
+
+def Dw(classId):
+    DbSum = 0
+    # loop over all the training instances where the class occurs
+    for i in S:
+        if i.className == classId:
+            Vi, Vj = valuesInClass(classId, i.attributes)
+            DbSum += max(Czekanowski(Vi, Vj))
+    return (1/len(S))*DbSum
+
+
+def Czekanowski(Vi, Vj):
+    pass  # TODO write Czekanowski function
 
 
 if __name__ == "__main__":
