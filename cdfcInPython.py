@@ -92,6 +92,10 @@ S = []
 
 class Tree:
 
+    left = None
+    right = None
+    data = None  # must either be a function or a terminal
+
     def __init__(self, data):
         self.left = None
         self.right = None
@@ -103,19 +107,46 @@ class Tree:
     def insertRight(self, data):
         self.right = Tree(data)
 
+    # running a tree should return a single value
+    def runTree(self, rFt):
+        if self.data in rFt:  # if the root is a terminal
+            return self.data  # return value
+        else:  # if the root is not a terminal
+            # run the tree recursively
+            return self.data(self.__runLeft(rFt), self.__runRight(rFt))
+
+    def __runLeft(self, relevantFeatures):
+        # if left node is a terminal
+        if self.left in relevantFeatures:
+            # TODO change so this uses the value for an instance
+            return self.left
+        else:  # if left node is a function
+            return self.left()
+
+    def __runRight(self, relevantFeatures):
+        # if right node is a terminal
+        if self.right in relevantFeatures:
+            return self.right
+        else:  # if right node is a function
+            return self.right()
+
     def PrintTree(self):
         print(self.data)
 
 
 class ConstructedFeature:
 
-    tree = None  # the tree representation of the constructed feature
+    tree = None  # the root node of the constructed feature
     className = None  # the name of the class this tree is meant to distinguish
     infoGain = None  # the info gain for this feature
+    relevantFeatures = None  # the set of relevant features
+    # the values data after they have been transformed by the tree
+    transformedValues = None
 
-    def __init__(self, tree, className):
-        self.tree = tree
+    def __init__(self, className):
         self.className = className
+        # call terminals to create the terminal set
+        self.relevantFeatures = terminals(className)
 
     def getInfoGain(self):
         if self.infoGain is None:
@@ -123,18 +154,37 @@ class ConstructedFeature:
         else:
             return self.infoGain
 
+    def transform(self):  # ? pass the instance here somehow?
+        # transform the data for a single feature
+        # this should return a single value (a value transformed by the tree)
+        return self.tree.runTree(self.relevantFeatures)
+
 
 class Hypothesis:
     # a single hypothesis(a GP individual)
-    features = None  # a list of all the constructed features
+    features = []  # a list of all the constructed features
     size = 0  # the number of nodes in all the cfs
     maxInfoGain = None  # the max info gain in the hypothesis
     averageInfoGain = None  # the average info gain of the hypothesis
     distance = 0  # the distance function score
     fitness = None  # the fitness score
 
+    def transform(self):  # TODO need to pass information on instance somehow
+        transformed = []  # this will hold the transformed values
+        # transform the original input using each constructed feature
+        for f in self.features:
+            transformed.append(f.transform())
+
+        return transformed
+
 
 # ***************** End of Namespaces/Structs & Objects ******************* #
+
+# ********************** Valid Operations Within Tree ********************** #
+# all functions for the tree must be of the form x(y,z)
+
+# *************************** End of Operations *************************** #
+
 
 def main():
     Tk().withdraw()  # prevent root window caused by Tkinter
@@ -188,38 +238,6 @@ def main():
         Occurences[id] = classes.count(id)
 
 
-def valuesInClass(classId, attribute):
-    """valuesInClass determines what values of an attribute occur in a class
-        and what values do not
-
-    Arguments:
-        classId {String or int} -- This is the identifier for the class that
-                                    should be examined
-        attribute {int} -- this is the attribute to be investigated. It should
-                            be the index of the attribute in the row
-                            namedtuple in the S list
-
-    Returns:
-        inClass -- This holds the values in the class.
-        notInClass -- This holds the values not in the class.
-    """
-
-    inClass = None  # attribute values that appear in the class
-    notInClass = None  # attribute values that do not appear in the class
-
-    # loop over all the S, where value is the row at the current index
-    for value in S:
-        # if the class is the same as the class given
-        if value.className == classId:
-            # add the feature's value to in
-            inClass.append(value.attributes[attribute])
-        else:  # if the class is not the same as the class given
-            # add the feature's value to not in
-            notInClass.append(value.attributes[attribute])
-    # return inClass & notInClass
-    return inClass, notInClass
-
-
 def terminals(classId):
     """terminals creates the list of relevant terminals for a given class.
 
@@ -266,6 +284,38 @@ def terminals(classId):
     return terminalSet
 
 
+def valuesInClass(classId, attribute):
+    """valuesInClass determines what values of an attribute occur in a class
+        and what values do not
+
+    Arguments:
+        classId {String or int} -- This is the identifier for the class that
+                                    should be examined
+        attribute {int} -- this is the attribute to be investigated. It should
+                            be the index of the attribute in the row
+                            namedtuple in the S list
+
+    Returns:
+        inClass -- This holds the values in the class.
+        notInClass -- This holds the values not in the class.
+    """
+
+    inClass = None  # attribute values that appear in the class
+    notInClass = None  # attribute values that do not appear in the class
+
+    # loop over all the S, where value is the row at the current index
+    for value in S:
+        # if the class is the same as the class given
+        if value.className == classId:
+            # add the feature's value to in
+            inClass.append(value.attributes[attribute])
+        else:  # if the class is not the same as the class given
+            # add the feature's value to not in
+            notInClass.append(value.attributes[attribute])
+    # return inClass & notInClass
+    return inClass, notInClass
+
+
 def fitness(h):
 
     def entropy(pos, neg):
@@ -281,10 +331,8 @@ def fitness(h):
         entClass = entropy(pPos, pNeg)
 
         # find the +/- probabilites of a feature given a class
-        # TODO use Baye's Theorem to compute
-        pPos = None
-        # TODO use Baye's Theorem to compute
-        pNeg = None
+        pPos = None  # TODO use Baye's Theorem to compute
+        pNeg = None  # TODO use Baye's Theorem to compute
         entFeature = entropy(pPos, pNeg)
 
         # H(class) - H(class|f)
@@ -304,9 +352,10 @@ def fitness(h):
     h.averageInfoGain += (gainSum + h.maxInfoGain)/((M+1)*(math.log(C, 2)))
 
     # set size
+    # * this must be based off the number of nodes a tree has because
+    # * the depth will be the same for all of them
 
 
-# TODO check that I'm computing distance correctly
 def Distance():
     return 1 / (1 + math.pow(math.e, -5*(Db() - Dw())))
 
