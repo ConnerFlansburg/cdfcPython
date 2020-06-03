@@ -7,10 +7,10 @@ from tkinter import Tk
 from tkinter.filedialog import askFile
 
 
-# * conversion workload
-# TODO write fitness function
+# * Currently Working On
+# TODO check fitness function code in Hypothesis, Constructed Feature, & Tree
 
-# * still to do
+# * Next Steps
 # TODO handle evolution (try to leverage parallelism)
 # TODO create initial population
 # TODO change appends so they use pointers
@@ -87,7 +87,7 @@ row = collect.namedtuple('row', ['className', 'attributes'])
 
 # this will store all of the records read in (list is a list of rows)
 # this also makes it the set of all training data
-S = []
+rows = []
 
 
 class Tree:
@@ -115,18 +115,17 @@ class Tree:
             # run the tree recursively
             return self.data(self.__runLeft(rFt), self.__runRight(rFt))
 
-    def __runLeft(self, relevantFeatures):
+    def __runLeft(self, relevantFeatures, featureValues):
         # if left node is a terminal
         if self.left in relevantFeatures:
-            # TODO change so this uses the value for an instance
-            return self.left
+            return featureValues[self.data]
         else:  # if left node is a function
             return self.left()
 
-    def __runRight(self, relevantFeatures):
+    def __runRight(self, relevantFeatures, featureValues):
         # if right node is a terminal
         if self.right in relevantFeatures:
-            return self.right
+            return featureValues[self.data]
         else:  # if right node is a function
             return self.right()
 
@@ -136,6 +135,7 @@ class Tree:
 
 class ConstructedFeature:
 
+    # TODO does this need to be a list because we might have multiple trees?
     tree = None  # the root node of the constructed feature
     className = None  # the name of the class this tree is meant to distinguish
     infoGain = None  # the info gain for this feature
@@ -154,34 +154,153 @@ class ConstructedFeature:
         else:
             return self.infoGain
 
-    def transform(self):  # ? pass the instance here somehow?
+    def transform(self, instance):  # instance should be a row object
+
+        relevantValues = {}  # this will hold the values of relevant features
+        # loop over the indexes of the relevant features
+        for i in self.relevantFeatures:
+            # and take the values of the relevant features out
+            # & store them in a dict keyed by their index in the original data
+            relevantValues[i] = instance.attributes[i]
+
         # transform the data for a single feature
         # this should return a single value (a value transformed by the tree)
-        return self.tree.runTree(self.relevantFeatures)
+        return self.tree.runTree(self.relevantFeatures, relevantValues)
 
 
 class Hypothesis:
     # a single hypothesis(a GP individual)
     features = []  # a list of all the constructed features
     size = 0  # the number of nodes in all the cfs
+
+    # TODO make getter functions for the below that set them
     maxInfoGain = None  # the max info gain in the hypothesis
     averageInfoGain = None  # the average info gain of the hypothesis
     distance = 0  # the distance function score
     fitness = None  # the fitness score
 
-    def transform(self):  # TODO need to pass information on instance somehow
-        transformed = []  # this will hold the transformed values
-        # transform the original input using each constructed feature
-        for f in self.features:
-            transformed.append(f.transform())
+    def fitness(self):
 
-        return transformed
+        # ? these can only be done for one class,
+        # ? how do we do it for all of them?
+        def Distance(values, classId):
+
+            # ********** Compute Vi & Vj ********** #
+            # loop over all the transformed values
+            vi = []  # values in class
+            vj = []  # values not in class
+            S = len(values)
+            for v in values:
+                if v.className == classId:  # if the values is in the class
+                    vi.append(v.values)  # add it to Vi
+                else:  # if the values are not in the class
+                    vj.append(v.values)  # add it to Vj
+
+            return 1 / (1 + math.pow(math.e, -5*(Db(vi, vj, s) - Dw(vi, vj, S))))
+
+        def Db(vi, vj, S):
+            distanceSum = 0
+            for i in range(1, S):
+                distanceSum += min(Czekanowski(vi[i], vj[i]))
+            return (1/S)*distanceSum
+
+        def Dw(vi, vj, S):
+            distanceSum = 0
+            for i in range(1, S):
+                distanceSum += max(Czekanowski(vi[i], vj[i]))
+            return (1/S)*distanceSum
+
+        def Czekanowski(Vi, Vj):
+            pass  # TODO write Czekanowski function
+
+        def entropy(pos, neg):
+            return -pos*math.log(pos, 2)-neg*math.log(neg, 2)
+
+        # loop over all features & get their info gain
+        gainSum = 0  # the info gain of the hypothesis
+        for f in self.features:
+
+            # TODO check this is correct
+            # ********* Entropy calculation ********* #
+            # find the +/- probabilities of a class
+            pPos = Occurences.get(f.className)
+            pNeg = INSTANCES_NUMBER - pPos
+            entClass = entropy(pPos, pNeg)
+
+            # find the +/- probabilites of a feature given a class
+            pPos = None  # TODO use Baye's Theorem to compute
+            pNeg = None  # TODO use Baye's Theorem to compute
+            entFeature = entropy(pPos, pNeg)
+
+            # ******** Info Gain calculation ******* #
+            # H(class) - H(class|f)
+            f.infoGain = entClass - entFeature
+            gainSum += f.infoGain  # update the info sum
+
+            # updates the max info gain of the hypothesis if needed
+            if self.maxInfoGain < f.infoGain:
+                self.maxInfoGain = f.infoGain
+
+        # calculate the average info gain using formula 3
+        # * create more correct citation later * #
+        term1 = gainSum+self.maxInfoGain
+        term2 = (M+1)*(math.log(C, 2))
+        self.averageInfoGain += term1 / term2
+
+        # set size
+        # * this must be based off the number of nodes a tree has because
+        # * the depth will be the same for all of them
+
+        # *********  Distance Calculation ********* #
+        # calculate the distance using the transformed values
+        self.distance = Distance(self.transform())
+
+        # ********* Final Calculation ********* #
+        term1 = ALPHA*self.averageInfoGain
+        term2 = (1-ALPHA)*self.distance
+        term3 = (math.pow(10, -7)*self.size)
+        return term1 + term2 - term3
+
+    def transform(self):
+
+        instance = collect.namedtuple(
+            'instance', ['inClass', 'values'])
+        # ? should this be an array or a dictionary?
+        transformed = []  # this will hold the transformed values
+        for r in rows:  # for each instance
+            # this will hold the calculated values for all
+            # the constructed features
+            values = []
+            # transform the original input using each constructed feature
+            for f in self.features:
+                # append the transformed values for a single
+                # constructed feature to values
+                values.append(f.transform(r))
+            # each instance will hold the new values for
+            # an instance & className. Transformed will hold
+            # all the instances for a hypothesis
+            transformed.append(instance(r.className, f.transform(r)))
+            # ? how to make class name a bool? Does it need to be?
+        return transformed  # return the list of all instances
 
 
 # ***************** End of Namespaces/Structs & Objects ******************* #
 
 # ********************** Valid Operations Within Tree ********************** #
 # all functions for the tree must be of the form x(y,z)
+
+def add(a, b):
+    return a + b
+
+
+def subtract(a, b):
+    return a - b
+
+
+# min is built in
+
+
+# max is built in
 
 # *************************** End of Operations *************************** #
 
@@ -194,7 +313,7 @@ def main():
     global FEATURE_NUMBER
     global POPULATION_SIZE
     global INSTANCES_NUMBER
-    global S
+    global rows
     global row
 
     classes = []  # this will hold classIds and how often they occur
@@ -211,13 +330,13 @@ def main():
                 counter += 1  # skip
             else:  # otherwise parse file
                 # reader[0] = classId, reader[1:] = attribute values
-                S.append(row(line[0], line[1:]))  # parse file
+                rows.append(row(line[0], line[1:]))  # parse file
                 classes.append(line[0])
                 classSet.add(line[0])
                 INSTANCES_NUMBER += 1
 
     # get the number of features in the dataset
-    FEATURE_NUMBER = len(S[0].attribute)
+    FEATURE_NUMBER = len(rows[0].attribute)
     POPULATION_SIZE = FEATURE_NUMBER * BETA  # set the pop size
 
     # ********* The Code Below is Used to Calculated Entropy  ********* #
@@ -226,7 +345,7 @@ def main():
         # in a dictionary keyed by value
         Values[v] = vals.count(v)
         if Values[v] > 1:  # if the value occurs more than once
-            for r in S:  # loop over S
+            for r in rows:  # loop over rows
                 # if the value appears in this instance
                 if r.attributes.contains(v):
                     # update the dictionary's amount of occurences
@@ -293,7 +412,7 @@ def valuesInClass(classId, attribute):
                                     should be examined
         attribute {int} -- this is the attribute to be investigated. It should
                             be the index of the attribute in the row
-                            namedtuple in the S list
+                            namedtuple in the rows list
 
     Returns:
         inClass -- This holds the values in the class.
@@ -303,8 +422,8 @@ def valuesInClass(classId, attribute):
     inClass = None  # attribute values that appear in the class
     notInClass = None  # attribute values that do not appear in the class
 
-    # loop over all the S, where value is the row at the current index
-    for value in S:
+    # loop over all the rows, where value is the row at the current index
+    for value in rows:
         # if the class is the same as the class given
         if value.className == classId:
             # add the feature's value to in
@@ -314,74 +433,6 @@ def valuesInClass(classId, attribute):
             notInClass.append(value.attributes[attribute])
     # return inClass & notInClass
     return inClass, notInClass
-
-
-def fitness(h):
-
-    def entropy(pos, neg):
-        return -pos*math.log(pos, 2)-neg*math.log(neg, 2)
-
-    # loop over all features & get their info gain
-    gainSum = 0  # the info gain of the hypothesis
-    for f in h.features:
-
-        # find the +/- probabilities of a class
-        pPos = Occurences.get(f.className)
-        pNeg = INSTANCES_NUMBER - pPos
-        entClass = entropy(pPos, pNeg)
-
-        # find the +/- probabilites of a feature given a class
-        pPos = None  # TODO use Baye's Theorem to compute
-        pNeg = None  # TODO use Baye's Theorem to compute
-        entFeature = entropy(pPos, pNeg)
-
-        # H(class) - H(class|f)
-        f.infoGain = entClass - entFeature
-        gainSum += f.infoGain  # update the info sum
-
-        # updates the max info gain of the hypothesis if needed
-        if h.maxInfoGain < f.infoGain:
-            h.maxInfoGain = f.infoGain
-
-        # ? this computes the distance for each constructed feature &
-        # ? adds it to the distance of all the other features. Is this correct?
-        h.distance += Distance(f.className)
-
-    # calculate the average info gain using formula 3
-    # * create more correct citation later * #
-    h.averageInfoGain += (gainSum + h.maxInfoGain)/((M+1)*(math.log(C, 2)))
-
-    # set size
-    # * this must be based off the number of nodes a tree has because
-    # * the depth will be the same for all of them
-
-
-def Distance():
-    return 1 / (1 + math.pow(math.e, -5*(Db() - Dw())))
-
-
-def Db(classId):
-    DbSum = 0
-    # loop over all the training instances where the class occurs
-    for i in S:
-        if i.className == classId:
-            Vi, Vj = valuesInClass(classId, i.attributes)
-            DbSum += min(Czekanowski(Vi, Vj))
-    return (1/len(S))*DbSum
-
-
-def Dw(classId):
-    DbSum = 0
-    # loop over all the training instances where the class occurs
-    for i in S:
-        if i.className == classId:
-            Vi, Vj = valuesInClass(classId, i.attributes)
-            DbSum += max(Czekanowski(Vi, Vj))
-    return (1/len(S))*DbSum
-
-
-def Czekanowski(Vi, Vj):
-    pass  # TODO write Czekanowski function
 
 
 if __name__ == "__main__":
