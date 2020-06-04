@@ -9,12 +9,12 @@ from tkinter.filedialog import askFile
 
 
 # * Currently Working On
-# TODO check fitness function code in Hypothesis
-# TODO check fitness function code in Constructed Feature
-# TODO check fitness function code in Tree
+# TODO check entropy function code in Hypothesis
+# TODO check transform function code in Constructed Feature
+# TODO check transform function code in Tree
+# TODO check logic for initial population generation
 
 # * Next Steps
-# TODO create initial population
 # TODO handle evolution (try to leverage parallelism)
 # TODO write main
 # TODO optimize & make modular
@@ -184,42 +184,49 @@ class Hypothesis:
 
     def getFitness(self):
 
-        # ? these can only be done for one class,
-        # ? how do we do it for all of them?
-        def Distance(values, classId):
+        def Distance(values):
 
             # ********** Compute Vi & Vj ********** #
+            Db = 0  # the sum of mins
+            Dw = 0  # the sum of maxs
             # loop over all the transformed values
-            vi = []  # values in class
-            vj = []  # values not in class
-            S = len(values)
-            for v in values:
-                if v.className == classId:  # if the values is in the class
-                    vi.append(v.values)  # add it to Vi
-                else:  # if the values are not in the class
-                    vj.append(v.values)  # add it to Vj
-            # ? what if Vi & Vj have different lengths?
-            term1 = Db(vi, vj, S)
-            term2 = Dw(vi, vj, S)
+            for i, vi in enumerate(values):
+
+                minSum = 2  # * must be high enough that it is always reset
+                maxSum = 0
+
+                for j, vj in enumerate(values):
+
+                    if i == j:  # if i equals j ignore this case
+                        # continue / skip / return go to next element
+                        pass
+
+                    dist = Czekanowski(vi, vj)  # compute the distance
+
+                    # if vi & vj are in the same class (Dw)
+                    if vi.inClass == vj.inClass:
+                        # replace the max if the current value is higher
+                        if dist > maxSum:
+                            maxSum = dist
+                    else:  # if vi & vj are not in the same class (Db)
+                        # replace the min if the current value is smaller
+                        if dist < minSum:
+                            minSum = dist
+
+                # update the running totals
+                Db += minSum
+                Dw += maxSum
+
+            # perform the final distance calculations
+            term1 = Db / len(values)
+            term2 = Dw / len(values)
             return 1 / (1 + math.pow(math.e, -5*(term1 - term2)))
-
-        def Db(vi, vj, S):
-            distanceSum = 0
-            for i in range(1, S):
-                distanceSum += min(Czekanowski(vi[i], vj[i]))
-            return (1/S)*distanceSum
-
-        def Dw(vi, vj, S):
-            distanceSum = 0
-            for i in range(1, S):
-                distanceSum += max(Czekanowski(vi[i], vj[i]))
-            return (1/S)*distanceSum
 
         def Czekanowski(Vi, Vj):
             minSum = 0
             addSum = 0
             # loop over the number of features
-            for d in range(1, FEATURE_NUMBER):
+            for d in range(1, len(self.features)):
                 minSum += min(Vi[d], Vj[d])  # the top of the fraction
                 addSum += Vi[d] + Vj[d]  # the bottom of the fraction
             return 1 - ((2*minSum) / addSum)
@@ -471,7 +478,7 @@ def createInitialPopulation():
 
 
 def grow(size):
-    # TODO both of these return trees. Changes so they create CFs & then a hypothesis
+    # TODO These return trees. Change so they create CFs & a hypothesis
 
     # TODO double check this logic
     def assign(level):
