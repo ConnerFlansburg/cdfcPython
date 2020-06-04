@@ -1,6 +1,7 @@
 
 import csv
 import math
+import random
 import collections as collect
 from scipy import stats
 from tkinter import Tk
@@ -8,13 +9,15 @@ from tkinter.filedialog import askFile
 
 
 # * Currently Working On
-# TODO check fitness function code in Hypothesis, Constructed Feature, & Tree
+# TODO check fitness function code in Hypothesis
+# TODO check fitness function code in Constructed Feature
+# TODO check fitness function code in Tree
 
 # * Next Steps
-# TODO handle evolution (try to leverage parallelism)
 # TODO create initial population
-# TODO change appends so they use pointers
+# TODO handle evolution (try to leverage parallelism)
 # TODO write main
+# TODO optimize & make modular
 
 # ******************** Constants/Globals ******************** #
 
@@ -47,6 +50,8 @@ POPULATION_SIZE = 0
 
 # the number of instances in the training data
 INSTANCES_NUMBER = 0
+
+MAX_DEPTH = 8
 
 # *** the next 3 variables are used to compute entropy *** #
 # this will store the number of times a class occurs in the training data in
@@ -172,14 +177,12 @@ class Hypothesis:
     # a single hypothesis(a GP individual)
     features = []  # a list of all the constructed features
     size = 0  # the number of nodes in all the cfs
-
-    # TODO make getter functions for the below that set them
-    maxInfoGain = None  # the max info gain in the hypothesis
-    averageInfoGain = None  # the average info gain of the hypothesis
-    distance = 0  # the distance function score
     fitness = None  # the fitness score
+    distance = 0  # the distance function score
+    averageInfoGain = None  # the average info gain of the hypothesis
+    maxInfoGain = None  # the max info gain in the hypothesis
 
-    def fitness(self):
+    def getFitness(self):
 
         # ? these can only be done for one class,
         # ? how do we do it for all of them?
@@ -195,8 +198,10 @@ class Hypothesis:
                     vi.append(v.values)  # add it to Vi
                 else:  # if the values are not in the class
                     vj.append(v.values)  # add it to Vj
-
-            return 1 / (1 + math.pow(math.e, -5*(Db(vi, vj, s) - Dw(vi, vj, S))))
+            # ? what if Vi & Vj have different lengths?
+            term1 = Db(vi, vj, S)
+            term2 = Dw(vi, vj, S)
+            return 1 / (1 + math.pow(math.e, -5*(term1 - term2)))
 
         def Db(vi, vj, S):
             distanceSum = 0
@@ -211,7 +216,13 @@ class Hypothesis:
             return (1/S)*distanceSum
 
         def Czekanowski(Vi, Vj):
-            pass  # TODO write Czekanowski function
+            minSum = 0
+            addSum = 0
+            # loop over the number of features
+            for d in range(1, FEATURE_NUMBER):
+                minSum += min(Vi[d], Vj[d])  # the top of the fraction
+                addSum += Vi[d] + Vj[d]  # the bottom of the fraction
+            return 1 - ((2*minSum) / addSum)
 
         def entropy(pos, neg):
             return -pos*math.log(pos, 2)-neg*math.log(neg, 2)
@@ -220,7 +231,6 @@ class Hypothesis:
         gainSum = 0  # the info gain of the hypothesis
         for f in self.features:
 
-            # TODO check this is correct
             # ********* Entropy calculation ********* #
             # find the +/- probabilities of a class
             pPos = Occurences.get(f.className)
@@ -289,6 +299,10 @@ class Hypothesis:
 # ********************** Valid Operations Within Tree ********************** #
 # all functions for the tree must be of the form x(y,z)
 
+# OPS is the list of valid operations on the tree
+OPS = ['add', 'subtract', 'times', 'max', 'isTrue']
+
+
 def add(a, b):
     return a + b
 
@@ -296,6 +310,13 @@ def add(a, b):
 def subtract(a, b):
     return a - b
 
+
+def times(a, b):
+    return a * b
+
+
+def isTrue(a, b):
+    pass  # ? how to deal with if function?
 
 # min is built in
 
@@ -357,6 +378,7 @@ def main():
         Occurences[id] = classes.count(id)
 
 
+# ? Should this be on the Constructed Feature object?
 def terminals(classId):
     """terminals creates the list of relevant terminals for a given class.
 
@@ -433,6 +455,94 @@ def valuesInClass(classId, attribute):
             notInClass.append(value.attributes[attribute])
     # return inClass & notInClass
     return inClass, notInClass
+
+
+def createInitialPopulation():
+
+    halfPopulation = POPULATION_SIZE//2
+
+    pop = []  # this will hold the initial population
+    # create half of pop via grow
+    pop.append(grow(halfPopulation))
+    # create half of pop via full
+    pop.append(full(halfPopulation))
+    # return the population
+    return pop
+
+
+def grow(size):
+    # TODO both of these return trees. Changes so they create CFs & then a hypothesis
+
+    # TODO double check this logic
+    def assign(level):
+        # ? should this be changed to guarantee every terminal is used?
+        # recursively assign tree values
+        if level != MAX_DEPTH:
+            # get the random value
+            spam = ls[random.randint(0, len(ls))]
+            if spam in terminal:  # if the item is a terminal
+                return Tree(spam)  # just return, stopping recursion
+
+            tree = Tree(spam)
+            tree.left = assign(level + 1)
+            tree.right = assign(level + 1)
+            return tree
+
+        else:
+            # stop recursion; max depth has been reached
+            # add a terminal to the leaf
+            spam = terminal[random.randint(0, len(terminal))]
+            # return
+            return Tree(spam)
+
+    for i in range(size):
+        classId = None  # ? how do I know that class that a tree is for?
+        # pick a random function & put it in the root
+        ls = random.shuffle(OPS)
+        rootData = ls[random.randint(0, len(ls))]
+        tree = Tree(rootData)  # make a new tree
+
+        # get the list of terminal characters
+        terminal = terminals(classId)
+        # add the terminal values to the list of functions & reorder
+        ls = random.shuffle(ls.append(terminal))
+
+        # create the tree
+        tree.left = assign(0)
+        tree.right = assign(0)
+
+
+def full(size):
+
+    # TODO double check this logic
+    def assign(level):
+        # ? should this be changed to guarantee every terminal is used?
+        # recursively assign tree values
+        if level != MAX_DEPTH:
+            # get a random function & add it to the tree
+            tree = Tree(ls[random.randint(0, len(ls))])
+            # call for branches
+            tree.left = assign(level + 1)
+            tree.right = assign(level + 1)
+            return tree
+
+        else:  # stop recursion; max depth has been reached
+            # add a terminal to the leaf & return
+            return Tree(terminal[random.randint(0, len(terminal))])
+
+    for i in range(size):
+        classId = None  # ? how do I know that class that a tree is for?
+        # pick a random function & put it in the root
+        ls = random.shuffle(OPS)
+        rootData = ls[random.randint(0, len(ls))]
+        tree = Tree(rootData)  # make a new tree
+
+        # get the list of terminal characters
+        terminal = terminals(classId)
+
+        # create the tree
+        tree.left = assign(0)
+        tree.right = assign(0)
 
 
 if __name__ == "__main__":
