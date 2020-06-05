@@ -7,27 +7,28 @@ from scipy import stats
 from tkinter import Tk
 from tkinter.filedialog import askFile
 
+# * Next Steps
+# TODO write code for mutation
+# TODO rework mutation to use parallelism
+# TODO write main
+# TODO optimize & make modular
 
-# * Currently Working On
+# * Sanity Checking / debugging
 # TODO check entropy function code in Hypothesis
 # TODO check transform function code in Constructed Feature
 # TODO check transform function code in Tree
 # TODO check logic for initial population generation
 
-# * Next Steps
-# TODO handle evolution (try to leverage parallelism)
-# TODO write main
-# TODO optimize & make modular
 
 # ******************** Constants/Globals ******************** #
 
-# CROSSOVER_RATE is the crossover rate
+# CROSSOVER_RATEis the chance that a candidate will reproduce
 CROSSOVER_RATE = 0.8
 
 # GENERATIONS is the number of generations the GP should run for
 GENERATIONS = 50
 
-# MUTATION_RATE is the mutation rate
+# MUTATION_RATE is the chance that a candidate will be mutated
 MUTATION_RATE = 0.2
 
 # ELITISM_RATE is the elitism rate
@@ -623,7 +624,9 @@ def evolve(pop, elitism=True):  # pop should be a list of hypotheses
         return child
 
     def mutate():
-        pass  # TODO write mutation
+        # TODO write mutation
+        # ? how many nodes are mutated? How are they selected? Randomly?
+        pass
 
     # *********** Calculate fitness & Handle Elitism *********** #
     if elitism is True:
