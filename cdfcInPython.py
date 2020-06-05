@@ -469,6 +469,7 @@ def createInitialPopulation():
     halfPopulation = POPULATION_SIZE//2
 
     pop = []  # this will hold the initial population
+    # TODO These return trees. Change so they create CFs & a hypothesis
     # create half of pop via grow
     pop.append(grow(halfPopulation))
     # create half of pop via full
@@ -478,8 +479,7 @@ def createInitialPopulation():
 
 
 def grow(size):
-    # TODO These return trees. Change so they create CFs & a hypothesis
-
+    # This function uses the grow method to generate an initial population
     # TODO double check this logic
     def assign(level):
         # ? should this be changed to guarantee every terminal is used?
@@ -520,7 +520,7 @@ def grow(size):
 
 
 def full(size):
-
+    # This function uses the full method to generate an initial population
     # TODO double check this logic
     def assign(level):
         # ? should this be changed to guarantee every terminal is used?
@@ -550,6 +550,98 @@ def full(size):
         # create the tree
         tree.left = assign(0)
         tree.right = assign(0)
+
+
+def evolve(pop, elitism=True):  # pop should be a list of hypotheses
+
+    def tournament():  # used by evolve to selection the parents
+        # ************* Tournament Selection ************* #
+        for j in range(0, 1):
+            # randomly select hypotheses from the population to create
+            # a list of all possible parents (we want to do this twice)
+
+            # this will hold the list of random potential parents
+            parents = (None, None)
+
+            for i in range(TOURNEY):
+                # this loop create 1 parent & is repeated twice
+                # ? is the append adding by value or reference?
+                # ? If it's adding by reference this will
+                # ? overwrite the added items...
+                possible = []
+
+                # get a random index integer
+                spam = random.randint(0, len(pop))
+
+                while possible.contains(pop[spam]):
+                    # if we have already selected the value as a parent,
+                    # get a new random value
+                    spam = random.randint(0, len(pop))
+
+                # add the potential parents to the list
+                possible.append(pop[spam])
+
+            # find the candidate with the max fitness & make it a parent
+            parents[j] = max(possible, key=lambda i: possible.fitness)
+
+        # parents now holds the two parents for a new hypothesis; return it
+        return parents
+
+    # ********** Mutation & Crossover ********** #
+    def crossover(mother, father):  # mother & father should be two trees
+        # ? is the crossover point selected randomly?
+        # this wil be the crossover point in the tree
+        # (must be before a terminal node)
+        motherCrossPoint = random.randint(0, MAX_DEPTH-1)
+        fatherCrossPoint = random.randint(0, MAX_DEPTH-1)
+
+        child = mother  # this will be the child we return
+
+        # we will walk through the child's copy of mother to prevent
+        # the mother from being overwritten
+        childCrossPoint = None
+        for i in range(motherCrossPoint):
+            # randomly walk the tree until we reach the crossover point
+            if random.randint(1, 2) == 1:
+                childCrossPoint = child.left()
+            else:
+                childCrossPoint = child.right()
+
+        fatherCrossNode = None  # the node at the crossover point
+        for i in range(fatherCrossPoint):
+            # randomly walk the tree until we reach the crossover point
+            if random.randint(1, 2) == 1:
+                fatherCrossNode = father.left()
+            else:
+                fatherCrossNode = father.right()
+
+        # take the sub-tree from father & add it to child at the
+        # crossover point for the mother
+        childCrossPoint.left = fatherCrossNode.left
+        childCrossPoint.right = fatherCrossNode.right
+
+        return child
+
+    def mutate():
+        pass  # TODO write mutation
+
+    # *********** Calculate fitness & Handle Elitism *********** #
+    if elitism is True:
+        # if we are using elitism, make the structures we'll use to track it
+        elite = collect.namedtuple('elite', ['fitness', 'hypothesis'])
+        elites = []
+
+    for h in pop:  # for every hypothesis, set it's fitness
+        h.getFitness()
+
+        # if we are using elitism we'll also need a list of all hypotheses
+        if elitism is True:
+            elites.append(elite(h.fitess, h))
+
+    if elitism is True:
+        # collect the best hypotheses & store them
+        spam = sorted(elites, key=lambda elite: elite.fitness)
+        elites = spam[:ELITISM_RATE]
 
 
 if __name__ == "__main__":
