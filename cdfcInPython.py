@@ -155,10 +155,10 @@ class ConstructedFeature:
         self.relevantFeatures = terminals(className)
 
     def getInfoGain(self):
-        if self.infoGain is None:
-            pass  # TODO write getInfoGain
-        else:
+        if self.infoGain:
             return self.infoGain
+        else:
+            pass  # TODO write getInfoGain
 
     def transform(self, instance):  # instance should be a row object
 
@@ -355,14 +355,15 @@ def main():
         reader = csv.reader(filePath, delimiter=',')
         counter = 0  # this is our line counter
         for line in reader:  # read the file
-            if counter == 0:  # if we are reading the column headers,
-                counter += 1  # skip
-            else:  # otherwise parse file
+            if counter:  # if we are not reading the column headers,
+                # parse the file
                 # reader[0] = classId, reader[1:] = attribute values
-                rows.append(row(line[0], line[1:]))  # parse file
+                rows.append(row(line[0], line[1:]))
                 classes.append(line[0])
                 classSet.add(line[0])
                 INSTANCES_NUMBER += 1
+            else:  # if we are reading the column headers,
+                counter += 1  # skip
 
     # get the number of features in the dataset
     FEATURE_NUMBER = len(rows[0].attribute)
@@ -598,6 +599,7 @@ def evolve(pop, elitism=True):  # pop should be a list of hypotheses
 
         child = mother  # this will be the child we return
 
+        # ! BUG - what if the tree isn't full and we can't reach the depth?
         # we will walk through the child's copy of mother to prevent
         # the mother from being overwritten
         childCrossPoint = None
@@ -623,13 +625,49 @@ def evolve(pop, elitism=True):  # pop should be a list of hypotheses
 
         return child
 
-    def mutate():
+    def mutate(candidate):
         # TODO write mutation
         # ? how many nodes are mutated? How are they selected? Randomly?
-        pass
+
+        # mutate a random number of random nodes in random ways
+
+        # get the number of nodes to mutate
+        numberToMutate = random.randint(1, POPULATION_SIZE)
+
+        # get the depth of nodes to mutate (root node would be 0)
+        depthsToMutate = [random.randint(1, MAX_DEPTH-1)
+                          for i in range(numberToMutate)]
+        # sort the depths so they are in numerical order. This will save us
+        # time when walking the tree
+        depthsToMutate.sort()
+
+        # this will be the node we are currently at in our tree
+        currentNode = candidate
+        # this will hold our current depth
+        currentDepth = 0
+        # ! BUG - what if the tree isn't full and we can't reach the depth?
+        # loop over the list of nodes to mutate & walk to them
+        for i in depthsToMutate:
+
+            # randomly walk the tree until we reach a node
+            # of the depth we want
+            while currentDepth != i:
+                if random.randint(1, 2) == 1:
+                    currentNode = currentNode.left
+                    currentDepth += 1
+                else:
+                    currentNode = currentNode.left
+                    currentDepth += 1
+
+            # Since we have reached a node of the random depth
+            # assign it a new random value
+            currentNode.data = OPS[random.randint(0, len(OPS))]
+        # ? Do I need to return canidate or are the changes in place
+        # ? (passed by reference or by value)?
+        return
 
     # *********** Calculate fitness & Handle Elitism *********** #
-    if elitism is True:
+    if elitism:
         # if we are using elitism, make the structures we'll use to track it
         elite = collect.namedtuple('elite', ['fitness', 'hypothesis'])
         elites = []
@@ -638,10 +676,10 @@ def evolve(pop, elitism=True):  # pop should be a list of hypotheses
         h.getFitness()
 
         # if we are using elitism we'll also need a list of all hypotheses
-        if elitism is True:
+        if elitism:
             elites.append(elite(h.fitess, h))
 
-    if elitism is True:
+    if elitism:
         # collect the best hypotheses & store them
         spam = sorted(elites, key=lambda elite: elite.fitness)
         elites = spam[:ELITISM_RATE]
