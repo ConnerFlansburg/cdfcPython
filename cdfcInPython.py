@@ -9,6 +9,7 @@ from tkinter.filedialog import askFile
 
 # * Next Steps
 # TODO write main
+# TODO finish docstrings
 # TODO rework mutation to use parallelism
 # TODO optimize & make modular
 
@@ -97,7 +98,23 @@ rows = []
 
 
 class Tree:
+    """Tree is a binary tree data structure that is used to represent a
+       constructed feature
 
+    Variables:
+        left: The left child of the tree. This will be a tree object.
+
+        right: The right child of the tree. This will be a tree object.
+
+        data: This will be either a terminal character or a function name.
+
+    Methods:
+        runTree: This is used to walk the tree until we reach a terminal
+                 character. After we do it should return that character along
+                 with a construct set of functions that should be operated on
+                 that terminal character. These functions should be store in
+                 the 'data' variable & be stored in as string function names.
+    """
     left = None
     right = None
     data = None  # must either be a function or a terminal
@@ -106,12 +123,6 @@ class Tree:
         self.left = None
         self.right = None
         self.data = data
-
-    def insertLeft(self, data):
-        self.left = Tree(data)
-
-    def insertRight(self, data):
-        self.right = Tree(data)
 
     # running a tree should return a single value
     def runTree(self, rFt):
@@ -135,11 +146,20 @@ class Tree:
         else:  # if right node is a function
             return self.right()
 
-    def PrintTree(self):
-        print(self.data)
-
 
 class ConstructedFeature:
+    """Constructed Feature is used to represent a single constructed feature in
+       a hypothesis. It contains the tree representation of the feature along
+       with additional information about the feature.
+
+    Variables:
+        [type]: [description]
+
+    Methods:
+        getInfoGain:
+
+        transform:
+    """
 
     # TODO does this need to be a list because we might have multiple trees?
     tree = None  # the root node of the constructed feature
@@ -300,6 +320,16 @@ class Hypothesis:
             transformed.append(instance(r.className, f.transform(r)))
             # ? how to make class name a bool? Does it need to be?
         return transformed  # return the list of all instances
+
+
+class Population:
+    # this will be the population of hypotheses
+    candidateHypotheses = []  # a list of all the candidate hyps
+    generation = None  # this is the number of this generation
+
+    def __init__(self, candidates, generationNumber):
+        self.candidateHypotheses = candidates
+        self.generation = generationNumber
 
 
 # ***************** End of Namespaces/Structs & Objects ******************* #
@@ -468,6 +498,79 @@ def valuesInClass(classId, attribute):
 
 def createInitialPopulation():
 
+    def grow(size):
+        # This function uses the grow method to generate an initial population
+        # TODO double check this logic
+        def assign(level):
+            # ? should this be changed to guarantee every terminal is used?
+            # recursively assign tree values
+            if level != MAX_DEPTH:
+                # get the random value
+                spam = ls[random.randint(0, len(ls))]
+                if spam in terminal:  # if the item is a terminal
+                    return Tree(spam)  # just return, stopping recursion
+
+                tree = Tree(spam)
+                tree.left = assign(level + 1)
+                tree.right = assign(level + 1)
+                return tree
+
+            else:
+                # stop recursion; max depth has been reached
+                # add a terminal to the leaf
+                spam = terminal[random.randint(0, len(terminal))]
+                # return
+                return Tree(spam)
+
+        for i in range(size):
+            classId = None  # ? how do I know that class that a tree is for?
+            # pick a random function & put it in the root
+            ls = random.shuffle(OPS)
+            rootData = ls[random.randint(0, len(ls))]
+            tree = Tree(rootData)  # make a new tree
+
+            # get the list of terminal characters
+            terminal = terminals(classId)
+            # add the terminal values to the list of functions & reorder
+            ls = random.shuffle(ls.append(terminal))
+
+            # create the tree
+            tree.left = assign(0)
+            tree.right = assign(0)
+
+    def full(size):
+        # This function uses the full method to generate an initial population
+        # TODO double check this logic
+        def assign(level):
+            # ? should this be changed to guarantee every terminal is used?
+            # recursively assign tree values
+            if level != MAX_DEPTH:
+                # get a random function & add it to the tree
+                tree = Tree(ls[random.randint(0, len(ls))])
+                # call for branches
+                tree.left = assign(level + 1)
+                tree.right = assign(level + 1)
+                return tree
+
+            else:  # stop recursion; max depth has been reached
+                # add a terminal to the leaf & return
+                return Tree(terminal[random.randint(0, len(terminal))])
+
+        for i in range(size):
+            classId = None  # ? how do I know that class that a tree is for?
+            # pick a random function & put it in the root
+            ls = random.shuffle(OPS)
+            rootData = ls[random.randint(0, len(ls))]
+            tree = Tree(rootData)  # make a new tree
+            # TODO somehow save & return the root of this tree
+
+            # get the list of terminal characters
+            terminal = terminals(classId)
+
+            # create the tree
+            tree.left = assign(0)
+            tree.right = assign(0)
+
     halfPopulation = POPULATION_SIZE//2
 
     pop = []  # this will hold the initial population
@@ -478,80 +581,6 @@ def createInitialPopulation():
     pop.append(full(halfPopulation))
     # return the population
     return pop
-
-
-def grow(size):
-    # This function uses the grow method to generate an initial population
-    # TODO double check this logic
-    def assign(level):
-        # ? should this be changed to guarantee every terminal is used?
-        # recursively assign tree values
-        if level != MAX_DEPTH:
-            # get the random value
-            spam = ls[random.randint(0, len(ls))]
-            if spam in terminal:  # if the item is a terminal
-                return Tree(spam)  # just return, stopping recursion
-
-            tree = Tree(spam)
-            tree.left = assign(level + 1)
-            tree.right = assign(level + 1)
-            return tree
-
-        else:
-            # stop recursion; max depth has been reached
-            # add a terminal to the leaf
-            spam = terminal[random.randint(0, len(terminal))]
-            # return
-            return Tree(spam)
-
-    for i in range(size):
-        classId = None  # ? how do I know that class that a tree is for?
-        # pick a random function & put it in the root
-        ls = random.shuffle(OPS)
-        rootData = ls[random.randint(0, len(ls))]
-        tree = Tree(rootData)  # make a new tree
-
-        # get the list of terminal characters
-        terminal = terminals(classId)
-        # add the terminal values to the list of functions & reorder
-        ls = random.shuffle(ls.append(terminal))
-
-        # create the tree
-        tree.left = assign(0)
-        tree.right = assign(0)
-
-
-def full(size):
-    # This function uses the full method to generate an initial population
-    # TODO double check this logic
-    def assign(level):
-        # ? should this be changed to guarantee every terminal is used?
-        # recursively assign tree values
-        if level != MAX_DEPTH:
-            # get a random function & add it to the tree
-            tree = Tree(ls[random.randint(0, len(ls))])
-            # call for branches
-            tree.left = assign(level + 1)
-            tree.right = assign(level + 1)
-            return tree
-
-        else:  # stop recursion; max depth has been reached
-            # add a terminal to the leaf & return
-            return Tree(terminal[random.randint(0, len(terminal))])
-
-    for i in range(size):
-        classId = None  # ? how do I know that class that a tree is for?
-        # pick a random function & put it in the root
-        ls = random.shuffle(OPS)
-        rootData = ls[random.randint(0, len(ls))]
-        tree = Tree(rootData)  # make a new tree
-
-        # get the list of terminal characters
-        terminal = terminals(classId)
-
-        # create the tree
-        tree.left = assign(0)
-        tree.right = assign(0)
 
 
 def evolve(pop, elitism=True):  # pop should be a list of hypotheses
@@ -587,7 +616,7 @@ def evolve(pop, elitism=True):  # pop should be a list of hypotheses
             parents[j] = max(possible, key=lambda i: possible.fitness)
 
         # parents now holds the two parents for a new hypothesis; return it
-        return parents
+        return parents  # ? is this several parent sets or just one?
 
     # ********** Mutation & Crossover ********** #
     def crossover(mother, father):  # mother & father should be two trees
@@ -626,7 +655,6 @@ def evolve(pop, elitism=True):  # pop should be a list of hypotheses
         return child
 
     def mutate(candidate):
-        # TODO write mutation
         # ? how many nodes are mutated? How are they selected? Randomly?
 
         # mutate a random number of random nodes in random ways
@@ -667,14 +695,22 @@ def evolve(pop, elitism=True):  # pop should be a list of hypotheses
         return
 
     # TODO check parameters of mutate & crossover
-    # TODO change this so it will be done over a population instead of once
-    # if the random number is greater than the mutation rate (the lower of the
-    # two), evolve using crossover
-    if random.uniform(0, 1) > MUTATION_RATE:
-        return crossover(pop)
+    if pop.generation >= GENERATIONS:
+        return  # if we have reached our generation max, exit
 
-    else:  # otherwis use mutation
-        mutate(pop)
+    mostFit = tournament(pop)  # collect the possible parents
+    newCandidates = []
+
+    for c in mostFit:
+        # loop over all mostFit hypotheses *(c should be a hypothesis object)
+        # if the random number is greater than the mutation rate (the lower of
+        # the two), evolve using crossover
+        if random.uniform(0, 1) > MUTATION_RATE:
+            newCandidates.append(crossover(pop))
+        else:  # otherwis use mutation
+            newCandidates.append(mutate(pop))
+    # create & return a new population
+    return Population(newCandidates, pop.generation+1)
 
     # *********** Calculate fitness & Handle Elitism *********** #
     if elitism:
