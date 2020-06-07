@@ -8,9 +8,8 @@ from tkinter import Tk
 from tkinter.filedialog import askFile
 
 # * Next Steps
-# TODO write code for mutation
-# TODO rework mutation to use parallelism
 # TODO write main
+# TODO rework mutation to use parallelism
 # TODO optimize & make modular
 
 # * Sanity Checking / debugging
@@ -18,6 +17,7 @@ from tkinter.filedialog import askFile
 # TODO check transform function code in Constructed Feature
 # TODO check transform function code in Tree
 # TODO check logic for initial population generation
+# TODO debug mutation & crossover
 
 
 # ******************** Constants/Globals ******************** #
@@ -556,7 +556,7 @@ def full(size):
 
 def evolve(pop, elitism=True):  # pop should be a list of hypotheses
 
-    def tournament():  # used by evolve to selection the parents
+    def tournament(pop):  # used by evolve to selection the parents
         # ************* Tournament Selection ************* #
         for j in range(0, 1):
             # randomly select hypotheses from the population to create
@@ -662,9 +662,19 @@ def evolve(pop, elitism=True):  # pop should be a list of hypotheses
             # Since we have reached a node of the random depth
             # assign it a new random value
             currentNode.data = OPS[random.randint(0, len(OPS))]
-        # ? Do I need to return canidate or are the changes in place
+        # ? Do I need to return candidate or are the changes in place
         # ? (passed by reference or by value)?
         return
+
+    # TODO check parameters of mutate & crossover
+    # TODO change this so it will be done over a population instead of once
+    # if the random number is greater than the mutation rate (the lower of the
+    # two), evolve using crossover
+    if random.uniform(0, 1) > MUTATION_RATE:
+        return crossover(pop)
+
+    else:  # otherwis use mutation
+        mutate(pop)
 
     # *********** Calculate fitness & Handle Elitism *********** #
     if elitism:
