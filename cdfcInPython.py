@@ -8,7 +8,6 @@ from tkinter import Tk
 from tkinter.filedialog import askFile
 
 # * Next Steps
-# TODO write getInfoGain in constructed features
 # TODO create a print function for population
 # TODO finish docstrings
 # TODO rework mutation to use parallelism
@@ -168,9 +167,6 @@ class ConstructedFeature:
                            been transformed by the decision tree.
 
     Methods:
-        getInfoGain: This gets the info gain value of the feature if it has
-                     been created, and generates it if it has not been.
-
         transform:  This takes the original data & transforms it using the
                     feature's decision tree.
     """
@@ -183,16 +179,11 @@ class ConstructedFeature:
     # the values data after they have been transformed by the tree
     transformedValues = None
 
-    def __init__(self, className):
+    def __init__(self, className, tree):
         self.className = className
+        self.tree = tree
         # call terminals to create the terminal set
         self.relevantFeatures = terminals(className)
-
-    def getInfoGain(self):
-        if self.infoGain:
-            return self.infoGain
-        else:
-            pass  # TODO write getInfoGain
 
     def transform(self, instance):  # instance should be a row object
 
@@ -219,6 +210,15 @@ class Hypothesis:
 
     def getFitness(self):
 
+        def __Czekanowski(Vi, Vj):
+            minSum = 0
+            addSum = 0
+            # loop over the number of features
+            for d in range(1, len(self.features)):
+                minSum += min(Vi[d], Vj[d])  # the top of the fraction
+                addSum += Vi[d] + Vj[d]  # the bottom of the fraction
+            return 1 - ((2*minSum) / addSum)
+
         def Distance(values):
 
             # ********** Compute Vi & Vj ********** #
@@ -236,7 +236,7 @@ class Hypothesis:
                         # continue / skip / return go to next element
                         pass
 
-                    dist = Czekanowski(vi, vj)  # compute the distance
+                    dist = __Czekanowski(vi, vj)  # compute the distance
 
                     # if vi & vj are in the same class (Dw)
                     if vi.inClass == vj.inClass:
@@ -257,16 +257,7 @@ class Hypothesis:
             term2 = Dw / len(values)
             return 1 / (1 + math.pow(math.e, -5*(term1 - term2)))
 
-        def Czekanowski(Vi, Vj):
-            minSum = 0
-            addSum = 0
-            # loop over the number of features
-            for d in range(1, len(self.features)):
-                minSum += min(Vi[d], Vj[d])  # the top of the fraction
-                addSum += Vi[d] + Vj[d]  # the bottom of the fraction
-            return 1 - ((2*minSum) / addSum)
-
-        def entropy(pos, neg):
+        def __entropy(pos, neg):
             return -pos*math.log(pos, 2)-neg*math.log(neg, 2)
 
         # loop over all features & get their info gain
@@ -277,12 +268,12 @@ class Hypothesis:
             # find the +/- probabilities of a class
             pPos = Occurences.get(f.className)
             pNeg = INSTANCES_NUMBER - pPos
-            entClass = entropy(pPos, pNeg)
+            entClass = __entropy(pPos, pNeg)
 
             # find the +/- probabilites of a feature given a class
             pPos = None  # TODO use Baye's Theorem to compute
             pNeg = None  # TODO use Baye's Theorem to compute
-            entFeature = entropy(pPos, pNeg)
+            entFeature = __entropy(pPos, pNeg)
 
             # ******** Info Gain calculation ******* #
             # H(class) - H(class|f)
@@ -459,7 +450,7 @@ def valuesInClass(classId, attribute):
 
 def createInitialPopulation():
 
-    def grow(size):
+    def __grow(size):
         # This function uses the grow method to generate an initial population
         # TODO double check this logic
         def assign(level):
@@ -499,7 +490,7 @@ def createInitialPopulation():
             tree.left = assign(0)
             tree.right = assign(0)
 
-    def full(size):
+    def __full(size):
         # This function uses the full method to generate an initial population
         # TODO double check this logic
         def assign(level):
@@ -537,16 +528,28 @@ def createInitialPopulation():
     pop = []  # this will hold the initial population
     # TODO These return trees. Change so they create CFs & a hypothesis
     # create half of pop via grow
-    pop.append(grow(halfPopulation))
+    pop.append(__grow(halfPopulation))
     # create half of pop via full
-    pop.append(full(halfPopulation))
+    pop.append(__full(halfPopulation))
+    # create a constructed feature for each item in the list
+    # TODO find a way to get the class name
+    # ? How to get the class id/name? Can it be randomly assigned?
+    features = [ConstructedFeature('className', i) for i in pop]
+    # create a list of empty hypotheses
+    hypList = [Hypothesis() for i in range(POPULATION_SIZE)]
+    for c in range(FEATURE_NUMBER):
+        spam = filter(lambda x: x.className == c, features)
+        # Loop over hList and add one feature to each hypotheses
+        for i in range(hypList):
+            i.tree.append(spam.pop())
+            # TODO set size somehow
     # return the population
     return pop
 
 
 def evolve(pop, elitism=True):  # pop should be a list of hypotheses
 
-    def tournament(pop):  # used by evolve to selection the parents
+    def __tournament(pop):  # used by evolve to selection the parents
         # ************* Tournament Selection ************* #
         for j in range(0, 1):
             # randomly select hypotheses from the population to create
@@ -580,7 +583,7 @@ def evolve(pop, elitism=True):  # pop should be a list of hypotheses
         return parents  # ? is this several parent sets or just one?
 
     # ********** Mutation & Crossover ********** #
-    def crossover(mother, father):  # mother & father should be two trees
+    def __crossover(mother, father):  # mother & father should be two trees
         # ? is the crossover point selected randomly?
         # this wil be the crossover point in the tree
         # (must be before a terminal node)
@@ -615,7 +618,7 @@ def evolve(pop, elitism=True):  # pop should be a list of hypotheses
 
         return child
 
-    def mutate(candidate):
+    def __mutate(candidate):
         # ? how many nodes are mutated? How are they selected? Randomly?
 
         # mutate a random number of random nodes in random ways
@@ -659,7 +662,7 @@ def evolve(pop, elitism=True):  # pop should be a list of hypotheses
     if pop.generation >= GENERATIONS:
         return  # if we have reached our generation max, exit
 
-    mostFit = tournament(pop)  # collect the possible parents
+    mostFit = __tournament(pop)  # collect the possible parents
     newCandidates = []
 
     for c in mostFit:
@@ -667,9 +670,9 @@ def evolve(pop, elitism=True):  # pop should be a list of hypotheses
         # if the random number is greater than the mutation rate (the lower of
         # the two), evolve using crossover
         if random.uniform(0, 1) > MUTATION_RATE:
-            newCandidates.append(crossover(pop))
+            newCandidates.append(__crossover(pop))
         else:  # otherwis use mutation
-            newCandidates.append(mutate(pop))
+            newCandidates.append(__mutate(pop))
     # create & return a new population
     return Population(newCandidates, pop.generation+1)
 
@@ -745,8 +748,9 @@ def main():
         Occurences[id] = classes.count(id)
     # ****************************************************************** #
 
+    # ********************* Run the Algorithm ********************* #
+    # create initial population
     currentPopulation = createInitialPopulation()
-
     # loop, evolving each generation. This is where most of the work is done
     for i in range(GENERATIONS):
         # generate a new population by evolving the old one
