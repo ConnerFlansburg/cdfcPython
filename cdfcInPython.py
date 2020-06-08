@@ -8,7 +8,8 @@ from tkinter import Tk
 from tkinter.filedialog import askFile
 
 # * Next Steps
-# TODO write main
+# TODO write getInfoGain in constructed features
+# TODO create a print function for population
 # TODO finish docstrings
 # TODO rework mutation to use parallelism
 # TODO optimize & make modular
@@ -153,12 +154,25 @@ class ConstructedFeature:
        with additional information about the feature.
 
     Variables:
-        [type]: [description]
+        tree: This is the constructed features binary decision tree.
+
+        className: The name/id of the class that the feature is meant to
+                   distinguish.
+
+        infoGain: The info gain of the feature.
+
+        relevantFeatures: The list of terminal characters relevant to the
+                          feature's class.
+
+        transformedValues: The values of the original data after they have
+                           been transformed by the decision tree.
 
     Methods:
-        getInfoGain:
+        getInfoGain: This gets the info gain value of the feature if it has
+                     been created, and generates it if it has not been.
 
-        transform:
+        transform:  This takes the original data & transforms it using the
+                    feature's decision tree.
     """
 
     # TODO does this need to be a list because we might have multiple trees?
@@ -362,59 +376,6 @@ def isTrue(a, b):
 # max is built in
 
 # *************************** End of Operations *************************** #
-
-
-def main():
-    Tk().withdraw()  # prevent root window caused by Tkinter
-    path = askFile()  # prompt user for file path
-
-    # makes sure we're using global variables
-    global FEATURE_NUMBER
-    global POPULATION_SIZE
-    global INSTANCES_NUMBER
-    global rows
-    global row
-
-    classes = []  # this will hold classIds and how often they occur
-    classSet = set()  # this will hold how many classes there are
-    vals = []  # holds all the that occur in the training data
-    valuesSet = set()  # same as values but with no repeated values
-
-    with open(path) as filePath:  # open selected file
-        # create a reader using the file
-        reader = csv.reader(filePath, delimiter=',')
-        counter = 0  # this is our line counter
-        for line in reader:  # read the file
-            if counter:  # if we are not reading the column headers,
-                # parse the file
-                # reader[0] = classId, reader[1:] = attribute values
-                rows.append(row(line[0], line[1:]))
-                classes.append(line[0])
-                classSet.add(line[0])
-                INSTANCES_NUMBER += 1
-            else:  # if we are reading the column headers,
-                counter += 1  # skip
-
-    # get the number of features in the dataset
-    FEATURE_NUMBER = len(rows[0].attribute)
-    POPULATION_SIZE = FEATURE_NUMBER * BETA  # set the pop size
-
-    # ********* The Code Below is Used to Calculated Entropy  ********* #
-    for v in valuesSet:
-        # find out how many times a value occurred and store it
-        # in a dictionary keyed by value
-        Values[v] = vals.count(v)
-        if Values[v] > 1:  # if the value occurs more than once
-            for r in rows:  # loop over rows
-                # if the value appears in this instance
-                if r.attributes.contains(v):
-                    # update the dictionary's amount of occurences
-                    # !BUG this won't work: dictionaries can't reuse keys
-                    fGivenC[r.className] += 1
-    # loop over the class set - each classId will be id only once
-    for id in classSet:
-        # finds out how many times a class occurs in data and add to dictionary
-        Occurences[id] = classes.count(id)
 
 
 # ? Should this be on the Constructed Feature object?
@@ -729,6 +690,73 @@ def evolve(pop, elitism=True):  # pop should be a list of hypotheses
         # collect the best hypotheses & store them
         spam = sorted(elites, key=lambda elite: elite.fitness)
         elites = spam[:ELITISM_RATE]
+
+
+def main():
+    Tk().withdraw()  # prevent root window caused by Tkinter
+    path = askFile()  # prompt user for file path
+
+    # makes sure we're using global variables
+    global FEATURE_NUMBER
+    global POPULATION_SIZE
+    global INSTANCES_NUMBER
+    global rows
+    global row
+
+    classes = []  # this will hold classIds and how often they occur
+    classSet = set()  # this will hold how many classes there are
+    vals = []  # holds all the that occur in the training data
+    valuesSet = set()  # same as values but with no repeated values
+
+    with open(path) as filePath:  # open selected file
+        # create a reader using the file
+        reader = csv.reader(filePath, delimiter=',')
+        counter = 0  # this is our line counter
+        for line in reader:  # read the file
+            if counter:  # if we are not reading the column headers,
+                # parse the file
+                # reader[0] = classId, reader[1:] = attribute values
+                rows.append(row(line[0], line[1:]))
+                classes.append(line[0])
+                classSet.add(line[0])
+                INSTANCES_NUMBER += 1
+            else:  # if we are reading the column headers,
+                counter += 1  # skip
+
+    # get the number of features in the dataset
+    FEATURE_NUMBER = len(rows[0].attribute)
+    POPULATION_SIZE = FEATURE_NUMBER * BETA  # set the pop size
+
+    # ********* The Code Below is Used to Calculated Entropy  ********* #
+    for v in valuesSet:
+        # find out how many times a value occurred and store it
+        # in a dictionary keyed by value
+        Values[v] = vals.count(v)
+        if Values[v] > 1:  # if the value occurs more than once
+            for r in rows:  # loop over rows
+                # if the value appears in this instance
+                if r.attributes.contains(v):
+                    # update the dictionary's amount of occurences
+                    # !BUG this won't work: dictionaries can't reuse keys
+                    fGivenC[r.className] += 1
+    # loop over the class set - each classId will be id only once
+    for id in classSet:
+        # finds out how many times a class occurs in data and add to dictionary
+        Occurences[id] = classes.count(id)
+    # ****************************************************************** #
+
+    currentPopulation = createInitialPopulation()
+
+    # loop, evolving each generation. This is where most of the work is done
+    for i in range(GENERATIONS):
+        # generate a new population by evolving the old one
+        newPopulation = evolve(currentPopulation, elitism=True)
+        # update currentPopulation to hold the new population
+        # this is done in two steps to avoid potential namespace issues
+        currentPopulation = newPopulation
+
+    # report the information about the final population
+    print(currentPopulation)
 
 
 if __name__ == "__main__":
