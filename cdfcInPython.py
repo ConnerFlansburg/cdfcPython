@@ -369,7 +369,6 @@ def isTrue(a, b):
 # *************************** End of Operations *************************** #
 
 
-# ? Should this be on the Constructed Feature object?
 def terminals(classId):
     """terminals creates the list of relevant terminals for a given class.
 
@@ -474,8 +473,20 @@ def createInitialPopulation():
                 # return
                 return Tree(spam)
 
+        classId = None
+        # create a list of classIds
+        classIds = random.shuffle(range(1, FEATURE_NUMBER))
+
         for i in range(size):
-            classId = None  # ? how do I know that class that a tree is for?
+
+            # ******** assign a random class id ******** #
+            # if the list is empty of class ids get new ones
+            if classIds:
+                classId = classIds.pop()
+            else:
+                classIds = random.shuffle(range(1, FEATURE_NUMBER))
+                classId = classIds.pop()
+
             # pick a random function & put it in the root
             ls = random.shuffle(OPS)
             rootData = ls[random.randint(0, len(ls))]
@@ -515,7 +526,7 @@ def createInitialPopulation():
             rootData = ls[random.randint(0, len(ls))]
             tree = Tree(rootData)  # make a new tree
             # TODO somehow save & return the root of this tree
-
+            # ? maybe this needs to make a constructed feature...
             # get the list of terminal characters
             terminal = terminals(classId)
 
@@ -526,14 +537,13 @@ def createInitialPopulation():
     halfPopulation = POPULATION_SIZE//2
 
     pop = []  # this will hold the initial population
-    # TODO These return trees. Change so they create CFs & a hypothesis
+    # TODO these should be lists of constructed features
     # create half of pop via grow
     pop.append(__grow(halfPopulation))
     # create half of pop via full
     pop.append(__full(halfPopulation))
     # create a constructed feature for each item in the list
-    # TODO find a way to get the class name
-    # ? How to get the class id/name? Can it be randomly assigned?
+    # TODO check this logic
     features = [ConstructedFeature('className', i) for i in pop]
     # create a list of empty hypotheses
     hypList = [Hypothesis() for i in range(POPULATION_SIZE)]
