@@ -171,7 +171,7 @@ class ConstructedFeature:
                     feature's decision tree.
     """
 
-    # TODO does this need to be a list because we might have multiple trees?
+    # ? does this need to be a list because we might have multiple trees?
     tree = None  # the root node of the constructed feature
     className = None  # the name of the class this tree is meant to distinguish
     infoGain = None  # the info gain for this feature
