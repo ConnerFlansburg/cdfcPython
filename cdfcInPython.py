@@ -248,9 +248,9 @@ class Hypothesis:
                 Dw += maxSum
 
             # perform the final distance calculations
-            term1 = Db / len(values)
-            term2 = Dw / len(values)
-            return 1 / (1 + math.pow(math.e, -5*(term1 - term2)))
+            t1 = Db / len(values)
+            t2 = Dw / len(values)
+            return 1 / (1 + math.pow(math.e, -5*(t1 - t2)))
 
         def __entropy(pos, neg):
             return -pos*math.log(pos, 2)-neg*math.log(neg, 2)
@@ -265,7 +265,7 @@ class Hypothesis:
             pNeg = INSTANCES_NUMBER - pPos
             entClass = __entropy(pPos, pNeg)
 
-            # find the +/- probabilites of a feature given a class
+            # find the +/- probabilities of a feature given a class
             pPos = None  # TODO use Baye's Theorem to compute
             pNeg = None  # TODO use Baye's Theorem to compute
             entFeature = __entropy(pPos, pNeg)
@@ -324,7 +324,7 @@ class Hypothesis:
 
 class Population:
     # this will be the population of hypotheses
-    candidateHypotheses = []  # a list of all the candidate hyps
+    candidateHypotheses = []  # a list of all the candidate hypotheses
     generation = None  # this is the number of this generation
 
     def __init__(self, candidates, generationNumber):
@@ -395,6 +395,7 @@ def terminals(classId):
         else:  # otherwise
             # set relevancy using t-value/p-value
             relevancy = abs(tValue)/pValue
+
         scores.append(Score(i, relevancy))
 
     # sort the features by relevancy scores
@@ -555,56 +556,73 @@ def createInitialPopulation():
 
 def evolve(population, elitism=True):  # pop should be a list of hypotheses
 
-    def __tournament():  # used by evolve to selection the parents
+    def __tournament(candidates):  # TODO check this after working on mutate & crossover
+        # used by evolve to selection the parents
         # ************* Tournament Selection ************* #
 
-        knights = population.candidateHypotheses
         first = None
         score = 0
         # compare TOURNEY number of random hypothesis
         for i in range(0, TOURNEY):
 
             # get a random hypothesis
-            knight = knights.pop(random.randint(0, len(knights)))
+            candidate = candidates.pop(random.randint(0, len(candidates)))
             # get that hypothesis's fitness score
-            fitness = knight.getFitness()
+            fitness = candidate.getFitness()
 
             # if first has not been set, set it
             if first is None:
-                first = knight
+                first = candidate
             # if first is set, but knight is more fit, update it
             elif score < fitness:
-                first = knight
+                first = candidate
                 score = fitness
 
         return first
 
     # ********** Mutation & Crossover ********** #
-    def __crossover():
+    def __crossover(cf, features):  # input should be the to be modified constructed feature
         # use tourney twice to get the parents & go from there
+        # return a constructed feature
         pass
 
-    def __mutate(candidate):
+    def __mutate(cf, features):  # input should be the constructed feature to be modified
         # use tourney once to choose what to mutate
+        # return a constructed feature
         pass
 
-    # *********** Calculate fitness & Handle Elitism *********** #
-    if elitism:
-        # if we are using elitism, make the structures we'll use to track it
-        elite = collect.namedtuple('elite', ['fitness', 'hypothesis'])
-        elites = []
+    # ************ Evolution ************ #
+    # NOTE currently this evolves every constructed feature in every hypotheses in the population
 
-    for h in pop:  # for every hypothesis, set it's fitness
-        h.getFitness()
+    newCandidates = []  # will hold the new candidates
 
-        # if we are using elitism we'll also need a list of all hypotheses
-        if elitism:
-            elites.append(elite(h.fitess, h))
+    for hyp in population.candidateHypotheses:
 
-    if elitism:
-        # collect the best hypotheses & store them
-        spam = sorted(elites, key=lambda elite: elite.fitness)
-        elites = spam[:ELITISM_RATE]
+        # loop over every hypothesis and for each hyp loop over it's list of features
+        newFeatures = []  # empty list of new candidates so it's ready for the next feature
+
+        for feature in hyp.features:
+            # for every constructed feature in h get a random real number between 0 & 1
+            # and if that number is > mutation rate (the lower of the two), use crossover
+            # otherwise use mutate. This will evolve a constructed feature
+            if random.uniform(0, 1) > MUTATION_RATE:
+                # here feature is the structure to be changed & hyp.features is used by tournament
+                newFeatures.append(__crossover(feature, hyp.features))
+            else:
+                # here feature is the structure to be changed & hyp.features is used by tournament
+                newFeatures.append(__mutate(feature, hyp.features))
+
+        # create a new hypothesis object
+        h = Hypothesis()
+        h.features = newFeatures
+        # add the new hypothesis to the list of new hypotheses
+        newCandidates.append(h)
+
+    # update the hypothesis
+    population.candidateHypotheses = newCandidates
+    # update generation
+    population.generation += 1
+
 
 
 def main():
