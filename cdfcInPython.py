@@ -10,16 +10,11 @@ from tkinter.filedialog import askFile
 # * Next Steps
 # TODO create a print function for population
 # TODO finish docstrings
-# TODO rework mutation to use parallelism
-# TODO optimize & make modular
 
 # * Sanity Checking / debugging
 # TODO check entropy function code in Hypothesis
-# TODO check transform function code in Constructed Feature
-# TODO check transform function code in Tree
-# TODO check logic for initial population generation
-# TODO debug mutation & crossover
-
+# TODO rework mutation to use parallelism
+# TODO optimize & make modular
 
 # ******************** Constants/Globals ******************** #
 
@@ -38,13 +33,13 @@ ELITISM_RATE = 1
 # TOURNEY is the tournament size
 TOURNEY = 7
 
-# ALPHA is the fitess weight alpha
+# ALPHA is the fitness weight alpha
 ALPHA = 0.8
 
 # a constant used to calculate the pop size
 BETA = 2
 
-# the number of features in the dataset
+# the number of features in the data set
 FEATURE_NUMBER = 0
 
 # the population size
@@ -58,10 +53,10 @@ MAX_DEPTH = 8
 # *** the next 3 variables are used to compute entropy *** #
 # this will store the number of times a class occurs in the training data in
 # a dictionary keyed by it's classId
-Occurences = {}
+Occurrences = {}
 
 # stores the number of times a value occurs in the training data
-# (occurences keyed value)
+# (occurrences keyed value)
 Values = {}
 
 # the number of times a value occurs keyed by class
@@ -79,7 +74,7 @@ R = 2
 # M is the number of constructed features
 M = R*C
 
-# FN (feature num) is number of features in the dataset
+# FN (feature num) is number of features in the data set
 FN = 0
 
 # PS (pop size) is the population size (equal to number of features * beta)
@@ -266,7 +261,7 @@ class Hypothesis:
 
             # ********* Entropy calculation ********* #
             # find the +/- probabilities of a class
-            pPos = Occurences.get(f.className)
+            pPos = Occurrences.get(f.className)
             pNeg = INSTANCES_NUMBER - pPos
             entClass = __entropy(pPos, pNeg)
 
@@ -383,7 +378,7 @@ def terminals(classId):
     """
 
     Score = collect.namedtuple('Score', ['Attribute', 'Relevancy'])
-    scores = None
+    scores = []
 
     for i in range(1, FEATURE_NUMBER):
         # find the values of attribute i in/not in class classId
@@ -405,7 +400,7 @@ def terminals(classId):
     # sort the features by relevancy scores
     sortedScores = sorted(scores, key=lambda Score: Score.Attribute)
 
-    terminalSet = None  # this will hold relevant terminals
+    terminalSet = []  # this will hold relevant terminals
     top = len(sortedScores)  # find the halfway point
     relevantScores = sortedScores[:top]  # slice top half
     for i in relevantScores:  # loop over relevant scores
@@ -431,8 +426,8 @@ def valuesInClass(classId, attribute):
         notInClass -- This holds the values not in the class.
     """
 
-    inClass = None  # attribute values that appear in the class
-    notInClass = None  # attribute values that do not appear in the class
+    inClass = []  # attribute values that appear in the class
+    notInClass = []  # attribute values that do not appear in the class
 
     # loop over all the rows, where value is the row at the current index
     for value in rows:
@@ -522,138 +517,76 @@ def createInitialPopulation():
         return tree
 
     # TODO create hyp & pop
+    def createHypothesis():
+        # given a list of trees, create a hypothesis
+
+        # get a list of all classIds
+        classIds = random.shuffle(range(1, C))
+
+        ftrs = []
+        # assumes one tree per feature, and creates 1 tree for
+        # each class
+        for __ in range(C):
+
+            # randomly decide if grow or full should be used.
+            # Also randomly assign the class ID then remove that ID
+            # so each ID may only be used once
+            if random.choice([True, False]):
+                name = classIds.pop(0)  # get a random id
+                tree = __grow(name)     # create tree
+                ftrs.append(ConstructedFeature(name, tree))
+            else:
+                name = classIds.pop(0)  # get a random id
+                tree = __full(name)     # create tree
+                ftrs.append(ConstructedFeature(name, tree))
+
+        h = Hypothesis
+        h.features = ftrs
+        # TODO get size of trees as they are generated & add to size var
+        return h
+
+    hypothesis = []
+
+    for __ in range(POPULATION_SIZE):
+        hypothesis = createHypothesis()
+
+    return Population(hypothesis, 0)
 
 
-def evolve(pop, elitism=True):  # pop should be a list of hypotheses
+def evolve(population, elitism=True):  # pop should be a list of hypotheses
 
-    # TODO redo whole evolvution
-
-    def __tournament(pop):  # used by evolve to selection the parents
+    def __tournament():  # used by evolve to selection the parents
         # ************* Tournament Selection ************* #
-        for j in range(0, 1):
-            # randomly select hypotheses from the population to create
-            # a list of all possible parents (we want to do this twice)
 
-            # this will hold the list of random potential parents
-            parents = (None, None)
+        knights = population.candidateHypotheses
+        first = None
+        score = 0
+        # compare TOURNEY number of random hypothesis
+        for i in range(0, TOURNEY):
 
-            for i in range(TOURNEY):
-                # this loop create 1 parent & is repeated twice
-                # ? is the append adding by value or reference?
-                # ? If it's adding by reference this will
-                # ? overwrite the added items...
-                possible = []
+            # get a random hypothesis
+            knight = knights.pop(random.randint(0, len(knights)))
+            # get that hypothesis's fitness score
+            fitness = knight.getFitness()
 
-                # get a random index integer
-                spam = random.randint(0, len(pop))
+            # if first has not been set, set it
+            if first is None:
+                first = knight
+            # if first is set, but knight is more fit, update it
+            elif score < fitness:
+                first = knight
+                score = fitness
 
-                while possible.contains(pop[spam]):
-                    # if we have already selected the value as a parent,
-                    # get a new random value
-                    spam = random.randint(0, len(pop))
-
-                # add the potential parents to the list
-                possible.append(pop[spam])
-
-            # find the candidate with the max fitness & make it a parent
-            parents[j] = max(possible, key=lambda i: possible.fitness)
-
-        # parents now holds the two parents for a new hypothesis; return it
-        return parents  # ? is this several parent sets or just one?
+        return first
 
     # ********** Mutation & Crossover ********** #
-    def __crossover(mother, father):  # mother & father should be two trees
-        # ? is the crossover point selected randomly?
-        # this wil be the crossover point in the tree
-        # (must be before a terminal node)
-        motherCrossPoint = random.randint(0, MAX_DEPTH-1)
-        fatherCrossPoint = random.randint(0, MAX_DEPTH-1)
-
-        child = mother  # this will be the child we return
-
-        # ! BUG - what if the tree isn't full and we can't reach the depth?
-        # we will walk through the child's copy of mother to prevent
-        # the mother from being overwritten
-        childCrossPoint = None
-        for i in range(motherCrossPoint):
-            # randomly walk the tree until we reach the crossover point
-            if random.randint(1, 2) == 1:
-                childCrossPoint = child.left()
-            else:
-                childCrossPoint = child.right()
-
-        fatherCrossNode = None  # the node at the crossover point
-        for i in range(fatherCrossPoint):
-            # randomly walk the tree until we reach the crossover point
-            if random.randint(1, 2) == 1:
-                fatherCrossNode = father.left()
-            else:
-                fatherCrossNode = father.right()
-
-        # take the sub-tree from father & add it to child at the
-        # crossover point for the mother
-        childCrossPoint.left = fatherCrossNode.left
-        childCrossPoint.right = fatherCrossNode.right
-
-        return child
+    def __crossover():
+        # use tourney twice to get the parents & go from there
+        pass
 
     def __mutate(candidate):
-        # ? how many nodes are mutated? How are they selected? Randomly?
-
-        # mutate a random number of random nodes in random ways
-
-        # get the number of nodes to mutate
-        numberToMutate = random.randint(1, POPULATION_SIZE)
-
-        # get the depth of nodes to mutate (root node would be 0)
-        depthsToMutate = [random.randint(1, MAX_DEPTH-1)
-                          for i in range(numberToMutate)]
-        # sort the depths so they are in numerical order. This will save us
-        # time when walking the tree
-        depthsToMutate.sort()
-
-        # this will be the node we are currently at in our tree
-        currentNode = candidate
-        # this will hold our current depth
-        currentDepth = 0
-        # ! BUG - what if the tree isn't full and we can't reach the depth?
-        # loop over the list of nodes to mutate & walk to them
-        for i in depthsToMutate:
-
-            # randomly walk the tree until we reach a node
-            # of the depth we want
-            while currentDepth != i:
-                if random.randint(1, 2) == 1:
-                    currentNode = currentNode.left
-                    currentDepth += 1
-                else:
-                    currentNode = currentNode.left
-                    currentDepth += 1
-
-            # Since we have reached a node of the random depth
-            # assign it a new random value
-            currentNode.data = OPS[random.randint(0, len(OPS))]
-        # ? Do I need to return candidate or are the changes in place
-        # ? (passed by reference or by value)?
-        return
-
-    # TODO check parameters of mutate & crossover
-    if pop.generation >= GENERATIONS:
-        return  # if we have reached our generation max, exit
-
-    mostFit = __tournament(pop)  # collect the possible parents
-    newCandidates = []
-
-    for c in mostFit:
-        # loop over all mostFit hypotheses *(c should be a hypothesis object)
-        # if the random number is greater than the mutation rate (the lower of
-        # the two), evolve using crossover
-        if random.uniform(0, 1) > MUTATION_RATE:
-            newCandidates.append(__crossover(pop))
-        else:  # otherwis use mutation
-            newCandidates.append(__mutate(pop))
-    # create & return a new population
-    return Population(newCandidates, pop.generation+1)
+        # use tourney once to choose what to mutate
+        pass
 
     # *********** Calculate fitness & Handle Elitism *********** #
     if elitism:
@@ -724,7 +657,7 @@ def main():
     # loop over the class set - each classId will be id only once
     for id in classSet:
         # finds out how many times a class occurs in data and add to dictionary
-        Occurences[id] = classes.count(id)
+        Occurrences[id] = classes.count(id)
     # ****************************************************************** #
 
     # ********************* Run the Algorithm ********************* #
