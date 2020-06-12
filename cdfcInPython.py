@@ -322,7 +322,7 @@ class Hypothesis:
             # each instance will hold the new values for
             # an instance & className. Transformed will hold
             # all the instances for a hypothesis
-            transformed.append(instance(r.className, f.transform(r)))
+            transformed.append(instance(r.className, values))
             # ? how to make class name a bool? Does it need to be?
         return transformed  # return the list of all instances
 
@@ -449,11 +449,10 @@ def valuesInClass(classId, attribute):
 
 def createInitialPopulation():
 
-    def __grow(size):
+    # TODO update design
+    def __grow(classId):
         # This function uses the grow method to generate an initial population
-        # TODO double check this logic
         def assign(level):
-            # ? should this be changed to guarantee every terminal is used?
             # recursively assign tree values
             if level != MAX_DEPTH:
                 # get the random value
@@ -473,37 +472,24 @@ def createInitialPopulation():
                 # return
                 return Tree(spam)
 
-        classId = None
-        # create a list of classIds
-        classIds = random.shuffle(range(1, FEATURE_NUMBER))
+        # pick a random function & put it in the root
+        ls = random.shuffle(OPS)
+        rootData = ls[random.randint(0, len(ls))]
+        tree = Tree(rootData)  # make a new tree
 
-        for i in range(size):
+        # get the list of terminal characters
+        terminal = terminals(classId)
+        # add the terminal values to the list of functions & reorder
+        ls = random.shuffle(ls.append(terminal))
 
-            # ******** assign a random class id ******** #
-            # if the list is empty of class ids get new ones
-            if classIds:
-                classId = classIds.pop()
-            else:
-                classIds = random.shuffle(range(1, FEATURE_NUMBER))
-                classId = classIds.pop()
+        # create the tree
+        tree.left = assign(1)
+        tree.right = assign(1)
 
-            # pick a random function & put it in the root
-            ls = random.shuffle(OPS)
-            rootData = ls[random.randint(0, len(ls))]
-            tree = Tree(rootData)  # make a new tree
+        return tree
 
-            # get the list of terminal characters
-            terminal = terminals(classId)
-            # add the terminal values to the list of functions & reorder
-            ls = random.shuffle(ls.append(terminal))
-
-            # create the tree
-            tree.left = assign(0)
-            tree.right = assign(0)
-
-    def __full(size):
+    def __full(classId):
         # This function uses the full method to generate an initial population
-        # TODO double check this logic
         def assign(level):
             # ? should this be changed to guarantee every terminal is used?
             # recursively assign tree values
@@ -519,45 +505,28 @@ def createInitialPopulation():
                 # add a terminal to the leaf & return
                 return Tree(terminal[random.randint(0, len(terminal))])
 
-        for i in range(size):
-            classId = None  # ? how do I know that class that a tree is for?
-            # pick a random function & put it in the root
-            ls = random.shuffle(OPS)
-            rootData = ls[random.randint(0, len(ls))]
-            tree = Tree(rootData)  # make a new tree
-            # TODO somehow save & return the root of this tree
-            # ? maybe this needs to make a constructed feature...
-            # get the list of terminal characters
-            terminal = terminals(classId)
+        # pick a random function & put it in the root
+        ls = random.shuffle(OPS)
+        rootData = ls[random.randint(0, len(ls))]
+        tree = Tree(rootData)  # make a new tree
 
-            # create the tree
-            tree.left = assign(0)
-            tree.right = assign(0)
+        # get the list of terminal characters
+        terminal = terminals(classId)
+        # add the terminal values to the list of functions & reorder
+        ls = random.shuffle(ls.append(terminal))
 
-    halfPopulation = POPULATION_SIZE//2
+        # create the tree
+        tree.left = assign(1)
+        tree.right = assign(1)
 
-    pop = []  # this will hold the initial population
-    # TODO these should be lists of constructed features
-    # create half of pop via grow
-    pop.append(__grow(halfPopulation))
-    # create half of pop via full
-    pop.append(__full(halfPopulation))
-    # create a constructed feature for each item in the list
-    # TODO check this logic
-    features = [ConstructedFeature('className', i) for i in pop]
-    # create a list of empty hypotheses
-    hypList = [Hypothesis() for i in range(POPULATION_SIZE)]
-    for c in range(FEATURE_NUMBER):
-        spam = filter(lambda x: x.className == c, features)
-        # Loop over hList and add one feature to each hypotheses
-        for i in range(hypList):
-            i.tree.append(spam.pop())
-            # TODO set size somehow
-    # return the population
-    return pop
+        return tree
+
+    # TODO create hyp & pop
 
 
 def evolve(pop, elitism=True):  # pop should be a list of hypotheses
+
+    # TODO redo whole evolvution
 
     def __tournament(pop):  # used by evolve to selection the parents
         # ************* Tournament Selection ************* #
