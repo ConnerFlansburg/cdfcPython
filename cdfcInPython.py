@@ -487,7 +487,6 @@ def createInitialPopulation():
     def __full(classId):
         # This function uses the full method to generate an initial population
         def assign(level):
-            # ? should this be changed to guarantee every terminal is used?
             # recursively assign tree values
             if level != MAX_DEPTH:
                 # get a random function & add it to the tree
@@ -549,7 +548,7 @@ def createInitialPopulation():
     hypothesis = []
 
     for __ in range(POPULATION_SIZE):
-        hypothesis = createHypothesis()
+        hypothesis.append(createHypothesis())
 
     return Population(hypothesis, 0)
 
@@ -581,48 +580,62 @@ def evolve(population, elitism=True):  # pop should be a list of hypotheses
         return first
 
     # ********** Mutation & Crossover ********** #
-    def __crossover(cf, features):  # input should be the to be modified constructed feature
+    def __crossover(cf):  # input should be the to be modified constructed feature
         # use tourney twice to get the parents & go from there
         # return a constructed feature
         pass
 
-    def __mutate(cf, features):  # input should be the constructed feature to be modified
+    def __mutate(cf):  # input should be the constructed feature to be modified
         # use tourney once to choose what to mutate
         # return a constructed feature
         pass
 
     # ************ Evolution ************ #
-    # NOTE currently this evolves every constructed feature in every hypotheses in the population
 
-    newCandidates = []  # will hold the new candidates
+    # create a new population with no hypotheses
+    newPopulation = Population([], population.generation+1)
 
-    for hyp in population.candidateHypotheses:
+    #while the size of the new population
+    while len(newPopulation.candidateHypotheses) < POPULATION_SIZE:
+        # get a random number between 0 & 1
+        probability = random.uniform(0,1)
+        # if probability is less than mutation rate, mutate
+        if probability < MUTATION_RATE:  # mutate
+            # get parent hypothesis using tournament
+            parent = __tournament(population)
+            # get a random feature from the hypothesis
+            featureIndex = random.randint(0, M)
+            feature = parent.feature[featureIndex]
+            # ? because lists are mutable all the changes happen in place?
+            # ? So I don't need to create a new hypoth/pop as there is only ever the one?
+            feature = feature.tree  # get the tree for that feature
 
-        # loop over every hypothesis and for each hyp loop over it's list of features
-        newFeatures = []  # empty list of new candidates so it's ready for the next feature
+            # TODO randomly select a subtree in feature
 
-        for feature in hyp.features:
-            # for every constructed feature in h get a random real number between 0 & 1
-            # and if that number is > mutation rate (the lower of the two), use crossover
-            # otherwise use mutate. This will evolve a constructed feature
-            if random.uniform(0, 1) > MUTATION_RATE:
-                # here feature is the structure to be changed & hyp.features is used by tournament
-                newFeatures.append(__crossover(feature, hyp.features))
-            else:
-                # here feature is the structure to be changed & hyp.features is used by tournament
-                newFeatures.append(__mutate(feature, hyp.features))
+            # TODO replace the subtree with a new randomly generated subtree
 
-        # create a new hypothesis object
-        h = Hypothesis()
-        h.features = newFeatures
-        # add the new hypothesis to the list of new hypotheses
-        newCandidates.append(h)
+            # TODO add to new population
 
-    # update the hypothesis
-    population.candidateHypotheses = newCandidates
-    # update generation
-    population.generation += 1
+        else:  # crossover
+            parent1 = __tournament(population)
+            parent2 = __tournament(population)
+            # check that each parent is unique
+            # ? does this need to be ==?
+            while parent1 is parent2:
+                parent2 = __tournament(population)
 
+            # get a random feature from each parent
+            featureIndex = random.randint(0, M)
+            feature1 = parent1.feature[featureIndex]
+            feature1 = feature1.tree
+            feature2 = parent2.feature[featureIndex]
+            feature2 = feature2.tree
+
+            # TODO randomly select subtrees from feature1 & feature2
+
+            # TODO swap subtrees selected
+
+    return newPopulation
 
 
 def main():
@@ -669,7 +682,7 @@ def main():
             for r in rows:  # loop over rows
                 # if the value appears in this instance
                 if r.attributes.contains(v):
-                    # update the dictionary's amount of occurences
+                    # update the dictionary's amount of occurrences
                     # !BUG this won't work: dictionaries can't reuse keys
                     fGivenC[r.className] += 1
     # loop over the class set - each classId will be id only once
