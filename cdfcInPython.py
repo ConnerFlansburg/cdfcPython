@@ -716,6 +716,7 @@ def evolve(population, elitism=True):  # pop should be a list of hypotheses
             newPopulation.candidateHypotheses.append(parent)
 
         else:  # ************ crossover ************ #
+
             parent1 = __tournament(population)
             parent2 = __tournament(population)
             # check that each parent is unique
