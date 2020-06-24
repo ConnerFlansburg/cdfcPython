@@ -114,9 +114,9 @@ class Tree:
     right = None
     data = None  # must either be a function or a terminal
 
-    def __init__(self, data):
-        self.left = None
-        self.right = None
+    def __init__(self, data, left=None, right=None):
+        self.left = left
+        self.right = right
         self.data = data
 
     # running a tree should return a single value
@@ -579,44 +579,143 @@ def evolve(population, elitism=True):  # pop should be a list of hypotheses
 
         return first
 
-    # ********** Mutation & Crossover ********** #
-    def __crossover(cf):  # input should be the to be modified constructed feature
-        # use tourney twice to get the parents & go from there
-        # return a constructed feature
-        pass
+    # ************ Grow ************ #
+    def __generateTree(node, terminalValues, values, depth, max_depth):
 
-    def __mutate(cf):  # input should be the constructed feature to be modified
-        # use tourney once to choose what to mutate
-        # return a constructed feature
-        pass
+        # if this node contains a terminal return
+        if node.data in terminalValues:
+            return
+
+        # make a random choice about which way to grow
+        choice = random.choice(["left", "right", "both"])
+
+        # grow left
+        if choice == "left":
+
+            # check to see if we are at the max depth
+            if depth == max_depth:
+                # get a random terminal
+                index = terminalValues[random.randint(0, len(terminalValues))]
+                # put the terminal in the left branch
+                node.left = Tree(index)
+                return
+
+            # pick a random operation or terminal
+            index = values[random.randint(0, len(values))]
+            # put the operation or terminal in the left node
+            node.left = Tree(index)
+
+            # call grow recursively
+            __grow(node.left, terminalValues, values, depth+1, max_depth)
+
+        # grow right
+        elif choice == "right":
+
+            # check to see if we are at the max depth
+            if depth == max_depth:
+                # get a random terminal
+                index = terminalValues[random.randint(0, len(terminalValues))]
+                # put the terminal in the left branch
+                node.left = Tree(index)
+                return
+
+            # pick a random operation or terminal
+            index = values[random.randint(0, len(values))]
+            # put the operation or terminal in the left node
+            node.right = Tree(index)
+
+            # call grow recursively
+            __grow(node.right, terminalValues, values, depth + 1, max_depth)
+
+        elif choice == "both":
+
+            # check to see if we are at the max depth
+            if depth == max_depth:
+                # get a random terminal
+                index = terminalValues[random.randint(0, len(terminalValues))]
+                # put the terminal in the left branch
+                node.left = Tree(index)
+                return
+
+            # left branch
+            # pick a random operation or terminal
+            index = values[random.randint(0, len(values))]
+            # put the operation or terminal in the left node
+            node.left = Tree(index)
+
+            # right branch
+            # pick a random operation or terminal
+            index = values[random.randint(0, len(values))]
+            # put the operation or terminal in the left node
+            node.right = Tree(index)
+
+            # call grow recursively
+            __grow(node.left, terminalValues, values, depth + 1, max_depth)
+            # call grow recursively
+            __grow(node.right, terminalValues, values, depth + 1, max_depth)
+
 
     # ************ Evolution ************ #
 
+    # ? Do I need to create a new population or is this all done in place?
     # create a new population with no hypotheses
     newPopulation = Population([], population.generation+1)
 
-    #while the size of the new population
+    # while the size of the new population is less than the max pop size
     while len(newPopulation.candidateHypotheses) < POPULATION_SIZE:
         # get a random number between 0 & 1
         probability = random.uniform(0,1)
         # if probability is less than mutation rate, mutate
-        if probability < MUTATION_RATE:  # mutate
+        if probability < MUTATION_RATE:  # ****** mutate ****** #
             # get parent hypothesis using tournament
             parent = __tournament(population)
             # get a random feature from the hypothesis
             featureIndex = random.randint(0, M)
             feature = parent.feature[featureIndex]
+            terminal = feature.relevantFeatures
             # ? because lists are mutable all the changes happen in place?
             # ? So I don't need to create a new hypoth/pop as there is only ever the one?
             feature = feature.tree  # get the tree for that feature
 
-            # TODO randomly select a subtree in feature
+            # randomly select a subtree in feature
+            while True:  # walk the tree & find a random subtree
+                # make a random decision
+                decide = random.choice(["left", "right", "choose"])
 
-            # TODO replace the subtree with a new randomly generated subtree
+                if decide == "left":  # go left
+                    feature = feature.left
 
-            # TODO add to new population
+                elif decide == "right":  # go right
+                    feature = feature.right
 
-        else:  # crossover
+                elif decide == "choose" or feature.data in terminal:
+                    break
+
+            # randomly decide which method to use to construct the new tree
+            decideGrow = random.choice([True, False])
+            # randomly generate subtree
+            if decideGrow:  # use grow
+                # pick a random function & put it in the root
+                ls = random.shuffle(OPS)
+                rootData = ls[random.randint(0, len(ls))]
+                # make a new tree
+                t = Tree(rootData)
+                # build the rest of the subtree
+                __generateTree(t, terminal, ls[random.shuffle(OPS.append(terminal))], 0, 8)
+
+            else:  # use full
+                # pick a random function & put it in the root
+                ls = random.shuffle(OPS)
+                rootData = ls[random.randint(0, len(ls))]
+                # make a new tree
+                t = Tree(rootData)
+                # build the rest of the subtree
+                __generateTree(t, terminal, OPS, 0, 8)
+
+            # parent 1 is hypotheses and should have been changed in place, so add it to the new pop
+            newPopulation.candidateHypotheses.append(parent)
+
+        else:  # ************ crossover ************ #
             parent1 = __tournament(population)
             parent2 = __tournament(population)
             # check that each parent is unique
@@ -626,14 +725,46 @@ def evolve(population, elitism=True):  # pop should be a list of hypotheses
 
             # get a random feature from each parent
             featureIndex = random.randint(0, M)
+            # feature 1
             feature1 = parent1.feature[featureIndex]
+            terminals1 = feature1.relevantFeatures
             feature1 = feature1.tree
+            # feature 2
             feature2 = parent2.feature[featureIndex]
+            terminals2 = feature2.relevantFeatures
             feature2 = feature2.tree
 
-            # TODO randomly select subtrees from feature1 & feature2
+            while True:  # walk the tree & find a random subtree for feature 1
+                # make a random decision
+                decide = random.choice(["left", "right", "choose"])
 
-            # TODO swap subtrees selected
+                if decide == "left":  # go left
+                    feature1 = feature1.left
+
+                elif decide == "right":  # go right
+                    feature1 = feature1.right
+
+                elif decide == "choose" or feature1.data in terminals1:
+                    break
+
+            while True:  # walk the tree & find a random subtree for feature 2
+                # make a random decision
+                decide = random.choice(["left", "right", "choose"])
+
+                if decide == "left":  # go left
+                    feature2 = feature2.left
+
+                elif decide == "right":  # go right
+                    feature2 = feature2.right
+
+                elif decide == "choose" or feature2.data in terminals2:
+                    break
+
+            # swap the two subtrees
+            feature1, feature2 = feature2, feature1  # ? is this done in place?
+
+            # parent 1 & 2 are both hypotheses and should have been changed in place, so add them to the new pop
+            newPopulation.candidateHypotheses.append(parent1, parent2)
 
     return newPopulation
 
