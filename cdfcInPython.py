@@ -13,7 +13,7 @@ from tkinter.filedialog import askFile
 
 # * Sanity Checking / debugging
 # TODO check entropy function code in Hypothesis
-# TODO rework mutation to use parallelism
+# TODO rework to use parallelism
 # TODO optimize & make modular
 
 # ******************** Constants/Globals ******************** #
@@ -50,17 +50,10 @@ INSTANCES_NUMBER = 0
 
 MAX_DEPTH = 8
 
-# *** the next 3 variables are used to compute entropy *** #
-# this will store the number of times a class occurs in the training data in
-# a dictionary keyed by it's classId
-Occurrences = {}
-
-# stores the number of times a value occurs in the training data
-# (occurrences keyed value)
-Values = {}
-
-# the number of times a value occurs keyed by class
-fGivenC = {}
+# *** used for entropy calculation ***#
+classToNum = {}  # dictionary[classId] = counter of times that class is found
+featureToValues = {}  # dictionary[feature] = array of all values that occur for that feature
+valuesForClass = {}  # dict[(classId, feature)] = array of all values that occur for this feature in this class
 
 # *** set values below for every new dataset *** #
 
@@ -120,12 +113,12 @@ class Tree:
         self.data = data
 
     # running a tree should return a single value
-    def runTree(self, rFt):
+    def runTree(self, rFt, rVls):
         if self.data in rFt:  # if the root is a terminal
             return self.data  # return value
         else:  # if the root is not a terminal
             # run the tree recursively
-            return self.data(self.__runLeft(rFt), self.__runRight(rFt))
+            return self.data(self.__runLeft(rFt, rVls), self.__runRight(rFt, rVls))
 
     def __runLeft(self, relevantFeatures, featureValues):
         # if left node is a terminal
@@ -255,14 +248,33 @@ class Hypothesis:
         def __entropy(pos, neg):
             return -pos*math.log(pos, 2)-neg*math.log(neg, 2)
 
+        def __bayes(feature):
+
+            # probability of a class
+            pClass = classToNum[feature.className] / C
+
+            # probability of a feature value
+            pFeature = featureToValues[feature.featIndex] / C
+
+            # probability of a feature, given a class
+            pGivenClass = None  # TODO come back to after understanding conditional entropy
+
+            # compute the top part of Baye's
+            numerator = pClass * pGivenClass
+
+            return numerator/pFeature
+
         # loop over all features & get their info gain
         gainSum = 0  # the info gain of the hypothesis
         for f in self.features:
 
             # ********* Entropy calculation ********* #
             # find the +/- probabilities of a class
-            pPos = Occurrences.get(f.className)
-            pNeg = INSTANCES_NUMBER - pPos
+            pPos = classToNum[f.className]  # get the number of times that class occurs
+            pNeg = INSTANCES_NUMBER - pPos  # get the number of times the class doesn't occur
+            # ? do I need to divide by the number of classes there are?
+            # pPos = pPos / C  # divide by the number of classes there are to make a probability
+            # pNeg = pNeg / C  # divide by the number of classes there are to make a probability
             entClass = __entropy(pPos, pNeg)
 
             # find the +/- probabilities of a feature given a class
@@ -388,8 +400,7 @@ def terminals(classId):
         tValue, pValue = stats.ttest_ind(inClass, notIn)
 
         # calculate relevancy for a single feature
-        relevancy = None  # this will hold the relevancy score for this feature
-
+        relevancy = 0  # this will hold the relevancy score for this feature
         if pValue >= 0.05:  # if p-value is less than 0.05
             relevancy = 0  # set relevancy score to 0
         else:  # otherwise
@@ -553,9 +564,9 @@ def createInitialPopulation():
     return Population(hypothesis, 0)
 
 
-def evolve(population, elitism=True):  # pop should be a list of hypotheses
+def evolve(population, elite):  # pop should be a list of hypotheses
 
-    def __tournament(candidates):  # TODO check this after working on mutate & crossover
+    def __tournament(candidates):
         # used by evolve to selection the parents
         # ************* Tournament Selection ************* #
 
@@ -579,7 +590,7 @@ def evolve(population, elitism=True):  # pop should be a list of hypotheses
 
         return first
 
-    # ************ Grow ************ #
+    # ************ Tree Generation ************ #
     def __generateTree(node, terminalValues, values, depth, max_depth):
 
         # if this node contains a terminal return
@@ -605,8 +616,8 @@ def evolve(population, elitism=True):  # pop should be a list of hypotheses
             # put the operation or terminal in the left node
             node.left = Tree(index)
 
-            # call grow recursively
-            __grow(node.left, terminalValues, values, depth+1, max_depth)
+            # call generateTree recursively
+            __generateTree(node.left, terminalValues, values, depth+1, max_depth)
 
         # grow right
         elif choice == "right":
@@ -624,8 +635,8 @@ def evolve(population, elitism=True):  # pop should be a list of hypotheses
             # put the operation or terminal in the left node
             node.right = Tree(index)
 
-            # call grow recursively
-            __grow(node.right, terminalValues, values, depth + 1, max_depth)
+            # cal__generateTree recursively
+            __generateTree(node.right, terminalValues, values, depth + 1, max_depth)
 
         elif choice == "both":
 
@@ -649,18 +660,17 @@ def evolve(population, elitism=True):  # pop should be a list of hypotheses
             # put the operation or terminal in the left node
             node.right = Tree(index)
 
+            # cal__generateTree recursively
+            __generateTree(node.left, terminalValues, values, depth + 1, max_depth)
             # call grow recursively
-            __grow(node.left, terminalValues, values, depth + 1, max_depth)
-            # call grow recursively
-            __grow(node.right, terminalValues, values, depth + 1, max_depth)
-
+            __generateTree(node.right, terminalValues, values, depth + 1, max_depth)
 
     # ************ Evolution ************ #
 
     # ? Do I need to create a new population or is this all done in place?
     # create a new population with no hypotheses
     newPopulation = Population([], population.generation+1)
-
+    elite = newPopulation[0]  # used for elitism
     # while the size of the new population is less than the max pop size
     while len(newPopulation.candidateHypotheses) < POPULATION_SIZE:
         # get a random number between 0 & 1
@@ -767,7 +777,12 @@ def evolve(population, elitism=True):  # pop should be a list of hypotheses
             # parent 1 & 2 are both hypotheses and should have been changed in place, so add them to the new pop
             newPopulation.candidateHypotheses.append(parent1, parent2)
 
-    return newPopulation
+        # handle elitism
+        newHypothFitness = newPopulation.candidateHypotheses[-1].getFitness()
+        if newHypothFitness > elite.getFitness:
+            elite = newPopulation.candidateHypotheses[-1]
+
+    return newPopulation, elite
 
 
 def main():
@@ -780,6 +795,10 @@ def main():
     global INSTANCES_NUMBER
     global rows
     global row
+    # *** used in entropy calculation *** #
+    global classToNum
+    global featureToValues
+    global valuesForClass
 
     classes = []  # this will hold classIds and how often they occur
     classSet = set()  # this will hold how many classes there are
@@ -798,6 +817,39 @@ def main():
                 classes.append(line[0])
                 classSet.add(line[0])
                 INSTANCES_NUMBER += 1
+
+                # ********* The Code Below is Used to Calculated Entropy  ********* #
+                # ? May not be needed if H(class|f) is used on constructed features...
+
+                # this will count the number of times a class occurs in the provided data
+                # dictionary[classId] = counter of times that class is found
+                if classToNum.get(line[0]):  # if we have encountered the class before
+                    classToNum[line[0]] += 1  # increment
+                else:  # if this is the first time we've encountered the class
+                    classToNum[line[0]] = 1  # set to 1
+
+                for featIndex, v in enumerate(line[1:]):  # loop over all the attribute values
+
+                    # this will create a list of all values that a feature has in the provided data
+                    # dictionary[feature] = array of all values that occur for that feature
+                    if featureToValues[featIndex]:  # if the feature has previous values
+                        featureToValues[featIndex].append(v)  # add the new value
+                    else:  # if there are no previous values for the feature
+                        featureToValues[featIndex] = [v]  # add the value, as a list, to the dictionary
+
+                    # this will create a list of all the values a feature has WITHIN a class
+                    # dictionary[ (classId, feature)] = array of all values that occur for this feature in this class
+                    # the dictionary uses the tuple (classId, featureIndex) as a key, so store it
+                    key = (line[0], line[featIndex])
+                    # if there are old values for the feature in the class, append
+                    if valuesForClass.get(key):
+                        valuesForClass[key].append(v)
+                    else:  # if there are no previous values for the feature in the class
+                        valuesForClass[key] = [v]  # add the value, as a list, to the dictionary
+
+                # ****************************************************************** #
+
+                counter += 1  # increment counter
             else:  # if we are reading the column headers,
                 counter += 1  # skip
 
@@ -805,31 +857,14 @@ def main():
     FEATURE_NUMBER = len(rows[0].attribute)
     POPULATION_SIZE = FEATURE_NUMBER * BETA  # set the pop size
 
-    # ********* The Code Below is Used to Calculated Entropy  ********* #
-    for v in valuesSet:
-        # find out how many times a value occurred and store it
-        # in a dictionary keyed by value
-        Values[v] = vals.count(v)
-        if Values[v] > 1:  # if the value occurs more than once
-            for r in rows:  # loop over rows
-                # if the value appears in this instance
-                if r.attributes.contains(v):
-                    # update the dictionary's amount of occurrences
-                    # !BUG this won't work: dictionaries can't reuse keys
-                    fGivenC[r.className] += 1
-    # loop over the class set - each classId will be id only once
-    for id in classSet:
-        # finds out how many times a class occurs in data and add to dictionary
-        Occurrences[id] = classes.count(id)
-    # ****************************************************************** #
-
     # ********************* Run the Algorithm ********************* #
     # create initial population
     currentPopulation = createInitialPopulation()
+    elite = currentPopulation.candidateHypotheses[0]  # init elitism
     # loop, evolving each generation. This is where most of the work is done
     for i in range(GENERATIONS):
         # generate a new population by evolving the old one
-        newPopulation = evolve(currentPopulation, elitism=True)
+        newPopulation, elite = evolve(currentPopulation, elite)
         # update currentPopulation to hold the new population
         # this is done in two steps to avoid potential namespace issues
         currentPopulation = newPopulation
