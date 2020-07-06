@@ -85,6 +85,7 @@ row = collect.namedtuple('row', ['className', 'attributes'])
 rows = []
 
 
+
 class Tree:
     """Tree is a binary tree data structure that is used to represent a
        constructed feature
@@ -105,7 +106,7 @@ class Tree:
     """
     left = None
     right = None
-    data = None  # must either be a function or a terminal
+    data = None  # must either be a function or a terminal (if a terminal it should be it's index)
 
     def __init__(self, data, left=None, right=None):
         self.left = left
@@ -163,7 +164,8 @@ class ConstructedFeature:
     tree = None  # the root node of the constructed feature
     className = None  # the name of the class this tree is meant to distinguish
     infoGain = None  # the info gain for this feature
-    relevantFeatures = None  # the set of relevant features
+    relevantFeatures = None  # holds the indexes of the relevant features
+    usedFeatures = None  # the relevant features the cf actually uses
     # the values data after they have been transformed by the tree
     transformedValues = None
 
@@ -172,6 +174,35 @@ class ConstructedFeature:
         self.tree = tree
         # call terminals to create the terminal set
         self.relevantFeatures = terminals(className)
+
+    def getUsedFeatures(self):
+        values = []  # will hold the indexes found at each terminal node
+
+        def __walk(node):  # given a node, walk the tree
+
+            if node.left and node.right is None:  # if there are no children
+                # we have reached a terminal. Get it's index/ID
+                values.append(node.data)
+                # there are no more children down this branch
+                return
+
+            # if there is no left child, but there is a right child
+            elif node.left is None:
+                __walk(node.right)  # walk down the right
+
+            # if there is no right child, but there is a left child
+            elif node.right is None:
+                __walk(node.left)  # walk down the left
+
+            else: # if there are both left & right children
+                # walk down both
+                __walk(node.right)
+                __walk(node.left)
+
+        __walk(self.tree)  # walk the tree starting with the CF's root
+        # values should now hold the indexes of the tree's terminals
+        return values
+
 
     def transform(self, instance):  # instance should be a row object
 
@@ -248,21 +279,37 @@ class Hypothesis:
         def __entropy(pos, neg):
             return -pos*math.log(pos, 2)-neg*math.log(neg, 2)
 
-        def __bayes(feature):
+        def __conditionalEntropy(feature):
 
-            # probability of a class
-            pClass = classToNum[feature.className] / C
+            # this is a feature struct that will be used to store feature values
+            # with their indexes/IDs in CFs
+            ft = collect.namedtuple('ft', ['id', 'value'])
+            partition = {}  # key = CF(Values), Entry = instance in training data
+            s = 0  # used to sum CF's conditional entropy
+            used = feature.getUsedFeatures()  # get the indexes of the used features
+            v = []  # this will hold the used features ids & values
+            for i in rows:  # loop over all instances
 
-            # probability of a feature value
-            pFeature = featureToValues[feature.featIndex] / C
+                # get CF(v) for this instance (i is a row struct which is what transform needs)
+                cfv = feature.transform(i)  # needs the values for an instance
 
-            # probability of a feature, given a class
-            pGivenClass = None  # TODO come back to after understanding conditional entropy
+                # get the values in this instance i of the used feature
+                for u in used:  # loop over all the indexes of used features
+                    # create a ft where the id is u (a used index) &
+                    # where the value is from the instance
+                    v.append(ft(u, i.attributes[u]))
 
-            # compute the top part of Baye's
-            numerator = pClass * pGivenClass
+                if partition[cfv]:  # if the partition exists
+                    partition[cfv].append(i)  # add the instance to it
+                else:  # if the partition doesn't exist
+                    partition[cfv] = [i]  # create it
 
-            return numerator/pFeature
+            for e in partition.keys():
+                # TODO figure out entropy calc for this case
+                s += (len(partition[e])/INSTANCES_NUMBER) * __entropy(partition[e])
+
+            # s holds the conditional entropy value
+            return s
 
         # loop over all features & get their info gain
         gainSum = 0  # the info gain of the hypothesis
@@ -277,10 +324,9 @@ class Hypothesis:
             # pNeg = pNeg / C  # divide by the number of classes there are to make a probability
             entClass = __entropy(pPos, pNeg)
 
-            # find the +/- probabilities of a feature given a class
-            pPos = None  # TODO use Baye's Theorem to compute
-            pNeg = None  # TODO use Baye's Theorem to compute
-            entFeature = __entropy(pPos, pNeg)
+            # find the conditional entropy
+            entFeature = None
+            # TODO call conditional entropy after it's working
 
             # ******** Info Gain calculation ******* #
             # H(class) - H(class|f)
