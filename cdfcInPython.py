@@ -319,10 +319,9 @@ class Hypothesis:
             # find the +/- probabilities of a class
             pPos = classToNum[f.className]  # get the number of times that class occurs
             pNeg = INSTANCES_NUMBER - pPos  # get the number of times the class doesn't occur
-            # ? do I need to divide by the number of classes there are?
             # pPos = pPos / C  # divide by the number of classes there are to make a probability
             # pNeg = pNeg / C  # divide by the number of classes there are to make a probability
-            entClass = __entropy(pPos, pNeg)
+            entClass = __entropy(pPos, pNeg)  # TODO rework to use summation equation
 
             # find the conditional entropy
             entFeature = None
