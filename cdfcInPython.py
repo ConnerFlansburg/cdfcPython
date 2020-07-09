@@ -12,7 +12,6 @@ from tkinter.filedialog import askFile
 # TODO finish docstrings
 
 # * Sanity Checking / debugging
-# TODO check entropy function code in Hypothesis
 # TODO rework to use parallelism
 # TODO optimize & make modular
 
@@ -50,10 +49,8 @@ INSTANCES_NUMBER = 0
 
 MAX_DEPTH = 8
 
-# *** used for entropy calculation ***#
-classToNum = {}  # dictionary[classId] = counter of times that class is found
-featureToValues = {}  # dictionary[feature] = array of all values that occur for that feature
-valuesForClass = {}  # dict[(classId, feature)] = array of all values that occur for this feature in this class
+# used for entropy calculation
+ENTROPY_OF_S = 0
 
 # *** set values below for every new dataset *** #
 
@@ -85,7 +82,6 @@ row = collect.namedtuple('row', ['className', 'attributes'])
 rows = []
 
 
-
 class Tree:
     """Tree is a binary tree data structure that is used to represent a
        constructed feature
@@ -114,26 +110,28 @@ class Tree:
         self.data = data
 
     # running a tree should return a single value
+    # rFt -- relevant features
+    # rVls -- the values of the relevant features
     def runTree(self, rFt, rVls):
         if self.data in rFt:  # if the root is a terminal
             return self.data  # return value
         else:  # if the root is not a terminal
             # run the tree recursively
             return self.data(self.__runLeft(rFt, rVls), self.__runRight(rFt, rVls))
-
+    # ################# ?? Check this logic ?? ############## #
     def __runLeft(self, relevantFeatures, featureValues):
         # if left node is a terminal
-        if self.left in relevantFeatures:
-            return featureValues[self.data]
+        if self.left.data in relevantFeatures:
+            return featureValues[self.left.data]
         else:  # if left node is a function
-            return self.left()
+            return self.left.data()
 
     def __runRight(self, relevantFeatures, featureValues):
         # if right node is a terminal
-        if self.right in relevantFeatures:
-            return featureValues[self.data]
+        if self.right.data in relevantFeatures:
+            return featureValues[self.right.data]
         else:  # if right node is a function
-            return self.right()
+            return self.right.data()
 
 
 class ConstructedFeature:
@@ -202,7 +200,6 @@ class ConstructedFeature:
         __walk(self.tree)  # walk the tree starting with the CF's root
         # values should now hold the indexes of the tree's terminals
         return values
-
 
     def transform(self, instance):  # instance should be a row object
 
@@ -276,8 +273,29 @@ class Hypothesis:
             t2 = Dw / len(values)
             return 1 / (1 + math.pow(math.e, -5*(t1 - t2)))
 
-        def __entropy(pos, neg):
-            return -pos*math.log(pos, 2)-neg*math.log(neg, 2)
+        def __entropy(partition):
+
+            # p[classId] = number of instances in the class in the partition sv
+            p = {}
+            # for instance i in a partition sv
+            for i in partition:
+                # if we have already found the class once,
+                # increment the counter
+                if p[i.className]:
+                    p[i.className] += 1
+                # if we have not yet encountered the class
+                # set the counter to 1
+                else:
+                    p[i.className] = 1
+
+            spam = 0
+            # for class in the list of classes in the partition sv
+            for c in p.keys():
+                # perform entropy calculation
+                pi = p[c] / len(partition)
+                spam -= pi * math.log(pi, 2)
+
+            return spam
 
         def __conditionalEntropy(feature):
 
@@ -305,7 +323,6 @@ class Hypothesis:
                     partition[cfv] = [i]  # create it
 
             for e in partition.keys():
-                # TODO figure out entropy calc for this case
                 s += (len(partition[e])/INSTANCES_NUMBER) * __entropy(partition[e])
 
             # s holds the conditional entropy value
@@ -316,20 +333,12 @@ class Hypothesis:
         for f in self.features:
 
             # ********* Entropy calculation ********* #
-            # find the +/- probabilities of a class
-            pPos = classToNum[f.className]  # get the number of times that class occurs
-            pNeg = INSTANCES_NUMBER - pPos  # get the number of times the class doesn't occur
-            # pPos = pPos / C  # divide by the number of classes there are to make a probability
-            # pNeg = pNeg / C  # divide by the number of classes there are to make a probability
-            entClass = __entropy(pPos, pNeg)  # TODO rework to use summation equation
-
             # find the conditional entropy
-            entFeature = None
-            # TODO call conditional entropy after it's working
+            condEntropy = __conditionalEntropy(f)
 
             # ******** Info Gain calculation ******* #
             # H(class) - H(class|f)
-            f.infoGain = entClass - entFeature
+            f.infoGain = ENTROPY_OF_S - condEntropy
             gainSum += f.infoGain  # update the info sum
 
             # updates the max info gain of the hypothesis if needed
@@ -337,7 +346,7 @@ class Hypothesis:
                 self.maxInfoGain = f.infoGain
 
         # calculate the average info gain using formula 3
-        # * create more correct citation later * #
+        # TODO create more correct citation later #
         term1 = gainSum+self.maxInfoGain
         term2 = (M+1)*(math.log(C, 2))
         self.averageInfoGain += term1 / term2
@@ -501,7 +510,6 @@ def valuesInClass(classId, attribute):
 
 def createInitialPopulation():
 
-    # TODO update design
     def __grow(classId):
         # This function uses the grow method to generate an initial population
         def assign(level):
@@ -572,7 +580,6 @@ def createInitialPopulation():
 
         return tree
 
-    # TODO create hyp & pop
     def createHypothesis():
         # given a list of trees, create a hypothesis
 
@@ -841,14 +848,14 @@ def main():
     global rows
     global row
     # *** used in entropy calculation *** #
-    global classToNum
-    global featureToValues
-    global valuesForClass
+    global ENTROPY_OF_S
 
     classes = []  # this will hold classIds and how often they occur
     classSet = set()  # this will hold how many classes there are
     vals = []  # holds all the that occur in the training data
     valuesSet = set()  # same as values but with no repeated values
+
+    classToOccur = {}  # maps a classId to the number of times it occurs
 
     with open(path) as filePath:  # open selected file
         # create a reader using the file
@@ -864,33 +871,13 @@ def main():
                 INSTANCES_NUMBER += 1
 
                 # ********* The Code Below is Used to Calculated Entropy  ********* #
-                # ? May not be needed if H(class|f) is used on constructed features...
 
                 # this will count the number of times a class occurs in the provided data
                 # dictionary[classId] = counter of times that class is found
-                if classToNum.get(line[0]):  # if we have encountered the class before
-                    classToNum[line[0]] += 1  # increment
+                if classToOccur.get(line[0]):  # if we have encountered the class before
+                    classToOccur[line[0]] += 1  # increment
                 else:  # if this is the first time we've encountered the class
-                    classToNum[line[0]] = 1  # set to 1
-
-                for featIndex, v in enumerate(line[1:]):  # loop over all the attribute values
-
-                    # this will create a list of all values that a feature has in the provided data
-                    # dictionary[feature] = array of all values that occur for that feature
-                    if featureToValues[featIndex]:  # if the feature has previous values
-                        featureToValues[featIndex].append(v)  # add the new value
-                    else:  # if there are no previous values for the feature
-                        featureToValues[featIndex] = [v]  # add the value, as a list, to the dictionary
-
-                    # this will create a list of all the values a feature has WITHIN a class
-                    # dictionary[ (classId, feature)] = array of all values that occur for this feature in this class
-                    # the dictionary uses the tuple (classId, featureIndex) as a key, so store it
-                    key = (line[0], line[featIndex])
-                    # if there are old values for the feature in the class, append
-                    if valuesForClass.get(key):
-                        valuesForClass[key].append(v)
-                    else:  # if there are no previous values for the feature in the class
-                        valuesForClass[key] = [v]  # add the value, as a list, to the dictionary
+                    classToOccur[line[0]] = 1  # set to 1
 
                 # ****************************************************************** #
 
@@ -901,6 +888,17 @@ def main():
     # get the number of features in the dataset
     FEATURE_NUMBER = len(rows[0].attribute)
     POPULATION_SIZE = FEATURE_NUMBER * BETA  # set the pop size
+
+    # ********* The Code Below is Used to Calculated Entropy  ********* #
+
+    # loop over all classes
+    for i in classToOccur.keys():
+        # compute p_i
+        pi = classToOccur[i] / INSTANCES_NUMBER
+        # calculation entropy summation
+        ENTROPY_OF_S -= pi * math.log(pi, 2)
+
+    # ****************************************************************** #
 
     # ********************* Run the Algorithm ********************* #
     # create initial population
