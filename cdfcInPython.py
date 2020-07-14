@@ -118,6 +118,7 @@ class Tree:
         else:  # if the root is not a terminal
             # run the tree recursively
             return self.data(self.__runLeft(rFt, rVls), self.__runRight(rFt, rVls))
+
     # ################# ?? Check this logic ?? ############## #
     def __runLeft(self, relevantFeatures, featureValues):
         # if left node is a terminal
@@ -132,6 +133,26 @@ class Tree:
             return featureValues[self.right.data]
         else:  # if right node is a function
             return self.right.data()
+
+    def getSize(self, counter):
+
+        counter += 1  # increment the counter
+
+        leftCount = 0
+        rightCount = 0
+        # if the left node is not null
+        if self.left:
+            # recursive call
+            leftCount = self.left.getSize(counter)
+
+        # if the right node is not null
+        if self.right:
+            # recursive call
+            rightCount = self.right.getSize(counter)
+
+        # add together the size of the subtrees & return them up the call stack
+        return leftCount + rightCount
+
 
 
 class ConstructedFeature:
@@ -164,12 +185,14 @@ class ConstructedFeature:
     infoGain = None  # the info gain for this feature
     relevantFeatures = None  # holds the indexes of the relevant features
     usedFeatures = None  # the relevant features the cf actually uses
+    size = 0  # the individual size
     # the values data after they have been transformed by the tree
     transformedValues = None
 
-    def __init__(self, className, tree):
+    def __init__(self, className, tree, size=0):
         self.className = className
         self.tree = tree
+        self.size = size
         # call terminals to create the terminal set
         self.relevantFeatures = terminals(className)
 
@@ -213,6 +236,11 @@ class ConstructedFeature:
         # transform the data for a single feature
         # this should return a single value (a value transformed by the tree)
         return self.tree.runTree(self.relevantFeatures, relevantValues)
+
+    def setSize(self):
+        # call getSize on the root of the tree
+        return self.tree.getSize(0)
+
 
 
 class Hypothesis:
@@ -512,25 +540,30 @@ def createInitialPopulation():
 
     def __grow(classId):
         # This function uses the grow method to generate an initial population
-        def assign(level):
+        def assign(level, counter):
+            # used to compute individual size
+            counter += 1
             # recursively assign tree values
             if level != MAX_DEPTH:
                 # get the random value
                 spam = ls[random.randint(0, len(ls))]
                 if spam in terminal:  # if the item is a terminal
-                    return Tree(spam)  # just return, stopping recursion
+                    return Tree(spam), counter  # just return, stopping recursion
 
                 tree = Tree(spam)
-                tree.left = assign(level + 1)
-                tree.right = assign(level + 1)
-                return tree
+                tree.left, cLeft = assign(level + 1, counter)
+                tree.right, cRight = assign(level + 1, counter)
+                # add the number of nodes from the left subtree,
+                # to the number of nodes from the right subtree
+                counter = cLeft + cRight
+                return tree, counter
 
             else:
                 # stop recursion; max depth has been reached
                 # add a terminal to the leaf
                 spam = terminal[random.randint(0, len(terminal))]
                 # return
-                return Tree(spam)
+                return Tree(spam), counter
 
         # pick a random function & put it in the root
         ls = random.shuffle(OPS)
@@ -543,26 +576,33 @@ def createInitialPopulation():
         ls = random.shuffle(ls.append(terminal))
 
         # create the tree
-        tree.left = assign(1)
-        tree.right = assign(1)
+        tree.left, counterLeft = assign(1, counter=1)
+        tree.right, counterRight = assign(1, counter=1)
 
-        return tree
+        # add the number of nodes together to get the individual size
+        size = counterRight + counterLeft
+
+        return tree, size
 
     def __full(classId):
         # This function uses the full method to generate an initial population
-        def assign(level):
+        def assign(level, counter):
+            counter += 1
             # recursively assign tree values
             if level != MAX_DEPTH:
                 # get a random function & add it to the tree
                 tree = Tree(ls[random.randint(0, len(ls))])
                 # call for branches
-                tree.left = assign(level + 1)
-                tree.right = assign(level + 1)
-                return tree
+                tree.left, cLeft = assign(level + 1, counter)
+                tree.right, cRight = assign(level + 1, counter)
+                # add the number of nodes from the left subtree,
+                # to the number of nodes from the right subtree
+                counter = cLeft + cRight
+                return tree, counter
 
             else:  # stop recursion; max depth has been reached
                 # add a terminal to the leaf & return
-                return Tree(terminal[random.randint(0, len(terminal))])
+                return Tree(terminal[random.randint(0, len(terminal))]), counter
 
         # pick a random function & put it in the root
         ls = random.shuffle(OPS)
@@ -575,10 +615,13 @@ def createInitialPopulation():
         ls = random.shuffle(ls.append(terminal))
 
         # create the tree
-        tree.left = assign(1)
-        tree.right = assign(1)
+        tree.left, counterLeft = assign(1, counter=1)
+        tree.right, counterRight = assign(1, counter=1)
 
-        return tree
+        # add the number of nodes together to get the individual size
+        size = counterRight + counterLeft
+
+        return tree, size
 
     def createHypothesis():
         # given a list of trees, create a hypothesis
@@ -596,12 +639,12 @@ def createInitialPopulation():
             # so each ID may only be used once
             if random.choice([True, False]):
                 name = classIds.pop(0)  # get a random id
-                tree = __grow(name)     # create tree
-                ftrs.append(ConstructedFeature(name, tree))
+                tree, size = __grow(name)     # create tree
+                ftrs.append(ConstructedFeature(name, tree, size))
             else:
                 name = classIds.pop(0)  # get a random id
-                tree = __full(name)     # create tree
-                ftrs.append(ConstructedFeature(name, tree))
+                tree, size = __full(name)     # create tree
+                ftrs.append(ConstructedFeature(name, tree, size))
 
         h = Hypothesis
         h.features = ftrs
@@ -642,12 +685,15 @@ def evolve(population, elite):  # pop should be a list of hypotheses
 
         return first
 
+    # TODO add counter for individual size
     # ************ Tree Generation ************ #
-    def __generateTree(node, terminalValues, values, depth, max_depth):
+    def __generateTree(node, terminalValues, values, depth, max_depth, counter=0):
+
+        counter += 1  # increment size counter
 
         # if this node contains a terminal return
         if node.data in terminalValues:
-            return
+            return counter
 
         # make a random choice about which way to grow
         choice = random.choice(["left", "right", "both"])
@@ -661,7 +707,7 @@ def evolve(population, elite):  # pop should be a list of hypotheses
                 index = terminalValues[random.randint(0, len(terminalValues))]
                 # put the terminal in the left branch
                 node.left = Tree(index)
-                return
+                return counter
 
             # pick a random operation or terminal
             index = values[random.randint(0, len(values))]
@@ -669,7 +715,7 @@ def evolve(population, elite):  # pop should be a list of hypotheses
             node.left = Tree(index)
 
             # call generateTree recursively
-            __generateTree(node.left, terminalValues, values, depth+1, max_depth)
+            __generateTree(node.left, terminalValues, values, depth+1, max_depth, counter)
 
         # grow right
         elif choice == "right":
@@ -680,7 +726,7 @@ def evolve(population, elite):  # pop should be a list of hypotheses
                 index = terminalValues[random.randint(0, len(terminalValues))]
                 # put the terminal in the left branch
                 node.left = Tree(index)
-                return
+                return counter
 
             # pick a random operation or terminal
             index = values[random.randint(0, len(values))]
@@ -713,16 +759,19 @@ def evolve(population, elite):  # pop should be a list of hypotheses
             node.right = Tree(index)
 
             # cal__generateTree recursively
-            __generateTree(node.left, terminalValues, values, depth + 1, max_depth)
+            cLeft = __generateTree(node.left, terminalValues, values, depth + 1, max_depth)
             # call grow recursively
-            __generateTree(node.right, terminalValues, values, depth + 1, max_depth)
+            cRight = __generateTree(node.right, terminalValues, values, depth + 1, max_depth)
+
+            # calculate the size (the number of nodes) by adding the size of the subtrees
+            counter = cLeft + cRight
+            return counter
 
     # ************ Evolution ************ #
 
     # ? Do I need to create a new population or is this all done in place?
     # create a new population with no hypotheses
     newPopulation = Population([], population.generation+1)
-    elite = newPopulation[0]  # used for elitism
     # while the size of the new population is less than the max pop size
     while len(newPopulation.candidateHypotheses) < POPULATION_SIZE:
         # get a random number between 0 & 1
@@ -755,6 +804,8 @@ def evolve(population, elite):  # pop should be a list of hypotheses
 
             # randomly decide which method to use to construct the new tree
             decideGrow = random.choice([True, False])
+            # the individual's size
+            size = 0
             # randomly generate subtree
             if decideGrow:  # use grow
                 # pick a random function & put it in the root
@@ -763,7 +814,8 @@ def evolve(population, elite):  # pop should be a list of hypotheses
                 # make a new tree
                 t = Tree(rootData)
                 # build the rest of the subtree
-                __generateTree(t, terminal, ls[random.shuffle(OPS.append(terminal))], 0, 8)
+                size = __generateTree(t, terminal, ls[random.shuffle(OPS.append(terminal))], 0, 8)
+                # set the size of the tree
 
             else:  # use full
                 # pick a random function & put it in the root
@@ -772,9 +824,13 @@ def evolve(population, elite):  # pop should be a list of hypotheses
                 # make a new tree
                 t = Tree(rootData)
                 # build the rest of the subtree
-                __generateTree(t, terminal, OPS, 0, 8)
+                size = __generateTree(t, terminal, OPS, 0, 8)
 
-            # parent 1 is hypotheses and should have been changed in place, so add it to the new pop
+            # get the className of the feature
+            cl = parent.feature[featureIndex].className
+            # add the replace the the parent with the mutated child
+            parent.feature[featureIndex] = ConstructedFeature(cl, t, size)
+            # add the parent to the new pop
             newPopulation.candidateHypotheses.append(parent)
 
         else:  # ************ crossover ************ #
@@ -782,7 +838,6 @@ def evolve(population, elite):  # pop should be a list of hypotheses
             parent1 = __tournament(population)
             parent2 = __tournament(population)
             # check that each parent is unique
-            # ? does this need to be ==?
             while parent1 is parent2:
                 parent2 = __tournament(population)
 
@@ -823,8 +878,13 @@ def evolve(population, elite):  # pop should be a list of hypotheses
                 elif decide == "choose" or feature2.data in terminals2:
                     break
 
+            # TODO set new tree size!!!!
             # swap the two subtrees
             feature1, feature2 = feature2, feature1  # ? is this done in place?
+
+            # get the size of the new constructed features by walking the trees
+            parent1.setSize()
+            parent2.setSize()
 
             # parent 1 & 2 are both hypotheses and should have been changed in place, so add them to the new pop
             newPopulation.candidateHypotheses.append(parent1, parent2)
