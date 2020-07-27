@@ -2,10 +2,13 @@
 import csv
 import math
 import random
+import numpy as np
 import collections as collect
 from scipy import stats
 from tkinter import Tk
 from tkinter.filedialog import askFile
+from sklearn.preprocessing import StandardScaler
+
 
 # * Next Steps
 # TODO create a print function for population
@@ -878,7 +881,6 @@ def evolve(population, elite):  # pop should be a list of hypotheses
                 elif decide == "choose" or feature2.data in terminals2:
                     break
 
-            # TODO set new tree size!!!!
             # swap the two subtrees
             feature1, feature2 = feature2, feature1  # ? is this done in place?
 
@@ -897,9 +899,50 @@ def evolve(population, elite):  # pop should be a list of hypotheses
     return newPopulation, elite
 
 
-def main():
-    Tk().withdraw()  # prevent root window caused by Tkinter
-    path = askFile()  # prompt user for file path
+def discretization(data):
+
+    for index, item in np.ndenumerate(data):
+
+        if item < -0.5:
+            data[index] = -1
+
+        elif item > 0.5:
+            data[index] = 1
+
+        else:
+            data[index] = 0
+
+    return data
+
+
+def normalize(path):
+
+    # this will hold all of the instances in our data
+    entries = np.array()
+
+    with open(path) as filePath:  # open selected file
+        # create a reader using the file
+        reader = csv.reader(filePath, delimiter=',')
+        for line in reader:  # read the file
+            entries.append(line)  # add the line to the list of entries
+
+    filePath.close()  # close the file
+
+    clss = entries[:, :1]  # remove the class ids
+
+    # transform the data
+    stdScalar = StandardScaler().fit_transform(clss)  # z-score
+    normalizedData = discretization(stdScalar)  # discrete transformation
+
+    finalData = np.empty()
+    finalData = np.append(finalData, np.array(entries[:, 0]), axis=1)
+    finalData = np.append(finalData, np.array(normalizedData), axis=0)
+
+    return finalData, stdScalar
+
+
+def cdfc(path):
+    # Class Dependent Feature Construction
 
     # makes sure we're using global variables
     global FEATURE_NUMBER
@@ -912,8 +955,6 @@ def main():
 
     classes = []  # this will hold classIds and how often they occur
     classSet = set()  # this will hold how many classes there are
-    vals = []  # holds all the that occur in the training data
-    valuesSet = set()  # same as values but with no repeated values
 
     classToOccur = {}  # maps a classId to the number of times it occurs
 
@@ -945,7 +986,7 @@ def main():
             else:  # if we are reading the column headers,
                 counter += 1  # skip
 
-    # get the number of features in the dataset
+    # get the number of features in the data set
     FEATURE_NUMBER = len(rows[0].attribute)
     POPULATION_SIZE = FEATURE_NUMBER * BETA  # set the pop size
 
@@ -972,9 +1013,20 @@ def main():
         # this is done in two steps to avoid potential namespace issues
         currentPopulation = newPopulation
 
+    # TODO figure out how best to report data
     # report the information about the final population
     print(currentPopulation)
 
 
+def main():
+
+    Tk().withdraw()  # prevent root window caused by Tkinter
+    path = askFile()  # prompt user for file path
+
+    cdfc(path)  # run class dependent feature construction
+    # TODO implement other models
+
+
 if __name__ == "__main__":
+
     main()
