@@ -915,19 +915,8 @@ def discretization(data):
     return data
 
 
-def normalize(path):
-
-    # this will hold all of the instances in our data
-    entries = np.array()
-
-    with open(path) as filePath:  # open selected file
-        # create a reader using the file
-        reader = csv.reader(filePath, delimiter=',')
-        for line in reader:  # read the file
-            entries.append(line)  # add the line to the list of entries
-
-    filePath.close()  # close the file
-
+def normalize(entries):
+    # TODO check logic after creating training data
     clss = entries[:, :1]  # remove the class ids
 
     # transform the data
@@ -938,7 +927,74 @@ def normalize(path):
     finalData = np.append(finalData, np.array(entries[:, 0]), axis=1)
     finalData = np.append(finalData, np.array(normalizedData), axis=0)
 
+    # stdScalar - Standard Scalar, will used to on test & training data
     return finalData, stdScalar
+
+
+def createTrainingData(entries, K=10):
+
+    # *** connect a class to every instance that occurs in it ***
+
+    # this will map a classId to a 2nd dictionary that will hold the number of instances in that class &
+    # the instances
+    # classToInstances[classId] = list[counter, instance1Values, instance2Values, ...]
+    classToInstances = {}
+
+    for e in entries:
+
+        # get the class id from the entry
+        cId = e[0]
+
+        # if we already have an entry for that classId, append to it
+        if classToInstances[cId]:
+            # get the current list for this class
+            spam = classToInstances[cId]
+            # increment instance counter
+            spam[0] += 1
+            # add the new instance at the new index, removing the classId from it
+            spam[spam[0]] = e[1:]
+
+        # if this is the first time we've seen the class, create a new list for it
+        else:
+            # initialize the counter, add the new instance to the new list at index 1
+            # after removing the classId from it
+            spam = [1, e[1:]]
+            # add the new list to the "master" dictionary
+            classToInstances[cId] = spam
+
+    # *** Now create a random permutation of the instances in a class, & put them in buckets ***
+
+    buckets = [None] * K  # this list will be what we "deal" our "deck" of instances to
+    index = 0  # this will be the index of the bucket we are "dealing" to
+
+    for cId in classToInstances.keys():
+
+        # *** get a permutation of the instances that are in the class given by classId ***
+
+        # get the list for the class
+        # list is of the form [counter, instance1Values, instance2Values, ...]
+        # where instanceNValues is a lists of a attribute values
+        instances = classToInstances[cId]
+
+        # get a permutation of the instances for the class, but first remove the counter
+        # permutation is of the form [instance?Values, instance?Values, ...]
+        # where instanceNValues is a list of a attribute values
+        permutation = np.random.permutation(instances[1:])
+
+        # *** assign instances to buckets ***
+
+        # loop over every instance in the class cId, in what is now a random order
+        # p should be an instance?Value, which is a list of a attribute values
+        for p in permutation:
+            buckets[index] = p  # add the random instance to the bucket at index p
+            index = (index+1) % K  # increment index in a round robin style
+
+    # *** The buckets are now full & together should contain every instance ***
+    # Divide them into training & test data
+    testing = buckets[K]  # take only the Kth bucket
+    train = buckets[:K]  # take all the buckets except K
+
+    return train, testing
 
 
 def cdfc(path):
@@ -958,6 +1014,22 @@ def cdfc(path):
 
     classToOccur = {}  # maps a classId to the number of times it occurs
 
+    with open(path) as filePath:  # open selected file
+        # create a reader using the file
+        reader = csv.reader(filePath, delimiter=',')
+
+        # *** Parse the file into a numpy 2d array *** #
+        # this will hold all of the instances in our data
+        entries = np.array()
+        for line in reader:  # read the file
+            entries.append(line)  # add the line to the list of entries
+
+        train, testing = createTrainingData(entries)
+        train, scalar = normalize(train)
+
+    filePath.close()  # close the file
+
+########################### TODO change to use normalize & createTrainingData ###################################
     with open(path) as filePath:  # open selected file
         # create a reader using the file
         reader = csv.reader(filePath, delimiter=',')
@@ -1019,6 +1091,7 @@ def cdfc(path):
 
 
 def main():
+    # TODO move into a it's own file
 
     Tk().withdraw()  # prevent root window caused by Tkinter
     path = askFile()  # prompt user for file path
