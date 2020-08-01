@@ -990,10 +990,34 @@ def createTrainingData(entries, K=10):
             index = (index+1) % K  # increment index in a round robin style
 
     # *** The buckets are now full & together should contain every instance ***
-    # Divide them into training & test data
-    testing = buckets[K]  # take only the Kth bucket
-    train = buckets[:K]  # take all the buckets except K
 
+    # get a randomly ordered range of numbers up to K
+    # this will be used to give a random index in the loop below
+    randomIndex = list(range(K))
+    random.shuffle(randomIndex)
+
+    # these will hold the testing & training data. Each index will
+    # hold the values from 1 of the K loops, So testing will hold
+    # 1 value at any index while train will hold a list of them
+    testing = []
+    train = []
+
+    # *** Divide them into training & test data K times ***
+
+    # loop over all the random index values
+    for r in randomIndex:  # len(r) = K so this will be done K times
+        # take only the Rth bucket
+        testing.append(buckets[r])
+        # trim the Rth bucket so train doesn't contain the testing instance
+        trimd = buckets  # needed since pop works in place
+        # take all the buckets except R
+        train = trimd.pop(r)
+
+    # train will be a list of all the training data and so is
+    # of len(k) & each index is a list of instances
+    # testing will be a list of all the testing data and so is
+    # of len(K) & each index is a single instance
+    # (where an instance is a list of feature values)
     return train, testing
 
 
