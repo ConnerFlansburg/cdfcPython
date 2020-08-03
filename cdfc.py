@@ -5,18 +5,16 @@ import random
 import numpy as np
 import collections as collect
 from scipy import stats
-from tkinter import Tk
-from tkinter.filedialog import askFile
 from sklearn.preprocessing import StandardScaler
 
 
 # * Next Steps
-# TODO create a print function for population
-# TODO finish docstrings
+# TODO write code for the if function in OPS
+# TODO set the size of a tree inside of createHypothesis
+# TODO add counter for tree size in generateTree
+# TODO figure out K loop part of cross validation
+# TODO debug
 
-# * Sanity Checking / debugging
-# TODO rework to use parallelism
-# TODO optimize & make modular
 
 # ******************** Constants/Globals ******************** #
 
@@ -122,7 +120,6 @@ class Tree:
             # run the tree recursively
             return self.data(self.__runLeft(rFt, rVls), self.__runRight(rFt, rVls))
 
-    # ################# ?? Check this logic ?? ############## #
     def __runLeft(self, relevantFeatures, featureValues):
         # if left node is a terminal
         if self.left.data in relevantFeatures:
@@ -157,7 +154,6 @@ class Tree:
         return leftCount + rightCount
 
 
-
 class ConstructedFeature:
     """Constructed Feature is used to represent a single constructed feature in
        a hypothesis. It contains the tree representation of the feature along
@@ -182,7 +178,6 @@ class ConstructedFeature:
                     feature's decision tree.
     """
 
-    # ? does this need to be a list because we might have multiple trees?
     tree = None  # the root node of the constructed feature
     className = None  # the name of the class this tree is meant to distinguish
     infoGain = None  # the info gain for this feature
@@ -243,7 +238,6 @@ class ConstructedFeature:
     def setSize(self):
         # call getSize on the root of the tree
         return self.tree.getSize(0)
-
 
 
 class Hypothesis:
@@ -454,7 +448,6 @@ def isTrue(a, b):
     pass  # ? how to deal with if function?
 
 # min is built in
-
 
 # max is built in
 
@@ -915,12 +908,30 @@ def discretization(data):
     return data
 
 
-def normalize(entries):
-    # TODO check logic after creating training data
+def normalize(entries, scalar=None):
+
+    # entries will be a list of all the training data in the form of
+    # [ list[[some instance, some instance, ...]],
+    #   list[[some instance, some instance, ...]], ...]
+    # (where each index is a list of instances)
+    # OR it will be a list of all the testing data in the form of
+    # [some instance, some instance, ...]
+    # (where an instance is a list of feature values)
+
     clss = entries[:, :1]  # remove the class ids
 
-    # transform the data
-    stdScalar = StandardScaler().fit_transform(clss)  # z-score
+    # set stdScalar either using parameter in the case of testing data,
+    # or making it in the case of training data
+
+    # if we are dealing with training data, not testing data
+    if scalar is None:
+        # transform the data
+        stdScalar = StandardScaler().fit_transform(clss)  # z-score
+    # if we are dealing with testing data
+    else:
+        stdScalar = scalar  # discrete transformation
+
+    # ? does this work for the training data (when entries is a list of lists)
     normalizedData = discretization(stdScalar)  # discrete transformation
 
     finalData = np.empty()
@@ -1048,18 +1059,20 @@ def cdfc(path):
         for line in reader:  # read the file
             entries.append(line)  # add the line to the list of entries
 
+        # now that the data has been parsed into a numpy array use it
+        # to create both the training data & the testing data
         train, testing = createTrainingData(entries)
+        # now normalize the training & testing data, and keep the scalar used
         train, scalar = normalize(train)
 
-    filePath.close()  # close the file
-
-########################### TODO change to use normalize & createTrainingData ###################################
-    with open(path) as filePath:  # open selected file
-        # create a reader using the file
-        reader = csv.reader(filePath, delimiter=',')
-        counter = 0  # this is our line counter
-        for line in reader:  # read the file
-            if counter:  # if we are not reading the column headers,
+        # set global variables using the now transformed data
+        # TODO check the below
+        # ? Do I want to calculate this using the training data,
+        # ?  or the training data & the testing data?
+        for s in train:
+            # each s in train will be a set of instances, and then
+            # each line in s will be a single instance
+            for line in s:
                 # parse the file
                 # reader[0] = classId, reader[1:] = attribute values
                 rows.append(row(line[0], line[1:]))
@@ -1078,13 +1091,11 @@ def cdfc(path):
 
                 # ****************************************************************** #
 
-                counter += 1  # increment counter
-            else:  # if we are reading the column headers,
-                counter += 1  # skip
+        # get the number of features in the data set
+        FEATURE_NUMBER = len(rows[0].attribute)
+        POPULATION_SIZE = FEATURE_NUMBER * BETA  # set the pop size
 
-    # get the number of features in the data set
-    FEATURE_NUMBER = len(rows[0].attribute)
-    POPULATION_SIZE = FEATURE_NUMBER * BETA  # set the pop size
+    filePath.close()  # close the file
 
     # ********* The Code Below is Used to Calculated Entropy  ********* #
 
@@ -1095,9 +1106,12 @@ def cdfc(path):
         # calculation entropy summation
         ENTROPY_OF_S -= pi * math.log(pi, 2)
 
-    # ****************************************************************** #
+    # ***************************************************************** #
 
-    # ********************* Run the Algorithm ********************* #
+    # *********************** Run the Algorithm *********************** #
+
+    # TODO run K times using the different training data
+    # ? how do I run this K different times?
     # create initial population
     currentPopulation = createInitialPopulation()
     elite = currentPopulation.candidateHypotheses[0]  # init elitism
@@ -1109,21 +1123,4 @@ def cdfc(path):
         # this is done in two steps to avoid potential namespace issues
         currentPopulation = newPopulation
 
-    # TODO figure out how best to report data
-    # report the information about the final population
-    print(currentPopulation)
-
-
-def main():
-    # TODO move into a it's own file
-
-    Tk().withdraw()  # prevent root window caused by Tkinter
-    path = askFile()  # prompt user for file path
-
-    cdfc(path)  # run class dependent feature construction
-    # TODO implement other models
-
-
-if __name__ == "__main__":
-
-    main()
+    # TODO use testing data to report accuracy
