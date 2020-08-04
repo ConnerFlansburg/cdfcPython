@@ -10,8 +10,6 @@ from sklearn.preprocessing import StandardScaler
 
 # * Next Steps
 # TODO write code for the if function in OPS
-# TODO set the size of a tree inside of createHypothesis
-# TODO add counter for tree size in generateTree
 # TODO figure out K loop part of cross validation
 # TODO debug
 
@@ -537,6 +535,7 @@ def createInitialPopulation():
     def __grow(classId):
         # This function uses the grow method to generate an initial population
         def assign(level, counter):
+
             # used to compute individual size
             counter += 1
             # recursively assign tree values
@@ -626,6 +625,7 @@ def createInitialPopulation():
         classIds = random.shuffle(range(1, C))
 
         ftrs = []
+        HypSize = 0
         # assumes one tree per feature, and creates 1 tree for
         # each class
         for __ in range(C):
@@ -642,9 +642,11 @@ def createInitialPopulation():
                 tree, size = __full(name)     # create tree
                 ftrs.append(ConstructedFeature(name, tree, size))
 
+            HypSize += size
+
         h = Hypothesis
         h.features = ftrs
-        # TODO get size of trees as they are generated & add to size var
+        h.size = HypSize
         return h
 
     hypothesis = []
@@ -681,7 +683,6 @@ def evolve(population, elite):  # pop should be a list of hypotheses
 
         return first
 
-    # TODO add counter for individual size
     # ************ Tree Generation ************ #
     def __generateTree(node, terminalValues, values, depth, max_depth, counter=0):
 
