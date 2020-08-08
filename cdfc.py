@@ -4,7 +4,7 @@ import collections as collect
 from scipy import stats
 
 # * Next Steps
-# TODO write the test function in hypoth
+# TODO write the test function in hypothesis
 # TODO debug
 
 # TODO write code for the if function in OPS
@@ -386,8 +386,8 @@ class Hypothesis:
     def transform(self):
 
         instance = collect.namedtuple(
-            'instance', ['inClass', 'values'])
-        # ? should this be an array or a dictionary?
+            'instance', ['className', 'values'])
+
         transformed = []  # this will hold the transformed values
         for r in rows:  # for each instance
             # this will hold the calculated values for all
@@ -401,13 +401,55 @@ class Hypothesis:
             # each instance will hold the new values for
             # an instance & className. Transformed will hold
             # all the instances for a hypothesis
+            # ? should the class name be changed/found some other way?
             transformed.append(instance(r.className, values))
-            # ? how to make class name a bool? Does it need to be?
+
+        return transformed  # return the list of all instances
+
+    def transformTesting(self, data):
+
+        instance = collect.namedtuple(
+            'instance', ['className', 'values'])
+
+        transformed = []  # this will hold the transformed values
+        for d in data:  # for each instance
+            # this will hold the calculated values for all
+            # the constructed features
+            values = []
+            # transform the original input using each constructed feature
+            for f in self.features:
+                # append the transformed values for a single
+                # constructed feature to values
+                values.append(f.transform(d))
+            # each instance will hold the new values for
+            # an instance & className. Transformed will hold
+            # all the instances for a hypothesis
+            transformed.append(instance(d.className, values))
+
         return transformed  # return the list of all instances
 
     # TODO write function. This should return info about a hypoth's accuracy given testing data
-    def test(self):
+    def test(self, data):
+
+        spam = []
+        for i in data:  # for every instance in data
+            # create a new row struct & append
+            # i[0] = classId, i[1:] = attribute values
+            spam.append(row(i[0], i[1:]))
+        data = spam  # update data to hold the same info but as a row struct
+
+        # transform the data using the hypothesis. This will be returned in the form:
+        # list[instance(className, values), instance(className, values)]
+        data = self.transformTesting(data)
+
+        # TODO take the transformed data & compare:
+        #      what class the instance belongs to in test data
+        #      and what class it belongs in the transformed data
+
+        # TODO calculate some accuracy values using this & return it
+
         pass
+
 
 class Population:
     # this will be the population of hypotheses

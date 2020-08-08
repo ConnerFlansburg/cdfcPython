@@ -45,9 +45,10 @@ def normalize(entries, scalar=None):
     # if we are dealing with testing data
     else:
         stdScalar = scalar  # discrete transformation
+        # TODO use scalar to transform entries
 
     # ? does this work for the training data (when entries is a list of lists)
-    normalizedData = discretization(stdScalar)  # discrete transformation
+    normalizedData = discretization(entries)  # discrete transformation
 
     finalData = np.empty()
     finalData = np.append(finalData, np.array(entries[:, 0]), axis=1)
@@ -77,14 +78,13 @@ def fillBuckets(entries, K):
             spam = classToInstances[cId]
             # increment instance counter
             spam[0] += 1
-            # add the new instance at the new index, removing the classId from it
-            spam[spam[0]] = e[1:]
+            # add the new instance at the new index
+            spam[spam[0]] = e[:]
 
         # if this is the first time we've seen the class, create a new list for it
         else:
             # initialize the counter, add the new instance to the new list at index 1
-            # after removing the classId from it
-            spam = [1, e[1:]]
+            spam = [1, e[:]]
             # add the new list to the "master" dictionary
             classToInstances[cId] = spam
 
@@ -98,19 +98,19 @@ def fillBuckets(entries, K):
         # *** get a permutation of the instances that are in the class given by classId ***
 
         # get the list for the class
-        # list is of the form [counter, instance1Values, instance2Values, ...]
-        # where instanceNValues is a lists of a attribute values
+        # list is of the form [counter, instance1, instance2, ...]
+        # where instanceN is a list where instanceN[0] is the classId & instanceN[1:] are the values
         instances = classToInstances[cId]
 
         # get a permutation of the instances for the class, but first remove the counter
-        # permutation is of the form [instance?Values, instance?Values, ...]
-        # where instanceNValues is a list of a attribute values
+        # permutation is of the form [instance?, instance?, ...]
+        # where instance? is a list where instance?[0] is the classId & instance?[1:] are the values
         permutation = np.random.permutation(instances[1:])
 
         # *** assign instances to buckets ***
 
         # loop over every instance in the class cId, in what is now a random order
-        # p should be an instance?Value, which is a list of a attribute values
+        # p should be an instance?, which is a row from the input data
         for p in permutation:
             buckets[index] = p  # add the random instance to the bucket at index p
             index = (index+1) % K  # increment index in a round robin style
@@ -175,6 +175,7 @@ def main():
         # now that we have our train & test data create our hypothesis
         hypothesis = cdfc(train)
 
+        testing = normalize(testing, scalar)
         # now that we have created our hypothesis, test it
         accuracy.append(hypothesis.test(testing))
 
