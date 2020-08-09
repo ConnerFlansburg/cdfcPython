@@ -206,7 +206,7 @@ class ConstructedFeature:
             elif node.right is None:
                 __walk(node.left)  # walk down the left
 
-            else: # if there are both left & right children
+            else:  # if there are both left & right children
                 # walk down both
                 __walk(node.right)
                 __walk(node.left)
@@ -482,8 +482,8 @@ def times(a, b):
     return a * b
 
 
-def isTrue(a, b):
-    pass  # ? how to deal with if function?
+# def if(a, b):
+    # pass  # ? how to deal with if function?
 
 # min is built in
 
@@ -516,17 +516,18 @@ def terminals(classId):
         tValue, pValue = stats.ttest_ind(inClass, notIn)
 
         # calculate relevancy for a single feature
-        relevancy = 0  # this will hold the relevancy score for this feature
         if pValue >= 0.05:  # if p-value is less than 0.05
             relevancy = 0  # set relevancy score to 0
+            # add relevancy score to the list of scores
+            scores.append(Score(i, relevancy))
         else:  # otherwise
             # set relevancy using t-value/p-value
             relevancy = abs(tValue)/pValue
-
-        scores.append(Score(i, relevancy))
+            # add relevancy score to the list of scores
+            scores.append(Score(i, relevancy))
 
     # sort the features by relevancy scores
-    sortedScores = sorted(scores, key=lambda Score: Score.Attribute)
+    sortedScores = sorted(scores, key=lambda s: s.Attribute)
 
     terminalSet = []  # this will hold relevant terminals
     top = len(sortedScores)  # find the halfway point
@@ -580,18 +581,20 @@ def createInitialPopulation():
             counter += 1
             # recursively assign tree values
             if level != MAX_DEPTH:
+
                 # get the random value
                 spam = ls[random.randint(0, len(ls))]
-                if spam in terminal:  # if the item is a terminal
+
+                if spam in terminal:            # if the item is a terminal
                     return Tree(spam), counter  # just return, stopping recursion
 
-                tree = Tree(spam)
-                tree.left, cLeft = assign(level + 1, counter)
-                tree.right, cRight = assign(level + 1, counter)
+                node = Tree(spam)
+                node.left, cLeft = assign(level + 1, counter)
+                node.right, cRight = assign(level + 1, counter)
                 # add the number of nodes from the left subtree,
                 # to the number of nodes from the right subtree
                 counter = cLeft + cRight
-                return tree, counter
+                return node, counter
 
             else:
                 # stop recursion; max depth has been reached
@@ -601,14 +604,16 @@ def createInitialPopulation():
                 return Tree(spam), counter
 
         # pick a random function & put it in the root
-        ls = random.shuffle(OPS)
+        ls = OPS[:]
+        random.shuffle(ls)
         rootData = ls[random.randint(0, len(ls))]
         tree = Tree(rootData)  # make a new tree
 
         # get the list of terminal characters
         terminal = terminals(classId)
         # add the terminal values to the list of functions & reorder
-        ls = random.shuffle(ls.append(terminal))
+        ls = ls + terminals(classId)
+        random.shuffle(ls)
 
         # create the tree
         tree.left, counterLeft = assign(1, counter=1)
@@ -626,28 +631,28 @@ def createInitialPopulation():
             # recursively assign tree values
             if level != MAX_DEPTH:
                 # get a random function & add it to the tree
-                tree = Tree(ls[random.randint(0, len(ls))])
+                node = Tree(ls[random.randint(0, len(ls))])
                 # call for branches
-                tree.left, cLeft = assign(level + 1, counter)
-                tree.right, cRight = assign(level + 1, counter)
+                node.left, cLeft = assign(level + 1, counter)
+                node.right, cRight = assign(level + 1, counter)
                 # add the number of nodes from the left subtree,
                 # to the number of nodes from the right subtree
                 counter = cLeft + cRight
-                return tree, counter
+                return node, counter
 
             else:  # stop recursion; max depth has been reached
                 # add a terminal to the leaf & return
                 return Tree(terminal[random.randint(0, len(terminal))]), counter
 
         # pick a random function & put it in the root
-        ls = random.shuffle(OPS)
+        ls = OPS[:]
         rootData = ls[random.randint(0, len(ls))]
         tree = Tree(rootData)  # make a new tree
 
-        # get the list of terminal characters
         terminal = terminals(classId)
         # add the terminal values to the list of functions & reorder
-        ls = random.shuffle(ls.append(terminal))
+        ls = ls + terminal  # get the list of terminal characters
+        random.shuffle(ls)
 
         # create the tree
         tree.left, counterLeft = assign(1, counter=1)
@@ -662,13 +667,14 @@ def createInitialPopulation():
         # given a list of trees, create a hypothesis
 
         # get a list of all classIds
-        classIds = random.shuffle(range(1, C))
+        classIds = list(range(1, C))
+        random.shuffle(classIds)
 
         ftrs = []
         HypSize = 0
         # assumes one tree per feature, and creates 1 tree for
         # each class
-        for __ in range(C):
+        for nll in range(C):
 
             # randomly decide if grow or full should be used.
             # Also randomly assign the class ID then remove that ID
@@ -691,7 +697,7 @@ def createInitialPopulation():
 
     hypothesis = []
 
-    for __ in range(POPULATION_SIZE):
+    for nl in range(POPULATION_SIZE):
         hypothesis.append(createHypothesis())
 
     return Population(hypothesis, 0)
@@ -812,7 +818,7 @@ def evolve(population, elite):  # pop should be a list of hypotheses
     # while the size of the new population is less than the max pop size
     while len(newPopulation.candidateHypotheses) < POPULATION_SIZE:
         # get a random number between 0 & 1
-        probability = random.uniform(0,1)
+        probability = random.uniform(0, 1)
         # if probability is less than mutation rate, mutate
         if probability < MUTATION_RATE:  # ****** mutate ****** #
             # get parent hypothesis using tournament
@@ -823,6 +829,7 @@ def evolve(population, elite):  # pop should be a list of hypotheses
             terminal = feature.relevantFeatures
             # ? because lists are mutable all the changes happen in place?
             # ? So I don't need to create a new hypoth/pop as there is only ever the one?
+            # ! check
             feature = feature.tree  # get the tree for that feature
 
             # randomly select a subtree in feature
@@ -841,22 +848,24 @@ def evolve(population, elite):  # pop should be a list of hypotheses
 
             # randomly decide which method to use to construct the new tree
             decideGrow = random.choice([True, False])
-            # the individual's size
-            size = 0
             # randomly generate subtree
             if decideGrow:  # use grow
                 # pick a random function & put it in the root
-                ls = random.shuffle(OPS)
+                ls = OPS[:]
+                random.shuffle(ls)
                 rootData = ls[random.randint(0, len(ls))]
                 # make a new tree
                 t = Tree(rootData)
                 # build the rest of the subtree
-                size = __generateTree(t, terminal, ls[random.shuffle(OPS.append(terminal))], 0, 8)
+                ls.append(terminal)  # append the terminals
+                random.shuffle(ls)  # shuffle the operations & terminals
+                size = __generateTree(t, terminal, ls, 0, 8)
                 # set the size of the tree
 
             else:  # use full
                 # pick a random function & put it in the root
-                ls = random.shuffle(OPS)
+                ls = OPS[:]
+                random.shuffle(ls)
                 rootData = ls[random.randint(0, len(ls))]
                 # make a new tree
                 t = Tree(rootData)
@@ -917,6 +926,7 @@ def evolve(population, elite):  # pop should be a list of hypotheses
 
             # swap the two subtrees
             feature1, feature2 = feature2, feature1  # ? is this done in place?
+            # ! they aren't used after the reassignment. Check this is correct
 
             # get the size of the new constructed features by walking the trees
             parent1.setSize()
@@ -1015,4 +1025,3 @@ def cdfc(train):
     bestHypothesis = max(currentPopulation.candidateHypotheses, key=lambda x: x.fitness)
     # return the best hypothesis generated
     return bestHypothesis
-
