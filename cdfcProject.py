@@ -1,4 +1,3 @@
-import csv
 import random
 import numpy as np
 import tkinter as tk
@@ -50,6 +49,7 @@ def normalize(entries, scalar=None):
     # ? does this work for the training data (when entries is a list of lists)
     normalizedData = discretization(entries)  # discrete transformation
 
+    # TODO create an empty numpy array so we can append
     finalData = np.empty()
     finalData = np.append(finalData, np.array(entries[:, 0]), axis=1)
     finalData = np.append(finalData, np.array(normalizedData), axis=0)
@@ -128,18 +128,8 @@ def main():
     # prompt user for file path
     path = filedialog.askopenfilename()
 
-    # *** parse the data *** #
-    with open(path) as filePath:  # open selected file
-        # create a reader using the file
-        reader = csv.reader(filePath, delimiter=',')
-
-        # *** Parse the file into a numpy 2d array *** #
-        # this will hold all of the instances in our data
-        entries = np.array()
-        for line in reader:  # read the file
-            entries.append(line)  # add the line to the list of entries
-
-    filePath.close()  # close the file
+    # *** Parse the file into a numpy 2d array *** #
+    entries = np.genfromtxt(path, delimiter=',')
 
     # *** create a set of K buckets filled with our instances *** #
     K = 10  # set the K for k fold cross validation
