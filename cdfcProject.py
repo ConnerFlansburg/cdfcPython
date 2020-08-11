@@ -1,4 +1,5 @@
 import random
+import copy
 import numpy as np
 import collections as collect
 import tkinter as tk
@@ -137,39 +138,51 @@ def main():
 
     # *** Loop over our buckets K times, each time running creating a new hypothesis *** #
     # this will be used to select random indexes to serve as the testing/training data
-    randomIndex = list(range(K))  # get a randomly ordered range of numbers up to K
-    random.shuffle(randomIndex)  # this will be used to give a random index in the loop below
+    randomIndex = list(range(0, K-1))  # get a randomly ordered range of numbers up to K
+    random.shuffle(randomIndex)        # this will be used to give a random index in the loop below
 
     accuracy = []  # this will store the details about the accuracy of our hypotheses
+
+    oldR = 0                        # used to remember previous r in loop
+    testingList = None                  # used to keep value for testing after a loop
+    trainList = copy.deepcopy(buckets)  # make a copy of buckets so we don't override it
 
     # *** Divide them into training & test data K times ***
     # loop over all the random index values
     for r in randomIndex:  # len(r) = K so this will be done K times
-
+    
         # *** Get the Training & Testing Data *** #
-        train = buckets  # make a copy of buckets so that we don't change it
+        
         # the Rth bucket becomes our testing data, everything else becomes training data
-        testing = train.pop(r)
-
+        # NOTE: the below is done in order to prevent accidental overwrites
+        if testingList is None:             # if this is not the first time though the loop
+            testingList = trainList.pop(r)  # then set train & testing
+            oldR = r                        # save the current r value for then next loop
+    
+        else:                                    # if we've already been through the loop at least once
+            trainList.insert(oldR, testingList)  # add testing back into train
+            testingList = trainList.pop(r)       # then set train & testing
+            oldR = r                             # save the current r value for then next loop
+    
         # *** Flatten the Training Data *** #
-        spam = []          # currently training is a list of lists of lists because of the buckets.
-        for lst in train:  # we can now remove the buckets by concatenating the lists of instance
-            spam += lst    # into one list of instances, flattening our data, & making it easier to work with
-        train = spam
+        train = []              # currently training is a list of lists of lists because of the buckets.
+        for lst in trainList:   # we can now remove the buckets by concatenating the lists of instance
+            train += lst        # into one list of instances, flattening our data, & making it easier to work with
 
-        train = np.array(train)      # turn training data into a numpy array
-        testing = np.array(testing)  # turn testing data into a numpy array
-
+        # transform the training & testing data into numpy arrays & free the List vars to be reused
+        train = np.array(train)          # turn training data into a numpy array
+        testing = np.array(testingList)  # turn testing data into a numpy array
+    
         # *** Normalize the Training Data *** #
         train, scalar = normalize(train)  # now normalize the training, and keep the scalar used
-
+    
         # *** Train the CDFC Model *** #
-        # CDFC_Hypothesis = cdfc(train)  # now that we have our train & test data create our hypothesis
-
+        # + CDFC_Hypothesis = cdfc(train)  # now that we have our train & test data create our hypothesis
+    
         # *** Train the Learning Algorithm *** #
         # transform data using the CDFC model
         # transformedTrain = CDFC_Hypothesis.transform(train)
-
+    
         # format data for SciKit Learn
         # + change the below to use transformedData instead of train
         # create the label array Y (the target of our training)
@@ -177,28 +190,28 @@ def main():
         labels = np.array(flat)        # convert the label list to a numpy array
         # create the feature matrix X ()
         ftrs = np.array(train[:, 1:])  # get everything BUT the labels/ids
-
+    
         # now that the data is formatted, run the learning algorithm
-        # ? should I eventually be running all 3 at once?
         # ? what's a good value for n_neighbors?
-        # ! model = KNeighborsClassifier(n_neighbors=3)     # Kth Nearest Neighbor Classifier
-        # ! model = DecisionTreeClassifier(random_state=0)  # Decision Tree Classifier
+        # + model = KNeighborsClassifier(n_neighbors=3)     # Kth Nearest Neighbor Classifier
+        # + model = DecisionTreeClassifier(random_state=0)  # Decision Tree Classifier
         model = GaussianNB()                            # Create a Gaussian Classifier (Naive Baye's)
         model.fit(ftrs, labels)                         # Train the model
-
+    
         # *** Normalize the Testing Data *** #
-        testing = normalize(testing, scalar)
-
+        testing, scalar = normalize(testing, scalar)
+    
         # *** Reduce the Testing Data Using the CDFC Model *** #
-        # testing = CDFC_Hypothesis.transform(testing)  # use the cdfc model to reduce the data's size
-
+        # + testing = CDFC_Hypothesis.transform(testing)  # use the cdfc model to reduce the data's size
+    
         # format data for SciKit Learn
         # create the label array Y (the target of our training)
-        flat = np.ravel(testing[:, :1])  # flatten the label list
+        debugSlice = testing[:, :1]
+        flat = np.ravel(debugSlice)  # flatten the label list
         trueLabels = np.array(flat)      # convert the label list to a numpy array
         # create the feature matrix X ()
         ftrs = np.array(testing[:, 1:])  # get everything BUT the labels/ids
-
+    
         # compute accuracy
         labelPrediction = model.predict(ftrs)  # use model to predict labels
         # compute the accuracy score by comparing the actual labels with those predicted
