@@ -3,13 +3,16 @@ import random
 import collections as collect
 from scipy import stats
 
-# * Next Steps
+# ! Next Steps
 # TODO check the logic of __runLeft & __runRight in tree
-# TODO write code for the if function in OPS
 # TODO check feature1, feature2 issue in crossover
-# TODO add citiation in entropy calc
 
-# ******************** Constants/Globals ******************** #
+# TODO write code for the if function in OPS
+# TODO add citation in entropy calc
+# TODO add docstrings
+# TODO add testing functions
+
+# **************************** Constants/Globals **************************** #
 CROSSOVER_RATE = 0.8  # CROSSOVER_RATE is the chance that a candidate will reproduce
 GENERATIONS = 50      # GENERATIONS is the number of generations the GP should run for
 MUTATION_RATE = 0.2   # MUTATION_RATE is the chance that a candidate will be mutated
@@ -27,6 +30,33 @@ M = 0                 # M is the number of constructed features
 # ! set the value of R for every new dataset, it is NOT set automatically ! #
 R = 2                 # R is the ratio of number of constructed features to the number of classes (features/classes)
 # ************************ End of Constants/Globals ************************ #
+
+# ********************** Valid Operations Within Tree ********************** #
+# all functions for the tree must be of the form x(y,z)
+
+# OPS is the list of valid operations on the tree
+OPS = ['add', 'subtract', 'times', 'max', 'isTrue']
+
+
+def add(a, b):
+    return a + b
+
+
+def subtract(a, b):
+    return a - b
+
+
+def times(a, b):
+    return a * b
+
+
+# def if(a, b):
+    # pass  # ? how to deal with if function?
+
+# min is built in
+
+# max is built in
+# *************************** End of Operations *************************** #
 
 # ********************** Namespaces/Structs & Objects *********************** #
 row = collect.namedtuple('row', ['className', 'attributes'])  # a single line in the csv, representing a record/instance
@@ -168,7 +198,7 @@ class ConstructedFeature:
         return values      # values should now hold the indexes of the tree's terminals
 
     def transform(self, instance):
-        # * NOTE instance should be a row object
+        # NOTE instance should be a row object
 
         relevantValues = {}  # this will hold the values of relevant features
 
@@ -213,7 +243,7 @@ class Hypothesis:
             
             for i, vi in enumerate(values):  # loop over all the transformed values
 
-                minSum = 2  # * NOTE must be high enough that it is always reset
+                minSum = 2  # NOTE must be high enough that it is always reset
                 maxSum = 0
 
                 for j, vj in enumerate(values):
@@ -318,7 +348,10 @@ class Hypothesis:
         term1 = ALPHA*self.averageInfoGain
         term2 = (1-ALPHA)*self.distance
         term3 = (math.pow(10, -7)*self.size)
-        return term1 + term2 - term3
+        final = term1 + term2 - term3
+        # ********* Finish Calculation ********* #
+        
+        return final
 
     def transform(self, data=None):
 
@@ -372,36 +405,7 @@ class Population:
         self.candidateHypotheses = candidates
         self.generation = generationNumber
 
-
 # ***************** End of Namespaces/Structs & Objects ******************* #
-
-# ********************** Valid Operations Within Tree ********************** #
-# all functions for the tree must be of the form x(y,z)
-
-# OPS is the list of valid operations on the tree
-OPS = ['add', 'subtract', 'times', 'max', 'isTrue']
-
-
-def add(a, b):
-    return a + b
-
-
-def subtract(a, b):
-    return a - b
-
-
-def times(a, b):
-    return a * b
-
-
-# def if(a, b):
-    # pass  # ? how to deal with if function?
-
-# min is built in
-
-# max is built in
-
-# *************************** End of Operations *************************** #
 
 
 def terminals(classId):
@@ -422,6 +426,9 @@ def terminals(classId):
 
     for i in range(1, FEATURE_NUMBER):
         inClass, notIn = valuesInClass(classId, i)        # find the values of attribute i in/not in class classId
+        # ? This currently uses a two-tailed test. Because of this p-value can be below 0, and
+        # ?     this can cause divide by 0 errors during the else case of relevancy calculation.
+        # ?     Should it be a one-tailed test instead?
         tValue, pValue = stats.ttest_ind(inClass, notIn)  # get the t-test & p-value for the feature
 
         # calculate relevancy for a single feature
@@ -430,6 +437,7 @@ def terminals(classId):
             scores.append(Score(i, relevancy))  # add relevancy score to the list of scores
         # otherwise
         else:
+            # NOTE: this causes a divided by zero error if p-Value comes from a two-tailed test
             relevancy = abs(tValue)/pValue      # set relevancy using t-value/p-value
             scores.append(Score(i, relevancy))  # add relevancy score to the list of scores
 
@@ -485,7 +493,7 @@ def createInitialPopulation():
             counter += 1  # used to compute individual size
             
             if level != MAX_DEPTH:  # recursively assign tree values
-                spam = ls[random.randint(0, len(ls))]  # get the random value
+                spam = ls[random.randint(0, (len(ls)-1))]  # get the random value
                 
                 if spam in terminal:            # if the item is a terminal
                     return Tree(spam), counter  # just return, stopping recursion
@@ -504,11 +512,11 @@ def createInitialPopulation():
         # pick a random function & put it in the root
         ls = OPS[:]
         random.shuffle(ls)
-        rootData = ls[random.randint(0, len(ls))]
+        rootData = ls[random.randint(0, (len(ls)-1))]
         tree = Tree(rootData)  # make a new tree
 
         terminal = terminals(classId)  # get the list of terminal characters
-        ls = ls + terminals(classId)   # add the terminal values to the list of functions & reorder
+        ls += terminals(classId)  # add the terminal values to the list of functions & reorder
         random.shuffle(ls)
 
         # create the tree
@@ -527,7 +535,7 @@ def createInitialPopulation():
             counter += 1
             
             if level != MAX_DEPTH:  # recursively assign tree values
-                node = Tree(ls[random.randint(0, len(ls))])  # get a random function & add it to the tree
+                node = Tree(ls[random.randint(0, len(ls)-1)])  # get a random function & add it to the tree
                 # call for branches
                 node.left, cLeft = assign(level + 1, counter)
                 node.right, cRight = assign(level + 1, counter)
@@ -535,16 +543,16 @@ def createInitialPopulation():
                 counter = cLeft + cRight
                 return node, counter
 
-            else:  # stop recursion; max depth has been reached
-                return Tree(terminal[random.randint(0, len(terminal))]), counter  # add a terminal to the leaf & return
+            else:  # stop recursion; max depth has been reached, so add a terminal to the leaf & return
+                return Tree(terminal[random.randint(0, (len(terminal)-1))]), counter
 
         # pick a random function & put it in the root
         ls = OPS[:]
-        rootData = ls[random.randint(0, len(ls))]
+        rootData = ls[random.randint(0, (len(ls)-1))]
         tree = Tree(rootData)  # make a new tree
 
         terminal = terminals(classId)  # get the list of terminal characters
-        ls = ls + terminal             # add the terminal values to the list of functions & reorder
+        ls += terminal  # add the terminal values to the list of functions & reorder
         random.shuffle(ls)
 
         # create the tree
@@ -557,10 +565,10 @@ def createInitialPopulation():
 
     def createHypothesis():
         # given a list of trees, create a hypothesis
-        # * this will make 1 tree for each feature, and 1 CF for each class
+        # NOTE this will make 1 tree for each feature, and 1 CF for each class
 
         # get a list of all classIds
-        classIds = list(range(1, LABEL_NUMBER))
+        classIds = list(range(1, LABEL_NUMBER+1))
         random.shuffle(classIds)
 
         ftrs = []
@@ -596,12 +604,12 @@ def createInitialPopulation():
 
 
 def evolve(population, elite):
-    # * pop should be a list of hypotheses
+    # NOTE pop should be a list of hypotheses
 
     def __tournament(candidates):
         # used by evolve to selection the parents
         
-        # ************* Tournament Selection ************* #
+        # **************** Tournament Selection **************** #
         first = None
         score = 0
         for i in range(0, TOURNEY):  # compare TOURNEY number of random hypothesis
@@ -615,12 +623,13 @@ def evolve(population, elite):
             elif score < fitness:  # if first is set, but knight is more fit,
                 first = candidate  # then update it
                 score = fitness
+        # ************ End of Tournament Selection ************* #
 
         return first
 
-    # ************ Tree Generation ************ #
     def __generateTree(node, terminalValues, values, depth, max_depth, counter=0):
-
+        
+        # **************** Tree Generation **************** #
         counter += 1  # increment size counter
 
         # if this node contains a terminal return
@@ -673,9 +682,9 @@ def evolve(population, elite):
 
             counter = cLeft + cRight  # calculate the size (the number of nodes) by adding the size of the subtrees
             return counter
+        # ************ End of Tree Generation ************ #
 
-    # ************ Evolution ************ #
-
+    # ******************* Evolution ******************* #
     # ? Do I need to create a new population or is this all done in place?
     newPopulation = Population([], population.generation+1)  # create a new population with no hypotheses
     
@@ -684,8 +693,7 @@ def evolve(population, elite):
         
         probability = random.uniform(0, 1)  # get a random number between 0 & 1
         
-        # ****** mutate ****** #
-        
+        # **************** Mutate **************** #
         if probability < MUTATION_RATE:  # if probability is less than mutation rate, mutate
             
             parent = __tournament(population)  # get parent hypothesis using tournament
@@ -743,8 +751,10 @@ def evolve(population, elite):
             cl = parent.feature[featureIndex].className                     # get the className of the feature
             parent.feature[featureIndex] = ConstructedFeature(cl, t, size)  # replace the parent with the mutated child
             newPopulation.candidateHypotheses.append(parent)                # add the parent to the new pop
+        # ************* End of Mutation ************* #
 
-        else:  # ************ crossover ************ #
+        # **************** Crossover **************** #
+        else:
 
             parent1 = __tournament(population)
             parent2 = __tournament(population)
@@ -801,6 +811,7 @@ def evolve(population, elite):
 
             # parent 1 & 2 are both hypotheses and should have been changed in place, so add them to the new pop
             newPopulation.candidateHypotheses.append(parent1, parent2)
+        # **************** End of Crossover **************** #
 
         # handle elitism
         newHypothFitness = newPopulation.candidateHypotheses[-1].getFitness()
@@ -821,8 +832,7 @@ def cdfc(train):
     global M
     global rows
     global row
-    # *** used in entropy calculation *** #
-    global ENTROPY_OF_S
+    global ENTROPY_OF_S  # * used in entropy calculation * #
 
     classes = []       # this will hold classIds and how often they occur
     classSet = set()   # this will hold how many classes there are
@@ -830,52 +840,43 @@ def cdfc(train):
     ids = []           # this will be a list of all labels/ids with no repeats
 
     # set global variables using the now transformed data
-    for s in train:
-        # each s in train will be a set of instances, and then
-        # each line in s will be a single instance
+    for line in train:  # each line in train will be an instances
         
-        for line in s:
-            
-            # parse the file
-            rows.append(row(line[0], line[1:]))  # reader[0] = classId, reader[1:] = attribute values
-            classes.append(line[0])
-            classSet.add(line[0])
-            INSTANCES_NUMBER += 1
+        # parse the file
+        rows.append(row(line[0], line[1:]))  # reader[0] = classId, reader[1:] = attribute values
+        classes.append(line[0])
+        classSet.add(line[0])
+        INSTANCES_NUMBER += 1
 
-            # track how many different IDs there are
-            if line[0] in ids:
-                continue
-            else:
-                ids.append(line[0])
+        # track how many different IDs there are
+        if line[0] in ids:
+            continue
+        else:
+            ids.append(line[0])
 
-            # ********* The Code Below is Used to Calculated Entropy  ********* #
-            
-            # this will count the number of times a class occurs in the provided data
-            # dictionary[classId] = counter of times that class is found
-            
-            if classToOccur.get(line[0]):   # if we have encountered the class before
-                classToOccur[line[0]] += 1  # increment
-            else:  # if this is the first time we've encountered the class
-                classToOccur[line[0]] = 1   # set to 1
-            
-            # ****************************************************************** #
+        # ********* The Code Below is Used to Calculated Entropy  ********* #
+        # this will count the number of times a class occurs in the provided data
+        # dictionary[classId] = counter of times that class is found
+        
+        if classToOccur.get(line[0]):   # if we have encountered the class before
+            classToOccur[line[0]] += 1  # increment
+        else:  # if this is the first time we've encountered the class
+            classToOccur[line[0]] = 1   # set to 1
+        # ****************************************************************** #
 
-    FEATURE_NUMBER = len(rows[0].attribute)  # get the number of features in the data set
+    FEATURE_NUMBER = len(rows[0].attributes)  # get the number of features in the data set
     POPULATION_SIZE = FEATURE_NUMBER * BETA  # set the pop size
     LABEL_NUMBER = len(ids)                  # get the number of classes in the data set
     M = R * LABEL_NUMBER                     # get the number of constructed features
 
     # ********* The Code Below is Used to Calculated Entropy  ********* #
-
     # loop over all classes
     for i in classToOccur.keys():
         pi = classToOccur[i] / INSTANCES_NUMBER  # compute p_i
         ENTROPY_OF_S -= pi * math.log(pi, 2)     # calculation entropy summation
-
     # ***************************************************************** #
 
     # *********************** Run the Algorithm *********************** #
-
     currentPopulation = createInitialPopulation()     # create initial population
     elite = currentPopulation.candidateHypotheses[0]  # init elitism
     
@@ -884,11 +885,9 @@ def cdfc(train):
         # update currentPopulation to hold the new population
         # this is done in two steps to avoid potential namespace issues
         currentPopulation = newPopulation
-
     # ***************************************************************** #
 
     # ****************** Return the Best Hypothesis ******************* #
-
     # check to see if the last generation has generated fitness scores
     if currentPopulation.candidateHypotheses[2].fitness is None:
         # if not then generate them

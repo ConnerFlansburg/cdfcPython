@@ -6,15 +6,17 @@ from cdfc import cdfc
 from sklearn.preprocessing import StandardScaler
 from sklearn.naive_bayes import GaussianNB
 from sklearn.metrics import accuracy_score
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.tree import DecisionTreeClassifier
+# from sklearn.neighbors import KNeighborsClassifier
+# from sklearn.tree import DecisionTreeClassifier
 
 # * Next Steps
-# TODO check that discretization is checking the right values
 # TODO change the learning algorithm so that it's trained using data the CDFC model has transformed
+# TODO report accuracy
+# TODO what data structure/form is best for accuracy
+
 
 def discretization(data):
-    # TODO check that this is using p value
+    
     for index, item in np.ndenumerate(data):
 
         if item < -0.5:
@@ -58,7 +60,7 @@ def normalize(entries, scalar=None):
         tData = discretization(tData)       # discrete transformation
 
     # *** add the IDs back on *** #
-    entries[:, 1:] = tData # this overwrites everything in entries BUT the ids
+    entries[:, 1:] = tData  # this overwrites everything in entries BUT the ids
 
     # stdScalar - Standard Scalar, will used to on test & training data
     return entries, stdScalar
@@ -76,12 +78,16 @@ def fillBuckets(entries, K):
 
         # get the class id from the entry
         cId = e[0]
+        
+        spam = []          # create an empty list
+        spam.insert(0, 0)  # initialize counter to 0
 
         # if we already have an entry for that classId, append to it
-        if classToInstances[cId]:
+        if classToInstances.get(cId):
             spam = classToInstances.get(cId)  # get the current list for this class
             spam[0] += 1                      # increment instance counter
-            spam[spam[0]] = e[:]              # add the new instance at the new index
+            index = spam[0]                   # get the index that the counter says is next
+            spam.insert(index, e[:])          # add the new instance at the new index
 
         # if this is the first time we've seen the class, create a new list for it
         else:
@@ -89,26 +95,26 @@ def fillBuckets(entries, K):
             classToInstances[cId] = spam  # add the new list to the "master" dictionary
 
     # *** Now create a random permutation of the instances in a class, & put them in buckets ***
-    buckets = [] * K  # create a list of empty lists that we will "deal" our "deck" of instances to
+    buckets = [[]] * K  # create a list of empty lists that we will "deal" our "deck" of instances to
     index = 0         # this will be the index of the bucket we are "dealing" to
 
     for cId in classToInstances.keys():
 
         # *** for each class use cId to get it's instances ***
         # list is of the form [counter, instance1, instance2, ...]
-        # where instanceN is a list where instanceN[0] is the classId & instanceN[1:] are the values
+        # where instanceN is a list and where instanceN[0] is the classId & instanceN[1:] are the values
         instances = classToInstances[cId]
 
         # *** create a permutation of a class's instances *** #
         # permutation is of the form [instance?, instance?, ...]
-        # where instance? is a list where instance?[0] is the classId & instance?[1:] are the values
+        # where instance? is a list and where instance?[0] is the classId & instance?[1:] are the values
         permutation = np.random.permutation(instances[1:])  # but first remove the counter
 
         # *** assign instances to buckets *** #
         # loop over every instance in the class cId, in what is now a random order
         # p should be an instance?, which is a row from the input data
         for p in permutation:
-            buckets[index].append(p)  # add the random instance to the bucket at index p
+            buckets[index].append(p)  # add the random instance to the bucket at index
             index = (index+1) % K     # increment index in a round robin style
 
     # *** The buckets are now full & together should contain every instance *** #
@@ -121,8 +127,8 @@ def main():
     path = filedialog.askopenfilename()  # prompt user for file path
 
     # *** Parse the file into a numpy 2d array *** #
-    entries = np.genfromtxt(path, delimiter=',')
-
+    entries = np.genfromtxt(path, delimiter=',', skip_header=1)
+    
     # *** create a set of K buckets filled with our instances *** #
     K = 10  # set the K for k fold cross validation
     buckets = fillBuckets(entries, K)  # using the parsed data, fill the k buckets
@@ -132,7 +138,6 @@ def main():
     randomIndex = list(range(K))  # get a randomly ordered range of numbers up to K
     random.shuffle(randomIndex)  # this will be used to give a random index in the loop below
 
-    # TODO what data structure/form is best for accuracy
     accuracy = []  # this will store the details about the accuracy of our hypotheses
 
     # *** Divide them into training & test data K times ***
@@ -164,7 +169,7 @@ def main():
         # transformedTrain = CDFC_Hypothesis.transform(train)
 
         # format data for SciKit Learn
-        # TODO change the below to use transformedData instead of train
+        # + change the below to use transformedData instead of train
         # create the label array Y (the target of our training)
         flat = np.ravel(train[:, :1])  # flatten the label list
         labels = np.array(flat)        # convert the label list to a numpy array
@@ -174,8 +179,8 @@ def main():
         # now that the data is formatted, run the learning algorithm
         # ? should I eventually be running all 3 at once?
         # ? what's a good value for n_neighbors?
-        model = KNeighborsClassifier(n_neighbors=3)     # Kth Nearest Neighbor Classifier
-        model = DecisionTreeClassifier(random_state=0)  # Decision Tree Classifier
+        # ! model = KNeighborsClassifier(n_neighbors=3)     # Kth Nearest Neighbor Classifier
+        # ! model = DecisionTreeClassifier(random_state=0)  # Decision Tree Classifier
         model = GaussianNB()                            # Create a Gaussian Classifier (Naive Baye's)
         model.fit(ftrs, labels)                         # Train the model
 

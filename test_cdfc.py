@@ -35,6 +35,7 @@ class TestHypothesis(TestCase):
 
 # ********************** Valid Operations Within Tree ********************** #
 
+
 # Add test
 class TestAdd(TestCase):
     def test_add(self):
