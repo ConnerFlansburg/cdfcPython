@@ -180,7 +180,7 @@ class ConstructedFeature:
 
         def __walk(node):  # given a node, walk the tree
 
-            if node.left and node.right is None:  # if there are no children, then we have reached a terminal.
+            if node.left is None and node.right is None:  # if there are no children, then we have reached a terminal.
                 values.append(node.data)          # Get it's index/ID & return because there are no more
                 return                            # children down this branch
 
@@ -606,16 +606,17 @@ def createInitialPopulation():
 def evolve(population, elite):
     # NOTE pop should be a list of hypotheses
 
-    def __tournament(candidates):
+    def __tournament(pop):
         # used by evolve to selection the parents
         
         # **************** Tournament Selection **************** #
+        candidates = pop.candidateHypotheses
         first = None
         score = 0
         for i in range(0, TOURNEY):  # compare TOURNEY number of random hypothesis
-
+            
             candidate = candidates.pop(random.randint(0, len(candidates)))  # get a random hypothesis
-            fitness = candidate.getFitness()                                # get that hypothesis's fitness score
+            fitness = candidate().getFitness()                              # get that hypothesis's fitness score
 
             if first is None:      # if first has not been set,
                 first = candidate  # then  set it

@@ -1,8 +1,10 @@
 import random
 import numpy as np
+import collections as collect
 import tkinter as tk
 from tkinter import filedialog
 from cdfc import cdfc
+from pprint import pprint
 from sklearn.preprocessing import StandardScaler
 from sklearn.naive_bayes import GaussianNB
 from sklearn.metrics import accuracy_score
@@ -162,7 +164,7 @@ def main():
         train, scalar = normalize(train)  # now normalize the training, and keep the scalar used
 
         # *** Train the CDFC Model *** #
-        CDFC_Hypothesis = cdfc(train)  # now that we have our train & test data create our hypothesis
+        # CDFC_Hypothesis = cdfc(train)  # now that we have our train & test data create our hypothesis
 
         # *** Train the Learning Algorithm *** #
         # transform data using the CDFC model
@@ -188,7 +190,7 @@ def main():
         testing = normalize(testing, scalar)
 
         # *** Reduce the Testing Data Using the CDFC Model *** #
-        testing = CDFC_Hypothesis.transform(testing)  # use the cdfc model to reduce the data's size
+        # testing = CDFC_Hypothesis.transform(testing)  # use the cdfc model to reduce the data's size
 
         # format data for SciKit Learn
         # create the label array Y (the target of our training)
@@ -201,7 +203,18 @@ def main():
         labelPrediction = model.predict(ftrs)  # use model to predict labels
         # compute the accuracy score by comparing the actual labels with those predicted
         accuracy.append(accuracy_score(trueLabels, labelPrediction))
-
+    
+    # *** Report Accuracy *** #
+    results = collect.namedtuple('results', ['standard_deviation', 'mean', 'median', 'max', 'min'])
+    r = results(np.std(accuracy), np.mean(accuracy), np.median(accuracy), max(accuracy), min(accuracy))
+    
+    print(f'The standard deviation: {r.standard_deviation}',
+          f'The mean: {r.mean}',
+          f'The median: {r.median}',
+          f'The max: {r.max}',
+          f'The min: {r.min}', sep='\n')
+    
+    pprint(accuracy)
 
 if __name__ == "__main__":
 
