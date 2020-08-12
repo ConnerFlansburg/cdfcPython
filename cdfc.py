@@ -31,7 +31,6 @@ M = 0                 # M is the number of constructed features
 # ! set the value of R for every new dataset, it is NOT set automatically ! #
 R = 2                 # R is the ratio of number of constructed features to the number of classes (features/classes)
 # ! changes here must also be made in the runLeft & runRight functions in the tree object ! #
-# TODO add 'if' functionality
 OPS = ['add', 'subtract', 'times', 'max', ]  # OPS is the list of valid operations on the tree
 # ************************ End of Constants/Globals ************************ #
 
@@ -62,7 +61,8 @@ class Tree:
     right = None
     data = None  # must either be a function or a terminal (if a terminal it should be it's index)
 
-    def __init__(self, data, left=None, right=None):
+    def __init__(self, data: typ.Union[str, int], left: typ.Union[None, "Tree"] = None,
+                 right: typ.Union[None, "Tree"] = None) -> None:
         self.left = left
         self.right = right
         self.data = data
@@ -142,17 +142,18 @@ class ConstructedFeature:
     size = 0                  # the individual size
     transformedValues = None  # the values data after they have been transformed by the tree
 
-    def __init__(self, className, tree, size=0):
+    def __init__(self, className: int, tree: Tree, size: int = 0) -> None:
         self.className = className
         self.tree = tree
         self.size = size
         self.relevantFeatures = terminals(className)  # call terminals to create the terminal set
 
-    def getUsedFeatures(self):
-        
-        values = []  # will hold the indexes found at each terminal node
+    def getUsedFeatures(self) -> typ.List[int]:
     
-        def __walk(node):
+        # will hold the indexes found at each terminal node
+        values = []  # type: typ.List[int]
+    
+        def __walk(node: Tree) -> None:
             # if this tree's node is a valid operation, keep walking done the tree
             if node.data in OPS:
                 __walk(node.left)  # walk down the left branch
@@ -167,7 +168,7 @@ class ConstructedFeature:
         __walk(self.tree)  # walk the tree starting with the CF's root node
         return values      # values should now hold the indexes of the tree's terminals
 
-    def transform(self, instance):
+    def transform(self, instance: row) -> np.float64:
         # NOTE instance should be a row object
 
         relevantValues = {}  # this will hold the values of relevant features
@@ -194,7 +195,7 @@ class Hypothesis:
     averageInfoGain = None  # the average info gain of the hypothesis
     maxInfoGain = None      # the max info gain in the hypothesis
 
-    def getFitness(self):
+    def getFitness(self) -> float:
 
         def __Czekanowski(Vi, Vj):
             minSum = 0
@@ -239,7 +240,7 @@ class Hypothesis:
             
             return 1 / (1 + math.pow(math.e, -5*(t1 - t2)))
 
-        def __entropy(partition):
+        def __entropy(partition: typ.List[row]) -> float:
 
             p = {}  # p[classId] = number of instances in the class in the partition sv
             for i in partition:          # for instance i in a partition sv
@@ -257,7 +258,7 @@ class Hypothesis:
 
             return calc
 
-        def __conditionalEntropy(feature):
+        def __conditionalEntropy(feature: ConstructedFeature) -> float:
 
             # this is a feature struct that will be used to store feature values
             # with their indexes/IDs in CFs
@@ -371,14 +372,14 @@ class Population:
     candidateHypotheses = []  # a list of all the candidate hypotheses
     generation = None         # this is the number of this generation
 
-    def __init__(self, candidates, generationNumber):
+    def __init__(self, candidates: typ.List[Hypothesis], generationNumber: int) -> None:
         self.candidateHypotheses = candidates
         self.generation = generationNumber
 
 # ***************** End of Namespaces/Structs & Objects ******************* #
 
 
-def terminals(classId):
+def terminals(classId: int) -> typ.List[int]:
     """terminals creates the list of relevant terminals for a given class.
 
     Arguments:
@@ -423,7 +424,7 @@ def terminals(classId):
     return terminalSet
 
 
-def valuesInClass(classId, attribute):
+def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[np.float64], typ.List[np.float64]]:
     """valuesInClass determines what values of an attribute occur in a class
         and what values do not
 
@@ -453,12 +454,12 @@ def valuesInClass(classId, attribute):
     return inClass, notInClass  # return inClass & notInClass
 
 
-def createInitialPopulation():
+def createInitialPopulation() -> Population:
 
-    def __grow(classId):
+    def __grow(classId: int) -> typ.Tuple[Tree, int]:
         # This function uses the grow method to generate an initial population
         
-        def assign(level, counter):
+        def assign(level: int, counter: int) -> typ.Tuple[Tree, int]:
 
             counter += 1  # used to compute individual size
             
@@ -497,10 +498,10 @@ def createInitialPopulation():
 
         return tree, size
 
-    def __full(classId):
+    def __full(classId: int) -> typ.Tuple[Tree, int]:
         # This function uses the full method to generate an initial population
         
-        def assign(level, counter):
+        def assign(level: int, counter: int) -> typ.Tuple[Tree, int]:
             
             counter += 1
             
@@ -533,7 +534,7 @@ def createInitialPopulation():
 
         return tree, size
 
-    def createHypothesis():
+    def createHypothesis() -> typ.Type[Hypothesis]:
         # given a list of trees, create a hypothesis
         # NOTE this will make 1 tree for each feature, and 1 CF for each class
 
@@ -573,10 +574,10 @@ def createInitialPopulation():
     return Population(hypothesis, 0)
 
 
-def evolve(population, elite):
+def evolve(population: Population, elite: typ.Type[Hypothesis]) -> typ.Tuple[Population, typ.Type[Hypothesis]]:
     # NOTE pop should be a list of hypotheses
 
-    def __tournament(pop):
+    def __tournament(pop: Population) -> typ.List[typ.Type[Hypothesis]]:
         # used by evolve to selection the parents
         
         # **************** Tournament Selection **************** #
@@ -786,13 +787,13 @@ def evolve(population, elite):
 
         # handle elitism
         newHypothFitness = newPopulation.candidateHypotheses[-1].getFitness()
-        if newHypothFitness > elite.getFitness:
+        if newHypothFitness > elite.getFitness():
             elite = newPopulation.candidateHypotheses[-1]
 
     return newPopulation, elite
 
 
-def cdfc(train):
+def cdfc(train: np.ndarray) -> Hypothesis:
     # Class Dependent Feature Construction
 
     # makes sure we're using global variables
