@@ -1,10 +1,11 @@
 import math
 import random
+import numpy as np
+import typing as typ
 import collections as collect
 from scipy import stats
 
 # ! Next Steps
-# TODO check the logic of __runLeft & __runRight in tree
 # TODO check feature1, feature2 issue in crossover
 
 # TODO write code for the if function in OPS
@@ -29,34 +30,10 @@ LABEL_NUMBER = 0      # LABEL_NUMBER is the number of classes/labels in the data
 M = 0                 # M is the number of constructed features
 # ! set the value of R for every new dataset, it is NOT set automatically ! #
 R = 2                 # R is the ratio of number of constructed features to the number of classes (features/classes)
+# ! changes here must also be made in the runLeft & runRight functions in the tree object ! #
+# TODO add 'if' functionality
+OPS = ['add', 'subtract', 'times', 'max', ]  # OPS is the list of valid operations on the tree
 # ************************ End of Constants/Globals ************************ #
-
-# ********************** Valid Operations Within Tree ********************** #
-# all functions for the tree must be of the form x(y,z)
-
-# OPS is the list of valid operations on the tree
-OPS = ['add', 'subtract', 'times', 'max', 'isTrue']
-
-
-def add(a, b):
-    return a + b
-
-
-def subtract(a, b):
-    return a - b
-
-
-def times(a, b):
-    return a * b
-
-
-# def if(a, b):
-    # pass  # ? how to deal with if function?
-
-# min is built in
-
-# max is built in
-# *************************** End of Operations *************************** #
 
 # ********************** Namespaces/Structs & Objects *********************** #
 row = collect.namedtuple('row', ['className', 'attributes'])  # a single line in the csv, representing a record/instance
@@ -91,32 +68,29 @@ class Tree:
         self.data = data
 
     # running a tree should return a single value
-    # rFt -- relevant features
-    # rVls -- the values of the relevant features
-    def runTree(self, rFt, rVls):
+    # featureValues -- the values of the relevant features keyed by their index in the original data
+    def runTree(self, featureValues: typ.Dict[int, np.float64]) -> typ.Union[None, np.float64]:
+        return self.__runNode(featureValues)
 
-        if self.data in rFt:  # if the root is a terminal,
-            return self.data  # then return value
-
-        # if the root is not a terminal, then run the tree recursively
+    def __runNode(self, featureValues):
+        # if this tree's node is a valid operation, then execute it
+        if self.data in OPS:
+            # find out which operation it is & return it's value
+            if self.data == 'add':
+                return self.left.runTree(featureValues) + self.right.runTree(featureValues)
+    
+            elif self.data == 'subtract':
+                return self.left.runTree(featureValues) - self.right.runTree(featureValues)
+    
+            elif self.data == 'times':
+                return self.left.runTree(featureValues) * self.left.runTree(featureValues)
+    
+            elif self.data == 'min':
+                return min(self.left.runTree(featureValues), self.right.runTree(featureValues))
+            
+        # if the node is not an operation, then it is a terminal index so return the value
         else:
-            return self.data(self.__runLeft(rFt, rVls), self.__runRight(rFt, rVls))
-
-    def __runLeft(self, relevantFeatures, featureValues):
-        # TODO check this logic. I don't think this is running recursively
-        if self.left.data in relevantFeatures:    # if left node is a terminal,
-            return featureValues[self.left.data]  # then return it's value
-
-        else:                        # if left node is a function,
-            return self.left.data()  # then return run the function
-
-    def __runRight(self, relevantFeatures, featureValues):
-
-        if self.right.data in relevantFeatures:    # if left node is a terminal,
-            return featureValues[self.right.data]  # then return it's value
-
-        else:                         # if left node is a function,
-            return self.right.data()  # then return run the function
+            return featureValues[self.data]
 
     def getSize(self, counter):
 
@@ -175,24 +149,20 @@ class ConstructedFeature:
         self.relevantFeatures = terminals(className)  # call terminals to create the terminal set
 
     def getUsedFeatures(self):
-
+        
         values = []  # will hold the indexes found at each terminal node
-
-        def __walk(node):  # given a node, walk the tree
-
-            if node.left is None and node.right is None:  # if there are no children, then we have reached a terminal.
-                values.append(node.data)          # Get it's index/ID & return because there are no more
-                return                            # children down this branch
-
-            elif node.left is None:  # if there is no left child, but there is a right child,
-                __walk(node.right)   # then walk down the right subtree
-
-            elif node.right is None:  # if there is no right child, but there is a right child,
-                __walk(node.left)     # then walk down the left subtree
-
-            else:                   # if there are both left & right children,
-                __walk(node.right)  # then walk down both subtrees
-                __walk(node.left)
+    
+        def __walk(node):
+            # if this tree's node is a valid operation, keep walking done the tree
+            if node.data in OPS:
+                __walk(node.left)  # walk down the left branch
+                __walk(node.right)  # walk down the right branch
+                return  # now that I have walked down both branches return
+        
+            # if the node is not an operation, then it is a terminal index so add it to value
+            else:
+                values.append(node.data)
+                return
 
         __walk(self.tree)  # walk the tree starting with the CF's root node
         return values      # values should now hold the indexes of the tree's terminals
@@ -209,7 +179,7 @@ class ConstructedFeature:
 
         # transform the data for a single feature
         # this should return a single value (a value transformed by the tree)
-        return self.tree.runTree(self.relevantFeatures, relevantValues)
+        return self.tree.runTree(relevantValues)
 
     def setSize(self):
         return self.tree.getSize(0)  # call getSize on the root of the tree
@@ -273,7 +243,7 @@ class Hypothesis:
 
             p = {}  # p[classId] = number of instances in the class in the partition sv
             for i in partition:          # for instance i in a partition sv
-                if p[i.className]:       # if we have already found the class once,
+                if i.className in p:       # if we have already found the class once,
                     p[i.className] += 1  # increment the counter
                     
                 else:                   # if we have not yet encountered the class
@@ -307,7 +277,7 @@ class Hypothesis:
                     # where the value is from the instance
                     v.append(ft(u, i.attributes[u]))
 
-                if partition[cfv]:            # if the partition exists
+                if cfv in partition:            # if the partition exists
                     partition[cfv].append(i)  # add the instance to it
                 else:                     # if the partition doesn't exist
                     partition[cfv] = [i]  # create it
@@ -328,7 +298,7 @@ class Hypothesis:
             gainSum += f.infoGain                    # update the info sum
 
             # updates the max info gain of the hypothesis if needed
-            if self.maxInfoGain < f.infoGain:
+            if self.maxInfoGain < f.infoGain:  # BUG maxInfoGain is None type
                 self.maxInfoGain = f.infoGain
 
         # calculate the average info gain using formula 3
@@ -506,7 +476,7 @@ def createInitialPopulation():
                 return node, counter
 
             else:  # stop recursion; max depth has been reached
-                spam = terminal[random.randint(0, len(terminal))]  # add a terminal to the leaf
+                spam = terminal[random.randint(0, (len(terminal)-1))]  # add a terminal to the leaf
                 return Tree(spam), counter                         # return
 
         # pick a random function & put it in the root

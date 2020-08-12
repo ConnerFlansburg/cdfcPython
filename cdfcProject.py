@@ -1,5 +1,6 @@
 import random
 import copy
+import typing as typ
 import numpy as np
 import collections as collect
 import tkinter as tk
@@ -14,11 +15,9 @@ from sklearn.metrics import accuracy_score
 
 # * Next Steps
 # TODO change the learning algorithm so that it's trained using data the CDFC model has transformed
-# TODO report accuracy
-# TODO what data structure/form is best for accuracy
 
 
-def discretization(data):
+def discretization(data: np.ndarray) -> np.ndarray:
     
     for index, item in np.ndenumerate(data):
 
@@ -34,7 +33,7 @@ def discretization(data):
     return data
 
 
-def normalize(entries, scalar=None):
+def normalize(entries: np.ndarray, scalar: typ.Union[None, StandardScaler, ]) -> typ.Tuple[np.ndarray, StandardScaler]:
 
     # remove the class IDs so the don't get normalized
     noIds = np.array(entries[:, 1:])
@@ -69,7 +68,7 @@ def normalize(entries, scalar=None):
     return entries, stdScalar
 
 
-def fillBuckets(entries, K):
+def fillBuckets(entries: np.ndarray, K: int) -> typ.List[typ.List[np.ndarray]]:
 
     # *** connect a class to every instance that occurs in it ***
     # this will map a classId to a 2nd dictionary that will hold the number of instances in that class &
@@ -105,7 +104,7 @@ def fillBuckets(entries, K):
 
         # *** for each class use cId to get it's instances ***
         # list is of the form [counter, instance1, instance2, ...]
-        # where instanceN is a list and where instanceN[0] is the classId & instanceN[1:] are the values
+        # where instanceN is a numpy array and where instanceN[0] is the classId & instanceN[1:] are the values
         instances = classToInstances[cId]
 
         # *** create a permutation of a class's instances *** #
@@ -124,7 +123,7 @@ def fillBuckets(entries, K):
     return buckets
 
 
-def main():
+def main() -> None:
 
     tk.Tk().withdraw()  # prevent root window caused by Tkinter
     path = filedialog.askopenfilename()  # prompt user for file path
@@ -177,11 +176,12 @@ def main():
         train, scalar = normalize(train)  # now normalize the training, and keep the scalar used
     
         # *** Train the CDFC Model *** #
-        # + CDFC_Hypothesis = cdfc(train)  # now that we have our train & test data create our hypothesis
+        CDFC_Hypothesis = cdfc(train)  # now that we have our train & test data create our hypothesis
     
         # *** Train the Learning Algorithm *** #
         # transform data using the CDFC model
-        # transformedTrain = CDFC_Hypothesis.transform(train)
+        transformedTrain = CDFC_Hypothesis.transform(train)
+        train = transformedTrain
     
         # format data for SciKit Learn
         # + change the below to use transformedData instead of train
@@ -228,6 +228,7 @@ def main():
           f'The min: {r.min}', sep='\n')
     
     pprint(accuracy)
+
 
 if __name__ == "__main__":
 
