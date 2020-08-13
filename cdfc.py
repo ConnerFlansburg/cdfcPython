@@ -377,7 +377,7 @@ class Hypothesis:
 class Population:
     # this will be the population of hypotheses. This is largely just a namespace
     # BUG for some reason the canidateHypotheses are not getting intilized
-    def __init__(self, candidates: typ.List[typ.Type[Hypothesis]], generationNumber: int) -> None:
+    def __init__(self, candidates: typ.List[Hypothesis], generationNumber: int) -> None:
         self.candidateHypotheses = candidates  # a list of all the candidate hypotheses
         self.generation = generationNumber     # this is the number of this generation
 # ***************** End of Namespaces/Structs & Objects ******************* #
@@ -538,7 +538,7 @@ def createInitialPopulation() -> Population:
 
         return tree, size
 
-    def createHypothesis() -> typ.Type[Hypothesis]:
+    def createHypothesis() -> Hypothesis:
         # given a list of trees, create a hypothesis
         # NOTE this will make 1 tree for each feature, and 1 CF for each class
 
@@ -547,7 +547,7 @@ def createInitialPopulation() -> Population:
         random.shuffle(classIds)
 
         ftrs: typ.List[ConstructedFeature] = []
-        HypSize = 0
+        size = 0
         
         for nll in range(LABEL_NUMBER):
             # randomly decide if grow or full should be used.
@@ -563,14 +563,11 @@ def createInitialPopulation() -> Population:
                 tree, size = __full(name)     # create tree
                 ftrs.append(ConstructedFeature(name, tree, size))
 
-            HypSize += size
+            size += size
+        # create a hypothesis & return it
+        return Hypothesis(ftrs, size)
 
-        h = Hypothesis
-        h.features = ftrs
-        h.size = HypSize
-        return h
-
-    hypothesis: typ.List[typ.Type[Hypothesis]] = []
+    hypothesis: typ.List[Hypothesis] = []
 
     for nl in range(POPULATION_SIZE):
         hypothesis.append(createHypothesis())
@@ -579,7 +576,6 @@ def createInitialPopulation() -> Population:
 
 
 def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, Hypothesis]:
-    # NOTE pop should be a list of hypotheses
 
     def __tournament(pop: Population) -> Hypothesis:
         # used by evolve to selection the parents
@@ -591,7 +587,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         for i in range(0, TOURNEY):  # compare TOURNEY number of random hypothesis
             
             candidate = candidates.pop(random.randint(0, (len(candidates)-1)))  # get a random hypothesis
-            fitness = candidate.getFitness()                              # get that hypothesis's fitness score
+            fitness = candidate.getFitness()                                    # get that hypothesis's fitness score
 
             if first is None:      # if first has not been set,
                 first = candidate  # then  set it
@@ -798,7 +794,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
     return newPopulation, elite
 
 
-def cdfc(train: np.ndarray) -> typ.Type[Hypothesis]:
+def cdfc(train: np.ndarray) -> Hypothesis:
     # Class Dependent Feature Construction
 
     # makes sure we're using global variables
