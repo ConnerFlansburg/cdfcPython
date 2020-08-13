@@ -577,137 +577,136 @@ def createInitialPopulation() -> Population:
 
 def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, Hypothesis]:
 
-    def __tournament(pop: Population) -> Hypothesis:
+    def __tournament(p: Population) -> Hypothesis:
         # used by evolve to selection the parents
         
         # **************** Tournament Selection **************** #
-        candidates = copy.deepcopy(pop.candidateHypotheses)
-        first = pop.candidateHypotheses[0]
-        score = 0
+        candidates: typ.List[Hypothesis] = copy.deepcopy(p.candidateHypotheses)  # copy to avoid overwriting
+        first = None  # the tournament winner
+        score = 0     # the winning score
         for i in range(0, TOURNEY):  # compare TOURNEY number of random hypothesis
-            
-            candidate = candidates.pop(random.randint(0, (len(candidates)-1)))  # get a random hypothesis
-            fitness = candidate.getFitness()                                    # get that hypothesis's fitness score
+            randomIndex = random.randint(0, (len(candidates)-1))  # get a random index value
+            candidate: Hypothesis = candidates.pop(randomIndex)   # get the hypothesis at the random index
+            # we pop here to avoid getting duplicates. The index uses candidates current size so it will be in range
+            fitness = candidate.getFitness()                      # get that hypothesis's fitness score
 
             if first is None:      # if first has not been set,
                 first = candidate  # then  set it
 
             elif score < fitness:  # if first is set, but knight is more fit,
                 first = candidate  # then update it
-                score = fitness
+                score = fitness    # then update the score to higher fitness
+        return first
         # ************ End of Tournament Selection ************* #
 
-        return first
-
+    # noinspection DuplicatedCode
     def __generateTree(node, terminalValues, values, depth, max_depth, counter=0):
         
         # **************** Tree Generation **************** #
         counter += 1  # increment size counter
 
-        # if this node contains a terminal return
-        if node.data in terminalValues:
-            return counter
+        if node.data in terminalValues:  # check to see of this node is a terminal
+            return counter               # if so then we should pass counter up the recursive stack
 
         choice = random.choice(["left", "right", "both"])  # make a random choice about which way to grow
 
         if choice == "left":  # grow left
 
             if depth == max_depth:  # check to see if we are at the max depth
-                index = terminalValues[random.randint(0, len(terminalValues))]  # get a random terminal
-                node.left = Tree(index)                                         # put that terminal in the left branch
-                return counter
+                index = terminalValues[random.randint(0, (len(terminalValues)-1))]  # get a random terminal
+                node.left = Tree(index)                                             # put it in the left branch
+                return counter                                                      # start back up recursive stack
 
-            index = values[random.randint(0, len(values))]  # pick a random operation or terminal
-            node.left = Tree(index)                         # put the operation or terminal in the left node
-
+            index = values[random.randint(0, (len(values)-1))]  # pick a random operation or terminal
+            node.left = Tree(index)                             # put the operation or terminal in the left node
+ 
             __generateTree(node.left, terminalValues, values, depth+1, max_depth, counter)  # generate tree recursively
 
         elif choice == "right":  # grow right
 
             if depth == max_depth:  # check to see if we are at the max depth
-                index = terminalValues[random.randint(0, len(terminalValues))]  # get a random terminal
-                node.left = Tree(index)                                         # put the terminal in the left branch
-                return counter
+                index = terminalValues[random.randint(0, (len(terminalValues)-1))]  # get a random terminal
+                node.left = Tree(index)                                             # put it in the left branch
+                return counter                                                      # start back up recursive stack
 
-            index = values[random.randint(0, len(values))]  # pick a random operation or terminal
-            node.right = Tree(index)                        # put the operation or terminal in the left node
+            index = values[random.randint(0, (len(values)-1))]  # pick a random operation or terminal
+            node.right = Tree(index)                            # put the operation or terminal in the left node
 
-            __generateTree(node.right, terminalValues, values, depth + 1, max_depth)  # call generateTree recursively
+            __generateTree(node.right, terminalValues, values, depth+1, max_depth, counter)  # generate tree recursively
 
         elif choice == "both":
 
             if depth == max_depth:  # check to see if we are at the max depth
-                index = terminalValues[random.randint(0, len(terminalValues))]  # get a random terminal
-                node.left = Tree(index)                                         # put the terminal in the left branch
-                return
+                index = terminalValues[random.randint(0, (len(terminalValues)-1))]  # get a random terminal
+                node.left = Tree(index)                                             # put it in the left branch
+                return counter
 
             # left branch
-            index = values[random.randint(0, len(values))]  # pick a random operation or terminal
-            node.left = Tree(index)                         # put the operation or terminal in the left node
+            index = values[random.randint(0, (len(values)-1))]  # pick a random operation or terminal
+            node.left = Tree(index)                             # put the operation or terminal in the left node
 
             # right branch
-            index = values[random.randint(0, len(values))]  # pick a random operation or terminal
-            node.right = Tree(index)                        # put the operation or terminal in the left node
+            index = values[random.randint(0, (len(values)-1))]  # pick a random operation or terminal
+            node.right = Tree(index)                            # put the operation or terminal in the left node
 
-            cLeft = __generateTree(node.left, terminalValues, values, depth + 1, max_depth)  # generate tree recursively
-            cRight = __generateTree(node.right, terminalValues, values, depth + 1, max_depth)  # call grow recursively
+            cLeft = __generateTree(node.left, terminalValues, values, depth+1, max_depth, counter)  # generate subtree
+            cRight = __generateTree(node.right, terminalValues, values, depth+1, max_depth, counter)  # generate subtree
 
             counter = cLeft + cRight  # calculate the size (the number of nodes) by adding the size of the subtrees
             return counter
         # ************ End of Tree Generation ************ #
 
     # ******************* Evolution ******************* #
-    # ? Do I need to create a new population or is this all done in place?
     newPopulation = Population([], population.generation+1)  # create a new population with no hypotheses
     
-    # while the size of the new population is less than the max pop size
-    while len(newPopulation.candidateHypotheses) < POPULATION_SIZE:
+    # while the new population has fewer hypotheses than the max pop size
+    while (len(newPopulation.candidateHypotheses)-1) < POPULATION_SIZE:
         
         probability = random.uniform(0, 1)  # get a random number between 0 & 1
         
         # **************** Mutate **************** #
         if probability < MUTATION_RATE:  # if probability is less than mutation rate, mutate
             
-            parent = __tournament(population)  # get parent hypothesis using tournament
+            # parent is from a copy of population made by tournament, NOT original pop
+            parent: Hypothesis = __tournament(population)  # get parent hypothesis using tournament
             
-            # get a random feature from the hypothesis
-            featureIndex = random.randint(0, M)
-            feature = parent.features[featureIndex]
-            terminal = feature.relevantFeatures
-            # ? because lists are mutable all the changes happen in place?
-            # ? So I don't need to create a new hypoth/pop as there is only ever the one?
-            # TODO check
-            feature = feature.tree  # get the tree for that feature
+            # get a random feature from the hypothesis, where M is the number of constructed features
+            featureIndex = random.randint(0, (M-1))
+            # get the indexes of the terminal values (for the feature)
+            terminal: typ.List[int] = parent.features[featureIndex].relevantFeatures
+            # get the tree (for the feature)
+            feature: Tree = parent.features[featureIndex].tree
 
             # randomly select a subtree in feature
             while True:  # walk the tree & find a random subtree
                 
                 decide = random.choice(["left", "right", "choose"])  # make a random decision
+
+                if decide == "choose" or feature.data in terminal:
+                    break
                 
-                if decide == "left":     # go left
+                elif decide == "left":     # go left
                     feature = feature.left
 
                 elif decide == "right":  # go right
                     feature = feature.right
-
-                elif decide == "choose" or feature.data in terminal:
-                    break
-
+                    
             decideGrow = random.choice([True, False])  # randomly decide which method to use to construct the new tree
             
             # randomly generate subtree
             if decideGrow:  # use grow
                 
                 # pick a random function & put it in the root
-                ls = OPS[:]
+                ls: typ.List[typ.Union[str, int]] = OPS[:]
                 random.shuffle(ls)
                 rootData = ls[random.randint(0, len(ls))]
                 
                 t = Tree(rootData)  # make a new tree
                 
                 # build the rest of the subtree
-                ls.append(terminal)                           # append the terminals
+                ls.extend(terminal)                           # append the terminals
                 random.shuffle(ls)                            # shuffle the operations & terminals
+                # TODO terminal should instead be the actual values of the terminals, not their index
                 size = __generateTree(t, terminal, ls, 0, 8)  # set the size of the tree
 
             else:  # use full
@@ -718,79 +717,91 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
                 rootData = ls[random.randint(0, len(ls))]
                 
                 t = Tree(rootData)                             # make a new tree
+                # TODO terminal should instead be the actual values of the terminals, not their index
                 size = __generateTree(t, terminal, OPS, 0, 8)  # build the rest of the subtree
 
             cl = parent.features[featureIndex].className                     # get the className of the feature
             parent.features[featureIndex] = ConstructedFeature(cl, t, size)  # replace the parent with the mutated child
             newPopulation.candidateHypotheses.append(parent)                # add the parent to the new pop
+            # appending is needed because parent is a copy made by tournament NOT a reference from the original pop
         # ************* End of Mutation ************* #
 
         # **************** Crossover **************** #
         else:
-
+            
+            # parent1 & parent2 are from a copy of population made by tournament, NOT original pop
+            # because of this they should not be viewed as references
             parent1 = __tournament(population)
             parent2 = __tournament(population)
             
-            while parent1 is parent2:  # check that each parent is unique
+            #  check that each parent is unique
+            # if they are the same they should reference the same object & so 'is' is used instead of ==
+            while parent1 is parent2:
                 parent2 = __tournament(population)
 
-            featureIndex = random.randint(0, M)  # get a random feature from each parent
-            
+            # get a random feature from each parent, where M is the number of constructed features
+            featureIndex = random.randint(0, (M-1))
+
             # feature 1
-            feature1 = parent1.features[featureIndex]
-            terminals1 = feature1.relevantFeatures
-            feature1 = feature1.tree
+            # get the indexes of the terminal values (for the feature)
+            terminals1: typ.List[int] = parent1.features[featureIndex].relevantFeatures
+            # get the tree (for the feature)
+            feature1: Tree = parent1.features[featureIndex].tree
             
             # feature 2
-            feature2 = parent2.features[featureIndex]
-            terminals2 = feature2.relevantFeatures
-            feature2 = feature2.tree
+            # get the indexes of the terminal values (for the feature)
+            terminals2: typ.List[int] = parent2.features[featureIndex].relevantFeatures
+            # get the tree (for the feature)
+            feature2: Tree = parent2.features[featureIndex].tree
 
             while True:  # walk the tree & find a random subtree for feature 1
                 
                 # make a random decision
                 decide = random.choice(["left", "right", "choose"])
-
-                if decide == "left":     # go left
+                
+                if decide == "choose" or feature1.data in terminals1:
+                    break
+    
+                elif decide == "left":   # go left
                     feature1 = feature1.left
                     
                 elif decide == "right":  # go right
                     feature1 = feature1.right
                     
-                elif decide == "choose" or feature1.data in terminals1:
-                    break
-
             while True:  # walk the tree & find a random subtree for feature 2
                 
                 # make a random decision
                 decide = random.choice(["left", "right", "choose"])
+                
+                if decide == "choose" or feature2.data in terminals2:
+                    break
 
-                if decide == "left":     # go left
+                elif decide == "left":   # go left
+                    parent2 = feature2
                     feature2 = feature2.left
 
                 elif decide == "right":  # go right
                     feature2 = feature2.right
 
-                elif decide == "choose" or feature2.data in terminals2:
-                    break
-
-            feature1, feature2 = feature2, feature1  # ? is this done in place? # swap the two subtrees
-            # TODO they aren't used after the reassignment. Check this is correct
+            # swap the two subtrees, this should be done in place as they are both references
+            # these are not used as the don't need to be. We merely want to swap their pointers
+            feature1, feature2 = feature2, feature1
 
             # get the size of the new constructed features by walking the trees
             parent1.setSize()
             parent2.setSize()
 
-            # parent 1 & 2 are both hypotheses and should have been changed in place, so add them to the new pop
+            # parent 1 & 2 are both hypotheses and should have been changed in place,
+            # but they refer to a copy made in tournament so add them to the new pop
             newPopulation.candidateHypotheses.append(parent1)
             newPopulation.candidateHypotheses.append(parent2)
-        # **************** End of Crossover **************** #
-
-        # handle elitism
-        newHypothFitness = newPopulation.candidateHypotheses[-1].getFitness()
-        if newHypothFitness > elite.getFitness():
-            elite = newPopulation.candidateHypotheses[-1]
-
+            # **************** End of Crossover **************** #
+    
+            # handle elitism
+            newHypothFitness = newPopulation.candidateHypotheses[-1].getFitness()
+            if newHypothFitness > elite.getFitness():
+                elite = newPopulation.candidateHypotheses[-1]
+                
     return newPopulation, elite
 
 
