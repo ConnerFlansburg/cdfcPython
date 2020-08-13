@@ -173,7 +173,7 @@ def main() -> None:
         testing = np.array(testingList)  # turn testing data into a numpy array
     
         # *** Normalize the Training Data *** #
-        train, scalar = normalize(train)  # now normalize the training, and keep the scalar used
+        train, scalar = normalize(train, None)  # now normalize the training, and keep the scalar used
     
         # *** Train the CDFC Model *** #
         CDFC_Hypothesis = cdfc(train)  # now that we have our train & test data create our hypothesis

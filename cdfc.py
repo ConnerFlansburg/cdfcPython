@@ -1,3 +1,4 @@
+import copy
 import math
 import random
 import numpy as np
@@ -14,29 +15,29 @@ from scipy import stats
 # TODO add testing functions
 
 # **************************** Constants/Globals **************************** #
-CROSSOVER_RATE = 0.8  # CROSSOVER_RATE is the chance that a candidate will reproduce
-GENERATIONS = 50      # GENERATIONS is the number of generations the GP should run for
-MUTATION_RATE = 0.2   # MUTATION_RATE is the chance that a candidate will be mutated
-ELITISM_RATE = 1      # ELITISM_RATE is the elitism rate
-TOURNEY = 7           # TOURNEY is the tournament size
-ALPHA = 0.8           # ALPHA is the fitness weight alpha
-BETA = 2              # BETA is a constant used to calculate the pop size
-FEATURE_NUMBER = 0    # FEATURE_NUMBER is the number of features in the data set
-POPULATION_SIZE = 0   # POPULATION_SIZE is the population size
-INSTANCES_NUMBER = 0  # INSTANCES_NUMBER is  the number of instances in the training data
-MAX_DEPTH = 8         # MAX_DEPTH is the max depth trees are allowed to be & is used in grow/full
-ENTROPY_OF_S = 0      # ENTROPY_OF_S is used for entropy calculation
-LABEL_NUMBER = 0      # LABEL_NUMBER is the number of classes/labels in the data
-M = 0                 # M is the number of constructed features
-# ! set the value of R for every new dataset, it is NOT set automatically ! #
-R = 2                 # R is the ratio of number of constructed features to the number of classes (features/classes)
+ALPHA: typ.Final = 0.8           # ALPHA is the fitness weight alpha
+BETA: typ.Final = 2              # BETA is a constant used to calculate the pop size
+CROSSOVER_RATE: typ.Final = 0.8  # CROSSOVER_RATE is the chance that a candidate will reproduce
+ELITISM_RATE: typ.Final = 1      # ELITISM_RATE is the elitism rate
+GENERATIONS: typ.Final = 50      # GENERATIONS is the number of generations the GP should run for
+MAX_DEPTH: typ.Final = 8         # MAX_DEPTH is the max depth trees are allowed to be & is used in grow/full
+MUTATION_RATE: typ.Final = 0.2   # MUTATION_RATE is the chance that a candidate will be mutated
 # ! changes here must also be made in the runLeft & runRight functions in the tree object ! #
-OPS = ['add', 'subtract', 'times', 'max', ]  # OPS is the list of valid operations on the tree
+OPS: typ.Final = ['add', 'subtract', 'times', 'max', ]  # OPS is the list of valid operations on the tree
+# ! set the value of R for every new dataset, it is NOT set automatically ! #
+R: typ.Final = 2                 # R is the ratio of number of CFs to the number of classes (features/classes)
+TOURNEY: typ.Final = 7           # TOURNEY is the tournament size
+ENTROPY_OF_S = 0                 # ENTROPY_OF_S is used for entropy calculation
+FEATURE_NUMBER = 0               # FEATURE_NUMBER is the number of features in the data set
+INSTANCES_NUMBER = 0             # INSTANCES_NUMBER is  the number of instances in the training data
+LABEL_NUMBER = 0                 # LABEL_NUMBER is the number of classes/labels in the data
+M = 0                            # M is the number of constructed features
+POPULATION_SIZE = 0              # POPULATION_SIZE is the population size
 # ************************ End of Constants/Globals ************************ #
 
 # ********************** Namespaces/Structs & Objects *********************** #
 row = collect.namedtuple('row', ['className', 'attributes'])  # a single line in the csv, representing a record/instance
-rows = []  # this will store all of the records read in (the training dat) as a list of rows
+rows: typ.List[row] = []  # this will store all of the records read in (the training dat) as a list of rows
 
 
 class Tree:
@@ -57,19 +58,16 @@ class Tree:
                  that terminal character. These functions should be store in
                  the 'data' variable & be stored in as string function names.
     """
-    left = None
-    right = None
-    data = None  # must either be a function or a terminal (if a terminal it should be it's index)
-
+    
     def __init__(self, data: typ.Union[str, int], left: typ.Union[None, "Tree"] = None,
                  right: typ.Union[None, "Tree"] = None) -> None:
-        self.left = left
-        self.right = right
-        self.data = data
+        self.left = left    # Will a another tree, or None if this is a terminal
+        self.right = right  # Will a another tree, or None if this is a terminal
+        self.data = data    # must either be a function or a terminal (if a terminal it should be it's index)
 
     # running a tree should return a single value
     # featureValues -- the values of the relevant features keyed by their index in the original data
-    def runTree(self, featureValues: typ.Dict[int, np.float64]) -> typ.Union[None, np.float64]:
+    def runTree(self, featureValues: typ.Dict[int, np.float64]) -> typ.Optional[np.float64]:
         return self.__runNode(featureValues)
 
     def __runNode(self, featureValues):
@@ -134,19 +132,17 @@ class ConstructedFeature:
                     feature's decision tree.
     """
 
-    tree = None               # the root node of the constructed feature
-    className = None          # the name of the class this tree is meant to distinguish
     infoGain = None           # the info gain for this feature
-    relevantFeatures = None   # holds the indexes of the relevant features
     usedFeatures = None       # the relevant features the cf actually uses
-    size = 0                  # the individual size
     transformedValues = None  # the values data after they have been transformed by the tree
 
     def __init__(self, className: int, tree: Tree, size: int = 0) -> None:
-        self.className = className
-        self.tree = tree
-        self.size = size
-        self.relevantFeatures = terminals(className)  # call terminals to create the terminal set
+        self.className = className  # the name of the class this tree is meant to distinguish
+        self.tree = tree            # the root node of the constructed feature
+        self.size = size            # the individual size
+        
+        # call terminals to create the terminal set
+        self.relevantFeatures = terminals(className)  # holds the indexes of the relevant features
 
     def getUsedFeatures(self) -> typ.List[int]:
     
@@ -169,9 +165,9 @@ class ConstructedFeature:
         return values      # values should now hold the indexes of the tree's terminals
 
     def transform(self, instance: row) -> np.float64:
-        # NOTE instance should be a row object
-
-        relevantValues = {}  # this will hold the values of relevant features
+    
+        # this will hold the values of relevant features
+        relevantValues: typ.Dict[int, typ.Optional[np.float64]] = {}
 
         # loop over the indexes of the relevant features, and take the values of the relevant features out
         # & store them in a dictionary keyed by their index in the original data
@@ -188,12 +184,15 @@ class ConstructedFeature:
 
 class Hypothesis:
     # a single hypothesis(a GP individual)
-    features = []           # a list of all the constructed features
-    size = 0                # the number of nodes in all the cfs
     fitness = None          # the fitness score
     distance = 0            # the distance function score
-    averageInfoGain = None  # the average info gain of the hypothesis
-    maxInfoGain = None      # the max info gain in the hypothesis
+    averageInfoGain = -1    # the average info gain of the hypothesis
+    maxInfoGain = -1        # the max info gain in the hypothesis
+    # + averageInfoGain & maxInfoGain must be low enough that they will always be overwritten + #
+    
+    def __init__(self, features, size) -> None:
+        self.features = features  # a list of all the constructed features
+        self.size = size          # the number of nodes in all the cfs
 
     def getFitness(self) -> float:
 
@@ -241,8 +240,8 @@ class Hypothesis:
             return 1 / (1 + math.pow(math.e, -5*(t1 - t2)))
 
         def __entropy(partition: typ.List[row]) -> float:
-
-            p = {}  # p[classId] = number of instances in the class in the partition sv
+            
+            p: typ.Dict[int, int] = {}   # p[classId] = number of instances in the class in the partition sv
             for i in partition:          # for instance i in a partition sv
                 if i.className in p:       # if we have already found the class once,
                     p[i.className] += 1  # increment the counter
@@ -263,7 +262,10 @@ class Hypothesis:
             # this is a feature struct that will be used to store feature values
             # with their indexes/IDs in CFs
             ft = collect.namedtuple('ft', ['id', 'value'])
-            partition = {}                    # key = CF(Values), Entry = instance in training data
+            
+            # key = CF(Values), Entry = instance in training data
+            partition: typ.Dict[np.float64, typ.List[row]] = {}
+            
             s = 0                             # used to sum CF's conditional entropy
             used = feature.getUsedFeatures()  # get the indexes of the used features
             v = []                            # this will hold the used features ids & values
@@ -299,7 +301,9 @@ class Hypothesis:
             gainSum += f.infoGain                    # update the info sum
 
             # updates the max info gain of the hypothesis if needed
-            if self.maxInfoGain < f.infoGain:  # BUG maxInfoGain is None type
+            # BUG maxInfoGain is None type. This is because MaxInfo gain is never set
+            # !   find a way to set it for each feature
+            if self.maxInfoGain < f.infoGain:
                 self.maxInfoGain = f.infoGain
 
         # calculate the average info gain using formula 3
@@ -365,17 +369,17 @@ class Hypothesis:
 
             return transformed  # return the list of all instances
 
+    def setSize(self) -> None:
+        for i in self.features:
+            i.setSize()
+
 
 class Population:
-    # this will be the population of hypotheses
-    
-    candidateHypotheses = []  # a list of all the candidate hypotheses
-    generation = None         # this is the number of this generation
-
-    def __init__(self, candidates: typ.List[Hypothesis], generationNumber: int) -> None:
-        self.candidateHypotheses = candidates
-        self.generation = generationNumber
-
+    # this will be the population of hypotheses. This is largely just a namespace
+    # BUG for some reason the canidateHypotheses are not getting intilized
+    def __init__(self, candidates: typ.List[typ.Type[Hypothesis]], generationNumber: int) -> None:
+        self.candidateHypotheses = candidates  # a list of all the candidate hypotheses
+        self.generation = generationNumber     # this is the number of this generation
 # ***************** End of Namespaces/Structs & Objects ******************* #
 
 
@@ -542,7 +546,7 @@ def createInitialPopulation() -> Population:
         classIds = list(range(1, LABEL_NUMBER+1))
         random.shuffle(classIds)
 
-        ftrs = []
+        ftrs: typ.List[ConstructedFeature] = []
         HypSize = 0
         
         for nll in range(LABEL_NUMBER):
@@ -566,7 +570,7 @@ def createInitialPopulation() -> Population:
         h.size = HypSize
         return h
 
-    hypothesis = []
+    hypothesis: typ.List[typ.Type[Hypothesis]] = []
 
     for nl in range(POPULATION_SIZE):
         hypothesis.append(createHypothesis())
@@ -574,20 +578,20 @@ def createInitialPopulation() -> Population:
     return Population(hypothesis, 0)
 
 
-def evolve(population: Population, elite: typ.Type[Hypothesis]) -> typ.Tuple[Population, typ.Type[Hypothesis]]:
+def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, Hypothesis]:
     # NOTE pop should be a list of hypotheses
 
-    def __tournament(pop: Population) -> typ.List[typ.Type[Hypothesis]]:
+    def __tournament(pop: Population) -> Hypothesis:
         # used by evolve to selection the parents
         
         # **************** Tournament Selection **************** #
-        candidates = pop.candidateHypotheses
-        first = None
+        candidates = copy.deepcopy(pop.candidateHypotheses)
+        first = pop.candidateHypotheses[0]
         score = 0
         for i in range(0, TOURNEY):  # compare TOURNEY number of random hypothesis
             
-            candidate = candidates.pop(random.randint(0, len(candidates)))  # get a random hypothesis
-            fitness = candidate().getFitness()                              # get that hypothesis's fitness score
+            candidate = candidates.pop(random.randint(0, (len(candidates)-1)))  # get a random hypothesis
+            fitness = candidate.getFitness()                              # get that hypothesis's fitness score
 
             if first is None:      # if first has not been set,
                 first = candidate  # then  set it
@@ -672,7 +676,7 @@ def evolve(population: Population, elite: typ.Type[Hypothesis]) -> typ.Tuple[Pop
             
             # get a random feature from the hypothesis
             featureIndex = random.randint(0, M)
-            feature = parent.feature[featureIndex]
+            feature = parent.features[featureIndex]
             terminal = feature.relevantFeatures
             # ? because lists are mutable all the changes happen in place?
             # ? So I don't need to create a new hypoth/pop as there is only ever the one?
@@ -720,8 +724,8 @@ def evolve(population: Population, elite: typ.Type[Hypothesis]) -> typ.Tuple[Pop
                 t = Tree(rootData)                             # make a new tree
                 size = __generateTree(t, terminal, OPS, 0, 8)  # build the rest of the subtree
 
-            cl = parent.feature[featureIndex].className                     # get the className of the feature
-            parent.feature[featureIndex] = ConstructedFeature(cl, t, size)  # replace the parent with the mutated child
+            cl = parent.features[featureIndex].className                     # get the className of the feature
+            parent.features[featureIndex] = ConstructedFeature(cl, t, size)  # replace the parent with the mutated child
             newPopulation.candidateHypotheses.append(parent)                # add the parent to the new pop
         # ************* End of Mutation ************* #
 
@@ -737,12 +741,12 @@ def evolve(population: Population, elite: typ.Type[Hypothesis]) -> typ.Tuple[Pop
             featureIndex = random.randint(0, M)  # get a random feature from each parent
             
             # feature 1
-            feature1 = parent1.feature[featureIndex]
+            feature1 = parent1.features[featureIndex]
             terminals1 = feature1.relevantFeatures
             feature1 = feature1.tree
             
             # feature 2
-            feature2 = parent2.feature[featureIndex]
+            feature2 = parent2.features[featureIndex]
             terminals2 = feature2.relevantFeatures
             feature2 = feature2.tree
 
@@ -782,7 +786,8 @@ def evolve(population: Population, elite: typ.Type[Hypothesis]) -> typ.Tuple[Pop
             parent2.setSize()
 
             # parent 1 & 2 are both hypotheses and should have been changed in place, so add them to the new pop
-            newPopulation.candidateHypotheses.append(parent1, parent2)
+            newPopulation.candidateHypotheses.append(parent1)
+            newPopulation.candidateHypotheses.append(parent2)
         # **************** End of Crossover **************** #
 
         # handle elitism
@@ -793,7 +798,7 @@ def evolve(population: Population, elite: typ.Type[Hypothesis]) -> typ.Tuple[Pop
     return newPopulation, elite
 
 
-def cdfc(train: np.ndarray) -> Hypothesis:
+def cdfc(train: np.ndarray) -> typ.Type[Hypothesis]:
     # Class Dependent Feature Construction
 
     # makes sure we're using global variables
