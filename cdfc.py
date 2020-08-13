@@ -427,6 +427,8 @@ def terminals(classId: int) -> typ.List[int]:
 
     return terminalSet
 
+def terminalsToValues(indexes = typ.List[int]) -> typ.List[typ.Union[int, np.float]]:
+    # TODO write this function to transform indexes of terminals into the vaules of the terminals
 
 def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[np.float64], typ.List[np.float64]]:
     """valuesInClass determines what values of an attribute occur in a class
@@ -460,83 +462,53 @@ def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[np.float64
 
 def createInitialPopulation() -> Population:
 
-    def __grow(classId: int) -> typ.Tuple[Tree, int]:
+    def __grow(relevantValues: typ.List[np.float], depth: int = 0) -> typ.Tuple[Tree, int]:
         # This function uses the grow method to generate an initial population
+        # the last thing returned should be a trees root node
         
-        def assign(level: int, counter: int) -> typ.Tuple[Tree, int]:
+        depth += 1  # increase the depth by one
 
-            counter += 1  # used to compute individual size
-            
-            if level != MAX_DEPTH:  # recursively assign tree values
-                spam = ls[random.randint(0, (len(ls)-1))]  # get the random value
-                
-                if spam in terminal:            # if the item is a terminal
-                    return Tree(spam), counter  # just return, stopping recursion
-
-                node = Tree(spam)
-                node.left, cLeft = assign(level + 1, counter)
-                node.right, cRight = assign(level + 1, counter)
-                # add the number of nodes from the left subtree, to the number of nodes from the right subtree
-                counter = cLeft + cRight
-                return node, counter
-
-            else:  # stop recursion; max depth has been reached
-                spam = terminal[random.randint(0, (len(terminal)-1))]  # add a terminal to the leaf
-                return Tree(spam), counter                         # return
-
-        # pick a random function & put it in the root
-        ls = OPS[:]
-        random.shuffle(ls)
-        rootData = ls[random.randint(0, (len(ls)-1))]
-        tree = Tree(rootData)  # make a new tree
-
-        terminal = terminals(classId)  # get the list of terminal characters
-        ls += terminals(classId)  # add the terminal values to the list of functions & reorder
-        random.shuffle(ls)
-
-        # create the tree
-        tree.left, counterLeft = assign(1, counter=1)
-        tree.right, counterRight = assign(1, counter=1)
+        if depth == MAX_DEPTH:  # if we've reached the max depth add a random terminal value and return
+            return Tree(random.randint(0, (len(relevantValues) - 1))), depth
+        else:
+            # combine the list of terminals & operations
+            ls: typ.List[typ.Union[str, float, int]] = OPS[:]
+            ls.extend(relevantValues)
+    
+            # get a random value from the combined list
+            value = ls[random.randint(0, (len(ls) - 1))]
+    
+            # create a tree with value as it's data
+            newTree = Tree(value)
+    
+            if value in relevantValues:  # if the value added was a terminal value,
+                return newTree, depth    # return the new tree
+            else:  # if the value was not a terminal value, then grow both children
+                newTree.left, leftDepth = __grow(relevantValues, depth)
+                newTree.right, rightDepth = __grow(relevantValues, depth)
+                totalDepth = leftDepth + rightDepth
+                return newTree, totalDepth  # after the recursive calls have finished return the tree
         
-        size = counterRight + counterLeft  # add the number of nodes together to get the individual size
-
-        return tree, size
-
-    def __full(classId: int) -> typ.Tuple[Tree, int]:
+    def __full(relevantValues: typ.List[np.float], depth: int = 0) -> typ.Tuple[Tree, int]:
         # This function uses the full method to generate an initial population
+        # the last thing returned should be a trees root node
         
-        def assign(level: int, counter: int) -> typ.Tuple[Tree, int]:
-            
-            counter += 1
-            
-            if level != MAX_DEPTH:  # recursively assign tree values
-                node = Tree(ls[random.randint(0, len(ls)-1)])  # get a random function & add it to the tree
-                # call for branches
-                node.left, cLeft = assign(level + 1, counter)
-                node.right, cRight = assign(level + 1, counter)
-                # add the number of nodes from the left subtree, to the number of nodes from the right subtree
-                counter = cLeft + cRight
-                return node, counter
+        depth += 1  # increase the depth by one
 
-            else:  # stop recursion; max depth has been reached, so add a terminal to the leaf & return
-                return Tree(terminal[random.randint(0, (len(terminal)-1))]), counter
-
-        # pick a random function & put it in the root
-        ls = OPS[:]
-        rootData = ls[random.randint(0, (len(ls)-1))]
-        tree = Tree(rootData)  # make a new tree
-
-        terminal = terminals(classId)  # get the list of terminal characters
-        ls += terminal  # add the terminal values to the list of functions & reorder
-        random.shuffle(ls)
-
-        # create the tree
-        tree.left, counterLeft = assign(1, counter=1)
-        tree.right, counterRight = assign(1, counter=1)
-
-        size = counterRight + counterLeft  # add the number of nodes together to get the individual size
-
-        return tree, size
+        if depth == MAX_DEPTH:  # if we've reached the max depth add a random terminal value and return
+            return Tree(random.randint(0, (len(relevantValues) - 1))), depth
+        else:
+            # get a random operation
+            value = OPS[random.randint(0, (len(OPS) - 1))]
+    
+            # create a tree with Value (an operation) as it's data
+            newTree = Tree(value)
+    
+            # we didn't add a terminal so, then grow both children
+            newTree.left, leftDepth = __full(relevantValues, depth)
+            newTree.right, rightDepth = __full(relevantValues, depth)
+            totalDepth = leftDepth + rightDepth
+            return newTree, totalDepth  # after the recursive calls have finished return the tree
 
     def createHypothesis() -> Hypothesis:
         # given a list of trees, create a hypothesis
@@ -556,11 +528,11 @@ def createInitialPopulation() -> Population:
             
             if random.choice([True, False]):
                 name = classIds.pop(0)        # get a random id
-                tree, size = __grow(name)     # create tree
+                tree, size = __grow(terminals(name))     # create tree
                 ftrs.append(ConstructedFeature(name, tree, size))
             else:
                 name = classIds.pop(0)        # get a random id
-                tree, size = __full(name)     # create tree
+                tree, size = __full(terminals(name))     # create tree
                 ftrs.append(ConstructedFeature(name, tree, size))
 
             size += size
@@ -601,12 +573,12 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
 
     # noinspection DuplicatedCode
     def __generateTree(node, terminalValues, values, depth, max_depth, counter=0):
-        
+        # TODO change to be more like grow code in initial population
         # **************** Tree Generation **************** #
         counter += 1  # increment size counter
 
-        if node.data in terminalValues:  # check to see of this node is a terminal
-            return counter               # if so then we should pass counter up the recursive stack
+        if node.data in OPS:  # check to see of this node is a terminal
+            return counter    # if so then we should pass counter up the recursive stack
 
         choice = random.choice(["left", "right", "both"])  # make a random choice about which way to grow
 
