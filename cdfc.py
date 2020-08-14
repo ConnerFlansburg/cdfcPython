@@ -80,9 +80,10 @@ class Tree:
         
         # BUG somehow +,-,*, and min() are being called on None type objects.
         # !   This is because for some reason it keeps trying to access the children that don't exist, even though it
-        # !   encounters values before then - How???
-        # +   Maybe this is because of the divide by 0 error?
-        # +   catch the exception?
+        # !   encounters values before then - How??? If a node contains a number it should return a value & not run children
+        # ? Maybe  when we have a value and try to index it using featureValues[self.data], we are getting a None?
+        # ?   (i.e. the issue is that the instance has a None value at that index)
+        # + Try creating a unit test for this, grow, & full
         # if the node is an operation both of it's branches should have operations or terminals
         # either way calling __runNode() won't return a None
         if self.data in OPS:  # if this tree's node is a valid operation, then execute it

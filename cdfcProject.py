@@ -5,17 +5,20 @@ import numpy as np
 import collections as collect
 import tkinter as tk
 from tkinter import filedialog
-from cdfc import cdfc
+# from cdfc import cdfc
 from pprint import pprint
 from sklearn.preprocessing import StandardScaler
-from sklearn.naive_bayes import GaussianNB
 from sklearn.metrics import accuracy_score
-# from sklearn.neighbors import KNeighborsClassifier
-# from sklearn.tree import DecisionTreeClassifier
+
+# *** Only one of these imports will be used at a time, which one depends on the model being used *** #
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.tree import DecisionTreeClassifier
 
 # * Next Steps
 # TODO figure out why model is giving the same value everytime -- maybe it because our data is suited to regression?
 # TODO get CDFC working
+from sklearn.tree import DecisionTreeClassifier
 
 
 def discretization(data: np.ndarray) -> np.ndarray:
@@ -177,14 +180,14 @@ def main() -> None:
         train, scalar = normalize(train, None)  # now normalize the training, and keep the scalar used
     
         # *** Train the CDFC Model *** #
-        CDFC_Hypothesis = cdfc(train)  # now that we have our train & test data create our hypothesis
+        # CDFC_Hypothesis = cdfc(train)  # now that we have our train & test data create our hypothesis
     
         # *** Train the Learning Algorithm *** #
         # transform data using the CDFC model
         # train = CDFC_Hypothesis.transform(train)
     
         # format data for SciKit Learn
-        # + change the below to use transformedData instead of train
+        # TODO change the below to use transformedData instead of train
         # create the label array Y (the target of our training)
         flat = np.ravel(train[:, :1])  # flatten the label list
         labels = np.array(flat)        # convert the label list to a numpy array
@@ -214,6 +217,10 @@ def main() -> None:
         # compute accuracy
         labelPrediction = model.predict(ftrs)  # use model to predict labels
         # compute the accuracy score by comparing the actual labels with those predicted
+        # ? currently the accuracy generated is the same every time, is this a bug?
+        # + Kth Nearest Neighbor Classifier Gives --- 0.9350
+        # + Decision Tree Gives --------------------- 0.9262
+        # + Naive Baye's Gives ---------------------- 0.5660
         accuracy.append(accuracy_score(trueLabels, labelPrediction))
     
     # *** Report Accuracy *** #
