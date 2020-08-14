@@ -155,13 +155,12 @@ def main() -> None:
     for r in randomIndex:  # len(r) = K so this will be done K times
     
         # *** Get the Training & Testing Data *** #
-        
         # the Rth bucket becomes our testing data, everything else becomes training data
-        # NOTE: the below is done in order to prevent accidental overwrites
+        # this is done in order to prevent accidental overwrites
         if testingList is None:             # if this is not the first time though the loop
             testingList = trainList.pop(r)  # then set train & testing
             oldR = r                        # save the current r value for then next loop
-    
+
         else:                                    # if we've already been through the loop at least once
             trainList.insert(oldR, testingList)  # add testing back into train
             testingList = trainList.pop(r)       # then set train & testing
@@ -176,16 +175,14 @@ def main() -> None:
         train = np.array(train)          # turn training data into a numpy array
         testing = np.array(testingList)  # turn testing data into a numpy array
     
-        # *** Normalize the Training Data *** #
+        # *** 3A Normalize the Training Data *** #
         train, scalar = normalize(train, None)  # now normalize the training, and keep the scalar used
     
-        # *** Train the CDFC Model *** #
+        # *** 3B Train the CDFC Model & Transform the Training Data using It *** #
         # CDFC_Hypothesis = cdfc(train)  # now that we have our train & test data create our hypothesis
-    
-        # *** Train the Learning Algorithm *** #
-        # transform data using the CDFC model
-        # train = CDFC_Hypothesis.transform(train)
-    
+        # train = CDFC_Hypothesis.transform(train)  # transform data using the CDFC model
+
+        # *** 3C Train the Learning Algorithm *** #
         # format data for SciKit Learn
         # TODO change the below to use transformedData instead of train
         # create the label array Y (the target of our training)
@@ -201,10 +198,10 @@ def main() -> None:
         model = GaussianNB()                            # Create a Gaussian Classifier (Naive Baye's)
         model.fit(ftrs, labels)                         # Train the model
     
-        # *** Normalize the Testing Data *** #
+        # *** 3D.1 Normalize the Testing Data *** #
         testing, scalar = normalize(testing, scalar)
     
-        # *** Reduce the Testing Data Using the CDFC Model *** #
+        # *** 3D.2 Reduce the Testing Data Using the CDFC Model *** #
         # + testing = CDFC_Hypothesis.transform(testing)  # use the cdfc model to reduce the data's size
     
         # format data for SciKit Learn
@@ -214,7 +211,7 @@ def main() -> None:
         # create the feature matrix X ()
         ftrs = np.array(testing[:, 1:])  # get everything BUT the labels/ids
     
-        # compute accuracy
+        # *** 3D.3 Feed the Training Data into the Model & get Accuracy *** #
         labelPrediction = model.predict(ftrs)  # use model to predict labels
         # compute the accuracy score by comparing the actual labels with those predicted
         # ? currently the accuracy generated is the same every time, is this a bug?
