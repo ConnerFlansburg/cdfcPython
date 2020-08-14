@@ -11,14 +11,13 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score
 
 # *** Only one of these imports will be used at a time, which one depends on the model being used *** #
-from sklearn.neighbors import KNeighborsClassifier
+# from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
-from sklearn.tree import DecisionTreeClassifier
+# from sklearn.tree import DecisionTreeClassifier
 
 # * Next Steps
 # TODO figure out why model is giving the same value everytime -- maybe it because our data is suited to regression?
 # TODO get CDFC working
-from sklearn.tree import DecisionTreeClassifier
 
 
 def discretization(data: np.ndarray) -> np.ndarray:
