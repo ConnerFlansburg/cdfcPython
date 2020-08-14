@@ -67,30 +67,48 @@ class Tree:
 
     # running a tree should return a single value
     # featureValues -- the values of the relevant features keyed by their index in the original data
-    def runTree(self, featureValues: typ.Dict[int, np.float64]) -> typ.Optional[np.float64]:
-        return self.__runNode(featureValues)
+    def runTree(self, featureValues: typ.Dict[int, np.float_]) -> np.float_:
+        return np.float64(self.__runNode(featureValues))
 
-    def __runNode(self, featureValues):
-        # if this tree's node is a valid operation, then execute it
-        if self.data in OPS:
+    def __runNode(self, featureValues: typ.Dict[int, np.float_]) -> float:
+        
+        # BUG somehow +,-,*, and min() are being called on None type objects.
+        # +   Maybe this is because of the divide by 0 error?
+        # +   catch the exception?
+        # if the node is an operation both of it's branches should have operations or terminals
+        # either way calling __runNode() won't return a None
+        if self.data in OPS:  # if this tree's node is a valid operation, then execute it
+            
             # find out which operation it is & return it's value
             if self.data == 'add':
-                return self.left.runTree(featureValues) + self.right.runTree(featureValues)
+                lft = self.left.__runNode(featureValues)
+                rgt = self.right.__runNode(featureValues)
+                vl = lft + rgt
+                return vl
     
             elif self.data == 'subtract':
-                return self.left.runTree(featureValues) - self.right.runTree(featureValues)
+                lft = self.left.__runNode(featureValues)
+                rgt = self.right.__runNode(featureValues)
+                vl = lft - rgt
+                return vl
     
             elif self.data == 'times':
-                return self.left.runTree(featureValues) * self.left.runTree(featureValues)
-    
+                lft = self.left.__runNode(featureValues)
+                rgt = self.right.__runNode(featureValues)
+                vl = lft * rgt
+                return vl
             elif self.data == 'min':
-                return min(self.left.runTree(featureValues), self.right.runTree(featureValues))
+                lft = self.left.__runNode(featureValues)
+                rgt = self.right.__runNode(featureValues)
+                vl = min(lft, rgt)
+                return vl
             
-        # if the node is not an operation, then it is a terminal index so return the value
-        else:
+        # if the node is not an operation than it should be a terminal index. So using it on featureValues
+        # should return a float or an int (the value of some feature in an instance) not a None
+        else:  # if the node is not an operation or None, then it is a terminal index so return the value
             return featureValues[self.data]
 
-    def getSize(self, counter):
+    def getSize(self, counter) -> int:
 
         counter += 1  # increment the counter
 
@@ -165,18 +183,8 @@ class ConstructedFeature:
         return values      # values should now hold the indexes of the tree's terminals
 
     def transform(self, instance: row) -> np.float64:
-    
-        # this will hold the values of relevant features
-        relevantValues: typ.Dict[int, typ.Optional[np.float64]] = {}
-
-        # loop over the indexes of the relevant features, and take the values of the relevant features out
-        # & store them in a dictionary keyed by their index in the original data
-        for i in self.relevantFeatures:
-            relevantValues[i] = instance.attributes[i]
-
-        # transform the data for a single feature
-        # this should return a single value (a value transformed by the tree)
-        return self.tree.runTree(relevantValues)
+        # Send the tree a list of all the attribute values in a single instance
+        return self.tree.runTree(instance.attributes)
 
     def setSize(self):
         return self.tree.getSize(0)  # call getSize on the root of the tree
@@ -301,13 +309,10 @@ class Hypothesis:
             gainSum += f.infoGain                    # update the info sum
 
             # updates the max info gain of the hypothesis if needed
-            # BUG maxInfoGain is None type. This is because MaxInfo gain is never set
-            # !   find a way to set it for each feature
             if self.maxInfoGain < f.infoGain:
                 self.maxInfoGain = f.infoGain
 
         # calculate the average info gain using formula 3
-        # TODO create more correct citation later #
         term1 = gainSum+self.maxInfoGain
         term2 = (M+1)*(math.log(LABEL_NUMBER, 2))
         self.averageInfoGain += term1 / term2
@@ -376,7 +381,6 @@ class Hypothesis:
 
 class Population:
     # this will be the population of hypotheses. This is largely just a namespace
-    # BUG for some reason the canidateHypotheses are not getting intilized
     def __init__(self, candidates: typ.List[Hypothesis], generationNumber: int) -> None:
         self.candidateHypotheses = candidates  # a list of all the candidate hypotheses
         self.generation = generationNumber     # this is the number of this generation
@@ -413,13 +417,14 @@ def terminals(classId: int) -> typ.List[int]:
         # otherwise
         else:
             # NOTE: this causes a divided by zero error if p-Value comes from a two-tailed test
+            # ! this must be adding the NoneType causing problems in run Tree
             relevancy = abs(tValue)/pValue      # set relevancy using t-value/p-value
             scores.append(Score(i, relevancy))  # add relevancy score to the list of scores
 
     sortedScores = sorted(scores, key=lambda s: s.Attribute)  # sort the features by relevancy scores
 
     terminalSet = []                     # this will hold relevant terminals
-    top = len(sortedScores)              # find the halfway point
+    top = len(sortedScores)/2            # find the halfway point
     relevantScores = sortedScores[:top]  # slice top half
     
     for i in relevantScores:             # loop over relevant scores
@@ -427,8 +432,6 @@ def terminals(classId: int) -> typ.List[int]:
 
     return terminalSet
 
-def terminalsToValues(indexes = typ.List[int]) -> typ.List[typ.Union[int, np.float]]:
-    # TODO write this function to transform indexes of terminals into the vaules of the terminals
 
 def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[np.float64], typ.List[np.float64]]:
     """valuesInClass determines what values of an attribute occur in a class
@@ -460,55 +463,57 @@ def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[np.float64
     return inClass, notInClass  # return inClass & notInClass
 
 
-def createInitialPopulation() -> Population:
+def __grow(relevantIndex: typ.List[np.float], depth: int = 0) -> typ.Tuple[Tree, int]:
+    # This function uses the grow method to generate an initial population
+    # the last thing returned should be a trees root node
 
-    def __grow(relevantValues: typ.List[np.float], depth: int = 0) -> typ.Tuple[Tree, int]:
-        # This function uses the grow method to generate an initial population
-        # the last thing returned should be a trees root node
-        
-        depth += 1  # increase the depth by one
+    depth += 1  # increase the depth by one
 
-        if depth == MAX_DEPTH:  # if we've reached the max depth add a random terminal value and return
-            return Tree(random.randint(0, (len(relevantValues) - 1))), depth
-        else:
-            # combine the list of terminals & operations
-            ls: typ.List[typ.Union[str, float, int]] = OPS[:]
-            ls.extend(relevantValues)
+    if depth == MAX_DEPTH:  # if we've reached the max depth add a random terminal value and return
+        return Tree(random.randint(0, (len(relevantIndex) - 1))), depth
+    else:
+        # combine the list of terminals & operations
+        ls: typ.List[typ.Union[str, float, int]] = OPS[:]
+        ls.extend(relevantIndex)
     
-            # get a random value from the combined list
-            value = ls[random.randint(0, (len(ls) - 1))]
+        # get a random value from the combined list
+        value = ls[random.randint(0, (len(ls) - 1))]
     
-            # create a tree with value as it's data
-            newTree = Tree(value)
+        # create a tree with value as it's data
+        newTree = Tree(value)
     
-            if value in relevantValues:  # if the value added was a terminal value,
-                return newTree, depth    # return the new tree
-            else:  # if the value was not a terminal value, then grow both children
-                newTree.left, leftDepth = __grow(relevantValues, depth)
-                newTree.right, rightDepth = __grow(relevantValues, depth)
-                totalDepth = leftDepth + rightDepth
-                return newTree, totalDepth  # after the recursive calls have finished return the tree
-        
-    def __full(relevantValues: typ.List[np.float], depth: int = 0) -> typ.Tuple[Tree, int]:
-        # This function uses the full method to generate an initial population
-        # the last thing returned should be a trees root node
-        
-        depth += 1  # increase the depth by one
-
-        if depth == MAX_DEPTH:  # if we've reached the max depth add a random terminal value and return
-            return Tree(random.randint(0, (len(relevantValues) - 1))), depth
-        else:
-            # get a random operation
-            value = OPS[random.randint(0, (len(OPS) - 1))]
-    
-            # create a tree with Value (an operation) as it's data
-            newTree = Tree(value)
-    
-            # we didn't add a terminal so, then grow both children
-            newTree.left, leftDepth = __full(relevantValues, depth)
-            newTree.right, rightDepth = __full(relevantValues, depth)
+        if value in relevantIndex:  # if the value added was a terminal value,
+            return newTree, depth  # return the new tree
+        else:  # if the value was not a terminal value, then grow both children
+            newTree.left, leftDepth = __grow(relevantIndex, depth)
+            newTree.right, rightDepth = __grow(relevantIndex, depth)
             totalDepth = leftDepth + rightDepth
             return newTree, totalDepth  # after the recursive calls have finished return the tree
+
+
+def __full(relevantValues: typ.List[np.float], depth: int = 0) -> typ.Tuple[Tree, int]:
+    # This function uses the full method to generate an initial population
+    # the last thing returned should be a trees root node
+
+    depth += 1  # increase the depth by one
+
+    if depth == MAX_DEPTH:  # if we've reached the max depth add a random terminal value and return
+        return Tree(random.randint(0, (len(relevantValues) - 1))), depth
+    else:
+        # get a random operation
+        value = OPS[random.randint(0, (len(OPS) - 1))]
+    
+        # create a tree with Value (an operation) as it's data
+        newTree = Tree(value)
+    
+        # we didn't add a terminal so, then grow both children
+        newTree.left, leftDepth = __full(relevantValues, depth)
+        newTree.right, rightDepth = __full(relevantValues, depth)
+        totalDepth = leftDepth + rightDepth
+        return newTree, totalDepth  # after the recursive calls have finished return the tree
+
+
+def createInitialPopulation() -> Population:
 
     def createHypothesis() -> Hypothesis:
         # given a list of trees, create a hypothesis
@@ -571,63 +576,6 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         return first
         # ************ End of Tournament Selection ************* #
 
-    # noinspection DuplicatedCode
-    def __generateTree(node, terminalValues, values, depth, max_depth, counter=0):
-        # TODO change to be more like grow code in initial population
-        # **************** Tree Generation **************** #
-        counter += 1  # increment size counter
-
-        if node.data in OPS:  # check to see of this node is a terminal
-            return counter    # if so then we should pass counter up the recursive stack
-
-        choice = random.choice(["left", "right", "both"])  # make a random choice about which way to grow
-
-        if choice == "left":  # grow left
-
-            if depth == max_depth:  # check to see if we are at the max depth
-                index = terminalValues[random.randint(0, (len(terminalValues)-1))]  # get a random terminal
-                node.left = Tree(index)                                             # put it in the left branch
-                return counter                                                      # start back up recursive stack
-
-            index = values[random.randint(0, (len(values)-1))]  # pick a random operation or terminal
-            node.left = Tree(index)                             # put the operation or terminal in the left node
- 
-            __generateTree(node.left, terminalValues, values, depth+1, max_depth, counter)  # generate tree recursively
-
-        elif choice == "right":  # grow right
-
-            if depth == max_depth:  # check to see if we are at the max depth
-                index = terminalValues[random.randint(0, (len(terminalValues)-1))]  # get a random terminal
-                node.left = Tree(index)                                             # put it in the left branch
-                return counter                                                      # start back up recursive stack
-
-            index = values[random.randint(0, (len(values)-1))]  # pick a random operation or terminal
-            node.right = Tree(index)                            # put the operation or terminal in the left node
-
-            __generateTree(node.right, terminalValues, values, depth+1, max_depth, counter)  # generate tree recursively
-
-        elif choice == "both":
-
-            if depth == max_depth:  # check to see if we are at the max depth
-                index = terminalValues[random.randint(0, (len(terminalValues)-1))]  # get a random terminal
-                node.left = Tree(index)                                             # put it in the left branch
-                return counter
-
-            # left branch
-            index = values[random.randint(0, (len(values)-1))]  # pick a random operation or terminal
-            node.left = Tree(index)                             # put the operation or terminal in the left node
-
-            # right branch
-            index = values[random.randint(0, (len(values)-1))]  # pick a random operation or terminal
-            node.right = Tree(index)                            # put the operation or terminal in the left node
-
-            cLeft = __generateTree(node.left, terminalValues, values, depth+1, max_depth, counter)  # generate subtree
-            cRight = __generateTree(node.right, terminalValues, values, depth+1, max_depth, counter)  # generate subtree
-
-            counter = cLeft + cRight  # calculate the size (the number of nodes) by adding the size of the subtrees
-            return counter
-        # ************ End of Tree Generation ************ #
-
     # ******************* Evolution ******************* #
     newPopulation = Population([], population.generation+1)  # create a new population with no hypotheses
     
@@ -667,31 +615,11 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             
             # randomly generate subtree
             if decideGrow:  # use grow
-                
-                # pick a random function & put it in the root
-                ls: typ.List[typ.Union[str, int]] = OPS[:]
-                random.shuffle(ls)
-                rootData = ls[random.randint(0, len(ls))]
-                
-                t = Tree(rootData)  # make a new tree
-                
-                # build the rest of the subtree
-                ls.extend(terminal)                           # append the terminals
-                random.shuffle(ls)                            # shuffle the operations & terminals
-                # TODO terminal should instead be the actual values of the terminals, not their index
-                size = __generateTree(t, terminal, ls, 0, 8)  # set the size of the tree
+                t, size = __grow(terminal)  # build the subtree
 
             else:  # use full
+                t, size = __full(terminal)  # build the subtree
                 
-                # pick a random function & put it in the root
-                ls = OPS[:]
-                random.shuffle(ls)
-                rootData = ls[random.randint(0, len(ls))]
-                
-                t = Tree(rootData)                             # make a new tree
-                # TODO terminal should instead be the actual values of the terminals, not their index
-                size = __generateTree(t, terminal, OPS, 0, 8)  # build the rest of the subtree
-
             cl = parent.features[featureIndex].className                     # get the className of the feature
             parent.features[featureIndex] = ConstructedFeature(cl, t, size)  # replace the parent with the mutated child
             newPopulation.candidateHypotheses.append(parent)                # add the parent to the new pop
