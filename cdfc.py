@@ -7,10 +7,10 @@ import collections as collect
 from scipy import stats
 
 # ! Next Steps
-# TODO check feature1, feature2 issue in crossover
+# TODO fix divide by zero error -- perhaps this will solve the issue in run tree?
+# TODO fix bug in run tree
 
 # TODO write code for the if function in OPS
-# TODO add citation in entropy calc
 # TODO add docstrings
 # TODO add testing functions
 
@@ -61,10 +61,16 @@ class Tree:
     
     def __init__(self, data: typ.Union[str, int], left: typ.Union[None, "Tree"] = None,
                  right: typ.Union[None, "Tree"] = None) -> None:
-        self.left = left    # Will a another tree, or None if this is a terminal
-        self.right = right  # Will a another tree, or None if this is a terminal
         self.data = data    # must either be a function or a terminal (if a terminal it should be it's index)
-
+        self.left = left
+        self.right = right
+        
+    def setLeft(self, left):
+        self.left = left
+        
+    def setRight(self, right):
+        self.left = right
+        
     # running a tree should return a single value
     # featureValues -- the values of the relevant features keyed by their index in the original data
     def runTree(self, featureValues: typ.Dict[int, np.float_]) -> np.float_:
@@ -73,6 +79,8 @@ class Tree:
     def __runNode(self, featureValues: typ.Dict[int, np.float_]) -> float:
         
         # BUG somehow +,-,*, and min() are being called on None type objects.
+        # !   This is because for some reason it keeps trying to access the children that don't exist, even though it
+        # !   encounters values before then - How???
         # +   Maybe this is because of the divide by 0 error?
         # +   catch the exception?
         # if the node is an operation both of it's branches should have operations or terminals
@@ -408,7 +416,8 @@ def terminals(classId: int) -> typ.List[int]:
         # ? This currently uses a two-tailed test. Because of this p-value can be below 0, and
         # ?     this can cause divide by 0 errors during the else case of relevancy calculation.
         # ?     Should it be a one-tailed test instead?
-        tValue, pValue = stats.ttest_ind(inClass, notIn)  # get the t-test & p-value for the feature
+        tValue, pCompValue = stats.ttest_ind(inClass, notIn)  # get the t-test & p-value for the feature
+        pValue = 1 - pCompValue
 
         # calculate relevancy for a single feature
         if pValue >= 0.05:  # if p-value is less than 0.05
@@ -416,15 +425,13 @@ def terminals(classId: int) -> typ.List[int]:
             scores.append(Score(i, relevancy))  # add relevancy score to the list of scores
         # otherwise
         else:
-            # NOTE: this causes a divided by zero error if p-Value comes from a two-tailed test
-            # ! this must be adding the NoneType causing problems in run Tree
             relevancy = abs(tValue)/pValue      # set relevancy using t-value/p-value
             scores.append(Score(i, relevancy))  # add relevancy score to the list of scores
 
-    sortedScores = sorted(scores, key=lambda s: s.Attribute)  # sort the features by relevancy scores
+    sortedScores = sorted(scores, key=lambda s: s.Relevancy)  # sort the features by relevancy scores
 
     terminalSet = []                     # this will hold relevant terminals
-    top = len(sortedScores)/2            # find the halfway point
+    top = len(sortedScores)//2            # find the halfway point
     relevantScores = sortedScores[:top]  # slice top half
     
     for i in relevantScores:             # loop over relevant scores

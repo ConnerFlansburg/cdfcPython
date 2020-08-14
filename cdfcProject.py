@@ -14,7 +14,8 @@ from sklearn.metrics import accuracy_score
 # from sklearn.tree import DecisionTreeClassifier
 
 # * Next Steps
-# TODO change the learning algorithm so that it's trained using data the CDFC model has transformed
+# TODO figure out why model is giving the same value everytime -- maybe it because our data is suited to regression?
+# TODO get CDFC working
 
 
 def discretization(data: np.ndarray) -> np.ndarray:
@@ -180,8 +181,7 @@ def main() -> None:
     
         # *** Train the Learning Algorithm *** #
         # transform data using the CDFC model
-        transformedTrain = CDFC_Hypothesis.transform(train)
-        train = transformedTrain
+        # train = CDFC_Hypothesis.transform(train)
     
         # format data for SciKit Learn
         # + change the below to use transformedData instead of train
@@ -206,8 +206,7 @@ def main() -> None:
     
         # format data for SciKit Learn
         # create the label array Y (the target of our training)
-        debugSlice = testing[:, :1]
-        flat = np.ravel(debugSlice)  # flatten the label list
+        flat = np.ravel(testing[:, :1])  # flatten the label list
         trueLabels = np.array(flat)      # convert the label list to a numpy array
         # create the feature matrix X ()
         ftrs = np.array(testing[:, 1:])  # get everything BUT the labels/ids
