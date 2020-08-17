@@ -7,7 +7,6 @@ import collections as collect
 from scipy import stats
 
 # ! Next Steps
-# TODO fix divide by zero error -- perhaps this will solve the issue in run tree?
 # TODO fix bug in run tree
 
 # TODO write code for the if function in OPS
@@ -73,16 +72,17 @@ class Tree:
         
     # running a tree should return a single value
     # featureValues -- the values of the relevant features keyed by their index in the original data
-    def runTree(self, featureValues: typ.Dict[int, np.float_]) -> np.float_:
+    def runTree(self, featureValues: typ.Dict[int]) -> np.float_:
         return np.float64(self.__runNode(featureValues))
 
-    def __runNode(self, featureValues: typ.Dict[int, np.float_]) -> float:
+    def __runNode(self, featureValues: typ.Dict[int]) -> float:
         
         # BUG somehow +,-,*, and min() are being called on None type objects.
         # !   This is because for some reason it keeps trying to access the children that don't exist, even though it
         # !   encounters values before then - How??? If a node contains a number it should return a value & not run children
         # ? Maybe  when we have a value and try to index it using featureValues[self.data], we are getting a None?
         # ?   (i.e. the issue is that the instance has a None value at that index)
+        # ? Maybe it's because featureValues is a Dictionary not a list? -- check
         # + Try creating a unit test for this, grow, & full
         # if the node is an operation both of it's branches should have operations or terminals
         # either way calling __runNode() won't return a None

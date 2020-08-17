@@ -1,4 +1,3 @@
-import random
 import copy
 import typing as typ
 import numpy as np
@@ -16,8 +15,7 @@ from sklearn.naive_bayes import GaussianNB
 # from sklearn.tree import DecisionTreeClassifier
 
 # * Next Steps
-# TODO figure out why model is giving the same value everytime -- maybe it because our data is suited to regression?
-# TODO get CDFC working
+# TODO figure out why model is giving the same value everytime -- maybe there's an issue with flattening?
 
 
 def discretization(data: np.ndarray) -> np.ndarray:
@@ -72,53 +70,46 @@ def normalize(entries: np.ndarray, scalar: typ.Union[None, StandardScaler, ]) ->
 
 
 def fillBuckets(entries: np.ndarray, K: int) -> typ.List[typ.List[np.ndarray]]:
-
     # *** connect a class to every instance that occurs in it ***
     # this will map a classId to a 2nd dictionary that will hold the number of instances in that class &
     # the instances
-    # classToInstances[classId] = list[counter, instance1Values, instance2Values, ...]
-    classToInstances = {}
+    # classToInstances[classId] = list[counter, instance1[], instance2[], ...]
+    classToInstances: typ.Dict[int, typ.List[typ.Union[int, typ.List[typ.Union[int, float]]]]] = {}
 
     for e in entries:
 
-        # get the class id from the entry
-        cId = e[0]
-        
-        spam = []          # create an empty list
-        spam.insert(0, 0)  # initialize counter to 0
+        label = e[0]  # get the class id from the entry
 
         # if we already have an entry for that classId, append to it
-        if classToInstances.get(cId):
-            spam = classToInstances.get(cId)  # get the current list for this class
-            spam[0] += 1                      # increment instance counter
-            index = spam[0]                   # get the index that the counter says is next
-            spam.insert(index, e[:])          # add the new instance at the new index
-
+        if classToInstances.get(label):
+            classToInstances.get(label)[0] += 1            # increment instance counter
+            idx = classToInstances.get(label)[0]           # get the index that the counter says is next
+            classToInstances.get(label).insert(idx, e[:])  # at that index insert a list representing the instance
+            
         # if this is the first time we've seen the class, create a new list for it
         else:
-            spam = [1, e[:]]  # initialize the counter, add the new instance to the new list at index 1
-            classToInstances[cId] = spam  # add the new list to the "master" dictionary
+            # add a list, at index 0 put the counter, and at index 1 put a list containing the instance (values & label)
+            classToInstances[label] = [1, e[:]]
 
     # *** Now create a random permutation of the instances in a class, & put them in buckets ***
-    buckets = [[]] * K  # create a list of empty lists that we will "deal" our "deck" of instances to
-    index = 0         # this will be the index of the bucket we are "dealing" to
+    buckets = [[] for _ in range(K)]  # create a list of empty lists that we will "deal" our "deck" of instances to
+    index = 0                         # this will be the index of the bucket we are "dealing" to
 
-    for cId in classToInstances.keys():
+    for classId in classToInstances.keys():
 
-        # *** for each class use cId to get it's instances ***
-        # list is of the form [counter, instance1, instance2, ...]
+        # *** for each class use the class id to get it's instances ***
+        # instances is of the form [instance1, instance2, ...]  (the counter has been removed)
         # where instanceN is a numpy array and where instanceN[0] is the classId & instanceN[1:] are the values
-        instances = classToInstances[cId]
+        instances: typ.List[typ.List[typ.Union[int, float]]] = classToInstances[classId][1:]
 
         # *** create a permutation of a class's instances *** #
-        # permutation is of the form [instance?, instance?, ...]
-        # where instance? is a list and where instance?[0] is the classId & instance?[1:] are the values
-        permutation = np.random.permutation(instances[1:])  # but first remove the counter
+        # permutation is a 2D numpy array, where each line is an instance
+        permutation = np.random.permutation(instances)  # this will reorder the instances but not their values
 
         # *** assign instances to buckets *** #
-        # loop over every instance in the class cId, in what is now a random order
-        # p should be an instance?, which is a row from the input data
-        for p in permutation:
+        # loop over every instance in the class classId, in what is now a random order
+        # p will be a single row from permutation & so will be a 1D numpy array representing an instance
+        for p in permutation:         # for every row in permutation
             buckets[index].append(p)  # add the random instance to the bucket at index
             index = (index+1) % K     # increment index in a round robin style
 
@@ -132,40 +123,36 @@ def main() -> None:
     path = filedialog.askopenfilename()  # prompt user for file path
 
     # *** Parse the file into a numpy 2d array *** #
-    entries = np.genfromtxt(path, delimiter=',', skip_header=1)
+    entries = np.genfromtxt(path, delimiter=',', skip_header=1)  # + this line is used to read .csv files
     
     # *** create a set of K buckets filled with our instances *** #
     K = 10  # set the K for k fold cross validation
     buckets = fillBuckets(entries, K)  # using the parsed data, fill the k buckets
 
     # *** Loop over our buckets K times, each time running creating a new hypothesis *** #
-    # this will be used to select random indexes to serve as the testing/training data
-    randomIndex = list(range(0, K-1))  # get a randomly ordered range of numbers up to K
-    random.shuffle(randomIndex)        # this will be used to give a random index in the loop below
-
-    accuracy = []  # this will store the details about the accuracy of our hypotheses
-
-    oldR = 0                        # used to remember previous r in loop
+    oldR = 0                            # used to remember previous r in loop
     testingList = None                  # used to keep value for testing after a loop
     trainList = copy.deepcopy(buckets)  # make a copy of buckets so we don't override it
+    accuracy = []                       # this will store the details about the accuracy of our hypotheses
 
     # *** Divide them into training & test data K times ***
     # loop over all the random index values
-    for r in randomIndex:  # len(r) = K so this will be done K times
+    for r in range(0, K-1):  # len(r) = K so this will be done K times
     
         # *** Get the Training & Testing Data *** #
         # the Rth bucket becomes our testing data, everything else becomes training data
         # this is done in order to prevent accidental overwrites
-        if testingList is None:             # if this is not the first time though the loop
-            testingList = trainList.pop(r)  # then set train & testing
-            oldR = r                        # save the current r value for then next loop
-
+        if testingList is None:                  # if this is not the first time though the loop
+            testingList = trainList.pop(r)       # then set train & testing
+            oldR = r                             # save the current r value for then next loop
+            
         else:                                    # if we've already been through the loop at least once
             trainList.insert(oldR, testingList)  # add testing back into train
             testingList = trainList.pop(r)       # then set train & testing
             oldR = r                             # save the current r value for then next loop
     
         # *** Flatten the Training Data *** #
+        # TODO check that this is flattening the data correctly
         train = []              # currently training is a list of lists of lists because of the buckets.
         for lst in trainList:   # we can now remove the buckets by concatenating the lists of instance
             train += lst        # into one list of instances, flattening our data, & making it easier to work with
@@ -185,6 +172,8 @@ def main() -> None:
         # format data for SciKit Learn
         # TODO change the below to use transformedData instead of train
         # create the label array Y (the target of our training)
+        # TODO Check that this is flattening correctly
+        # + check that this doesn't conflict with earlier flatten (~line 162)
         flat = np.ravel(train[:, :1])  # flatten the label list
         labels = np.array(flat)        # convert the label list to a numpy array
         # create the feature matrix X ()
@@ -205,6 +194,8 @@ def main() -> None:
     
         # format data for SciKit Learn
         # create the label array Y (the target of our training)
+        # TODO Check that this is flattening correctly
+        # + check that this doesn't conflict with earlier flatten (~line 162)
         flat = np.ravel(testing[:, :1])  # flatten the label list
         trueLabels = np.array(flat)      # convert the label list to a numpy array
         # create the feature matrix X ()
@@ -213,10 +204,6 @@ def main() -> None:
         # *** 3D.3 Feed the Training Data into the Model & get Accuracy *** #
         labelPrediction = model.predict(ftrs)  # use model to predict labels
         # compute the accuracy score by comparing the actual labels with those predicted
-        # ? currently the accuracy generated is the same every time, is this a bug?
-        # + Kth Nearest Neighbor Classifier Gives --- 0.9350
-        # + Decision Tree Gives --------------------- 0.9262
-        # + Naive Baye's Gives ---------------------- 0.5660
         accuracy.append(accuracy_score(trueLabels, labelPrediction))
     
     # *** Report Accuracy *** #
