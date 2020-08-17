@@ -15,7 +15,7 @@ from sklearn.naive_bayes import GaussianNB
 # from sklearn.tree import DecisionTreeClassifier
 
 # * Next Steps
-# TODO figure out why model is giving the same value everytime -- maybe there's an issue with flattening?
+# TODO get CDFC working & use it to reduce data
 
 
 def discretization(data: np.ndarray) -> np.ndarray:
@@ -152,14 +152,13 @@ def main() -> None:
             oldR = r                             # save the current r value for then next loop
     
         # *** Flatten the Training Data *** #
-        # TODO check that this is flattening the data correctly
         train = []              # currently training is a list of lists of lists because of the buckets.
         for lst in trainList:   # we can now remove the buckets by concatenating the lists of instance
             train += lst        # into one list of instances, flattening our data, & making it easier to work with
 
         # transform the training & testing data into numpy arrays & free the List vars to be reused
         train = np.array(train)          # turn training data into a numpy array
-        testing = np.array(testingList)  # turn testing data into a numpy array
+        testing = np.array(testingList)  # turn testing data into a numpy array, testing doesn't need to be flattened
     
         # *** 3A Normalize the Training Data *** #
         train, scalar = normalize(train, None)  # now normalize the training, and keep the scalar used
@@ -172,9 +171,7 @@ def main() -> None:
         # format data for SciKit Learn
         # TODO change the below to use transformedData instead of train
         # create the label array Y (the target of our training)
-        # TODO Check that this is flattening correctly
-        # + check that this doesn't conflict with earlier flatten (~line 162)
-        flat = np.ravel(train[:, :1])  # flatten the label list
+        flat = np.ravel(train[:, :1])  # get a list of all the labels as a list of lists & then flatten it
         labels = np.array(flat)        # convert the label list to a numpy array
         # create the feature matrix X ()
         ftrs = np.array(train[:, 1:])  # get everything BUT the labels/ids
@@ -194,9 +191,7 @@ def main() -> None:
     
         # format data for SciKit Learn
         # create the label array Y (the target of our training)
-        # TODO Check that this is flattening correctly
-        # + check that this doesn't conflict with earlier flatten (~line 162)
-        flat = np.ravel(testing[:, :1])  # flatten the label list
+        flat = np.ravel(testing[:, :1])  # get a list of all the labels as a list of lists & then flatten it
         trueLabels = np.array(flat)      # convert the label list to a numpy array
         # create the feature matrix X ()
         ftrs = np.array(testing[:, 1:])  # get everything BUT the labels/ids
