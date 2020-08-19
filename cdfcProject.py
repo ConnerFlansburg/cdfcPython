@@ -1,18 +1,15 @@
 import copy
 import typing as typ
 import numpy as np
-import collections as collect
 import tkinter as tk
+import pandas as pd
 from tkinter import filedialog
 # from cdfc import cdfc
-from pprint import pprint
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score
-
-# *** Only one of these imports will be used at a time, which one depends on the model being used *** #
-# from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
-# from sklearn.tree import DecisionTreeClassifier
+from sklearn.tree import DecisionTreeClassifier
 
 # * Next Steps
 # TODO get CDFC working & use it to reduce data
@@ -117,14 +114,8 @@ def fillBuckets(entries: np.ndarray, K: int) -> typ.List[typ.List[np.ndarray]]:
     return buckets
 
 
-def main() -> None:
+def buildModel(entries, model) -> typ.List[float]:
 
-    tk.Tk().withdraw()  # prevent root window caused by Tkinter
-    path = filedialog.askopenfilename()  # prompt user for file path
-
-    # *** Parse the file into a numpy 2d array *** #
-    entries = np.genfromtxt(path, delimiter=',', skip_header=1)  # + this line is used to read .csv files
-    
     # *** create a set of K buckets filled with our instances *** #
     K = 10  # set the K for k fold cross validation
     buckets = fillBuckets(entries, K)  # using the parsed data, fill the k buckets
@@ -177,10 +168,6 @@ def main() -> None:
         ftrs = np.array(train[:, 1:])  # get everything BUT the labels/ids
     
         # now that the data is formatted, run the learning algorithm
-        # ? what's a good value for n_neighbors?
-        # + model = KNeighborsClassifier(n_neighbors=3)     # Kth Nearest Neighbor Classifier
-        # + model = DecisionTreeClassifier(random_state=0)  # Decision Tree Classifier
-        model = GaussianNB()                            # Create a Gaussian Classifier (Naive Baye's)
         model.fit(ftrs, labels)                         # Train the model
     
         # *** 3D.1 Normalize the Testing Data *** #
@@ -201,17 +188,30 @@ def main() -> None:
         # compute the accuracy score by comparing the actual labels with those predicted
         accuracy.append(accuracy_score(trueLabels, labelPrediction))
     
-    # *** Report Accuracy *** #
-    results = collect.namedtuple('results', ['standard_deviation', 'mean', 'median', 'max', 'min'])
-    r = results(np.std(accuracy), np.mean(accuracy), np.median(accuracy), max(accuracy), min(accuracy))
+    # *** Return Accuracy *** #
+    return accuracy
+
+
+def main() -> None:
     
-    print(f'The standard deviation: {r.standard_deviation}',
-          f'The mean: {r.mean}',
-          f'The median: {r.median}',
-          f'The max: {r.max}',
-          f'The min: {r.min}', sep='\n')
+    tk.Tk().withdraw()                   # prevent root window caused by Tkinter
+    path = filedialog.askopenfilename()  # prompt user for file path
     
-    pprint(accuracy)
+    # *** Parse the file into a numpy 2d array *** #
+    entries = np.genfromtxt(path, delimiter=',', skip_header=1)  # + this line is used to read .csv files
+
+    # accuracy is a float list, each value is the accuracy for a single run
+    knnAccuracy = buildModel(entries, KNeighborsClassifier(n_neighbors=3))    # Kth Nearest Neighbor Classifier
+    dtAccuracy = buildModel(entries, DecisionTreeClassifier(random_state=0))  # Decision Tree Classifier
+    nbAccuracy = buildModel(entries, GaussianNB())                            # Create a Gaussian Classifier (Naive Baye's)
+    
+    # use accuracy to create a dataframe
+    accuracyList = {'KNN': knnAccuracy, 'Decision Tree': dtAccuracy, 'Naive Bayes': nbAccuracy}
+    df = pd.DataFrame(accuracyList, columns=['KNN', 'Decision Tree', 'Naive Bayes'])
+    
+    # export the data frame to a csv
+    export_file_path = filedialog.asksaveasfilename(defaultextension='.csv')
+    df.to_csv(export_file_path, index=False, encoding='utf-8')
 
 
 if __name__ == "__main__":
