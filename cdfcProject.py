@@ -3,6 +3,7 @@ import typing as typ
 import numpy as np
 import tkinter as tk
 import pandas as pd
+import matplotlib.pyplot as plt
 from tkinter import filedialog
 # from cdfc import cdfc
 from sklearn.preprocessing import StandardScaler
@@ -209,7 +210,40 @@ def main() -> None:
     accuracyList = {'KNN': knnAccuracy, 'Decision Tree': dtAccuracy, 'Naive Bayes': nbAccuracy}
     df = pd.DataFrame(accuracyList, columns=['KNN', 'Decision Tree', 'Naive Bayes'])
     
-    # export the data frame to a csv
+    # *** Create the Plot *** #
+    red_diamond = dict(markerfacecolor='tab:red', marker='D')
+    fig1 = df.boxplot(showmeans=True,               # create boxplot, store it in fig1, & show the means
+                      flierprops=red_diamond,       # change the outliers to be red diamonds
+                      medianprops=dict(color='g'))  # change the medians to be green
+    fig1.set_title("Accuracy")                      # set the title of the plot
+    fig1.set_xlabel("Accuracy Ratio")               # set the label of the x-axis
+    fig1.set_ylabel("Model Type")                   # set the label of the y-axis
+    
+    # *** Save the Plot as an Image *** #
+    # create a list of file formats that the plot may be saved as
+    images = [('Image Files', ['.jpeg', '.jpg', '.png', '.tiff', '.tif', '.bmp'])]
+    # ask the user where they want to save the plot
+    out = filedialog.asksaveasfilename(defaultextension='.png', filetypes=images)
+    # save the plot to the location provided by the user
+    plt.savefig(out)
+
+    # *** Export the Statistics as a LaTeX File *** #
+    # this is a list of the column name & their values
+    clms = {'Mean': [np.mean(knnAccuracy), np.mean(dtAccuracy), np.mean(nbAccuracy)],
+            'Max': [max(knnAccuracy), max(dtAccuracy), max(nbAccuracy)],
+            'Min': [min(knnAccuracy), min(dtAccuracy), min(nbAccuracy)],
+            'Standard Deviation': [np.std(knnAccuracy), np.std(dtAccuracy), np.std(nbAccuracy)]}
+    # this is a list of the row names
+    rws = ['KNN', 'Decision Tree', 'Naive Bayes']
+    # create a data frame using the column & row lists
+    frame = pd.DataFrame(data=clms, index=rws)
+    # ask the user where they want to save the latex output
+    out = filedialog.asksaveasfilename(defaultextension='.tex')
+    # open the file & write frame to it after converting it to latex
+    with open(out, "w") as texFile:
+        print(frame.to_latex(), file=texFile)
+
+    # *** Export the Raw Accuracy Values as a CSV *** #
     export_file_path = filedialog.asksaveasfilename(defaultextension='.csv')
     df.to_csv(export_file_path, index=False, encoding='utf-8')
 
