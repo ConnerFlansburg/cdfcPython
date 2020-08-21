@@ -211,13 +211,17 @@ def main() -> None:
     df = pd.DataFrame(accuracyList, columns=['KNN', 'Decision Tree', 'Naive Bayes'])
     
     # *** Create the Plot *** #
-    red_diamond = dict(markerfacecolor='tab:red', marker='D')
-    fig1 = df.boxplot(showmeans=True,               # create boxplot, store it in fig1, & show the means
-                      flierprops=red_diamond,       # change the outliers to be red diamonds
-                      medianprops=dict(color='g'))  # change the medians to be green
-    fig1.set_title("Accuracy")                      # set the title of the plot
-    fig1.set_xlabel("Accuracy Ratio")               # set the label of the x-axis
-    fig1.set_ylabel("Model Type")                   # set the label of the y-axis
+    outlierSymbol = dict(markerfacecolor='tab:red', marker='D')  # change the outliers to be red diamonds
+    medianSymbol = dict(linewidth=2.5, color='tab:green')        # change the medians to be green
+    meanlineSymbol = dict(linewidth=2.5, color='tab:blue')       # change the means to be blue
+    fig1 = df.boxplot(showmeans=True,                            # create boxplot, store it in fig1, & show the means
+                      meanline=True,                             # show mean as a mean line
+                      flierprops=outlierSymbol,                  # set the outlier properties
+                      medianprops=medianSymbol,                  # set the median properties
+                      meanprops=meanlineSymbol)                  # set the mean properties
+    fig1.set_title("Accuracy")                                   # set the title of the plot
+    fig1.set_xlabel("Accuracy Ratio")                            # set the label of the x-axis
+    fig1.set_ylabel("Model Type")                                # set the label of the y-axis
     
     # *** Save the Plot as an Image *** #
     # create a list of file formats that the plot may be saved as
