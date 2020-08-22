@@ -3,7 +3,7 @@ import typing as typ
 import numpy as np
 import tkinter as tk
 import pandas as pd
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 from tkinter import filedialog
 # from cdfc import cdfc
 from sklearn.preprocessing import StandardScaler
@@ -13,7 +13,10 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
 
 # * Next Steps
+# TODO export data from Colon - for some reason it's hitting and inifity, Nan, of max value
 # TODO get CDFC working & use it to reduce data
+
+K: typ.Final[int] = 10  # set the K for k fold cross validation
 
 
 def discretization(data: np.ndarray) -> np.ndarray:
@@ -67,7 +70,7 @@ def normalize(entries: np.ndarray, scalar: typ.Union[None, StandardScaler, ]) ->
     return entries, stdScalar
 
 
-def fillBuckets(entries: np.ndarray, K: int) -> typ.List[typ.List[np.ndarray]]:
+def fillBuckets(entries: np.ndarray) -> typ.List[typ.List[np.ndarray]]:
     # *** connect a class to every instance that occurs in it ***
     # this will map a classId to a 2nd dictionary that will hold the number of instances in that class &
     # the instances
@@ -102,7 +105,10 @@ def fillBuckets(entries: np.ndarray, K: int) -> typ.List[typ.List[np.ndarray]]:
 
         # *** create a permutation of a class's instances *** #
         # permutation is a 2D numpy array, where each line is an instance
-        permutation = np.random.permutation(instances)  # this will reorder the instances but not their values
+        # seed = None
+        seed = 498
+        rand = np.random.default_rng(seed)             # create a numpy random generator with/without seed
+        permutation = rand.permutation(instances)  # shuffle the instances
 
         # *** assign instances to buckets *** #
         # loop over every instance in the class classId, in what is now a random order
@@ -116,10 +122,9 @@ def fillBuckets(entries: np.ndarray, K: int) -> typ.List[typ.List[np.ndarray]]:
 
 
 def buildModel(entries, model) -> typ.List[float]:
-
+    
     # *** create a set of K buckets filled with our instances *** #
-    K = 10  # set the K for k fold cross validation
-    buckets = fillBuckets(entries, K)  # using the parsed data, fill the k buckets
+    buckets = fillBuckets(entries)  # using the parsed data, fill the k buckets
 
     # *** Loop over our buckets K times, each time running creating a new hypothesis *** #
     oldR = 0                            # used to remember previous r in loop
@@ -129,7 +134,7 @@ def buildModel(entries, model) -> typ.List[float]:
 
     # *** Divide them into training & test data K times ***
     # loop over all the random index values
-    for r in range(0, K-1):  # len(r) = K so this will be done K times
+    for r in range(0, K):  # len(r) = K so this will be done K times
     
         # *** Get the Training & Testing Data *** #
         # the Rth bucket becomes our testing data, everything else becomes training data
@@ -206,11 +211,36 @@ def main() -> None:
     dtAccuracy = buildModel(entries, DecisionTreeClassifier(random_state=0))  # Decision Tree Classifier
     nbAccuracy = buildModel(entries, GaussianNB())                            # Create a Gaussian Classifier (Naive Baye's)
     
-    # use accuracy to create a dataframe
+    # *** Create a Dataframe that Combines the Accuracy of all the Models *** #
+    # use accuracy data to create a dictionary. This will become the frame
     accuracyList = {'KNN': knnAccuracy, 'Decision Tree': dtAccuracy, 'Naive Bayes': nbAccuracy}
-    df = pd.DataFrame(accuracyList, columns=['KNN', 'Decision Tree', 'Naive Bayes'])
+    # this will create labels for each instance ("fold") of the model, of the form "Fold i"
+    rowList = [["Fold {}".format(i) for i in range(1, K+1)]]
+    # create the dataframe. It will be used both by the latex & the plot exporter
+    df = pd.DataFrame(accuracyList, columns=['KNN', 'Decision Tree', 'Naive Bayes'], index=rowList)
+
+    # *** Modify the Dataframe to Match our LaTeX File *** #
     
-    # *** Create the Plot *** #
+    latexFrame = df.transpose()  # transposing passes a copy, so as to avoid issues with plot (should we want it)
+    
+    mn = [min(knnAccuracy), min(dtAccuracy), min(nbAccuracy)]                        # create the new min,
+    median = [np.median(knnAccuracy), np.median(dtAccuracy), np.median(nbAccuracy)]  # median,
+    mean = [np.mean(knnAccuracy), np.mean(dtAccuracy), np.mean(nbAccuracy)]          # mean,
+    mx = [max(knnAccuracy), max(dtAccuracy), max(nbAccuracy)]                        # & max columns
+    
+    latexFrame['min'] = mn             # add the min,
+    latexFrame['median'] = median      # median,
+    latexFrame['mean'] = mean          # mean,
+    latexFrame['max'] = mx             # & max columns to the dataframe
+    latexFrame *= 100                  # turn the decimal into a percent
+    latexFrame = latexFrame.round(1)   # round to 1 decimal place
+    
+    # *** Export the Dataframe as a LaTeX File *** #
+    out = filedialog.asksaveasfilename(defaultextension='.tex')  # ask the user where they want to save the latex output
+    with open(out, "w") as texFile:                 # open the selected file
+        print(latexFrame.to_latex(), file=texFile)  # & write dataframe to it, converting it to latex
+
+    '''   # *** Create the Plot *** #
     outlierSymbol = dict(markerfacecolor='tab:red', marker='D')  # change the outliers to be red diamonds
     medianSymbol = dict(linewidth=2.5, color='tab:green')        # change the medians to be green
     meanlineSymbol = dict(linewidth=2.5, color='tab:blue')       # change the means to be blue
@@ -229,27 +259,7 @@ def main() -> None:
     # ask the user where they want to save the plot
     out = filedialog.asksaveasfilename(defaultextension='.png', filetypes=images)
     # save the plot to the location provided by the user
-    plt.savefig(out)
-
-    # *** Export the Statistics as a LaTeX File *** #
-    # this is a list of the column name & their values
-    clms = {'Mean': [np.mean(knnAccuracy), np.mean(dtAccuracy), np.mean(nbAccuracy)],
-            'Max': [max(knnAccuracy), max(dtAccuracy), max(nbAccuracy)],
-            'Min': [min(knnAccuracy), min(dtAccuracy), min(nbAccuracy)],
-            'Standard Deviation': [np.std(knnAccuracy), np.std(dtAccuracy), np.std(nbAccuracy)]}
-    # this is a list of the row names
-    rws = ['KNN', 'Decision Tree', 'Naive Bayes']
-    # create a data frame using the column & row lists
-    frame = pd.DataFrame(data=clms, index=rws)
-    # ask the user where they want to save the latex output
-    out = filedialog.asksaveasfilename(defaultextension='.tex')
-    # open the file & write frame to it after converting it to latex
-    with open(out, "w") as texFile:
-        print(frame.to_latex(), file=texFile)
-
-    # *** Export the Raw Accuracy Values as a CSV *** #
-    export_file_path = filedialog.asksaveasfilename(defaultextension='.csv')
-    df.to_csv(export_file_path, index=False, encoding='utf-8')
+    plt.savefig(out)'''
 
 
 if __name__ == "__main__":
