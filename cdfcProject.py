@@ -1,10 +1,12 @@
 import copy
+import sys
 import typing as typ
 import numpy as np
 import tkinter as tk
 import pandas as pd
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 from tkinter import filedialog
+from pathlib import Path
 # from cdfc import cdfc
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score
@@ -13,10 +15,31 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
 
 # * Next Steps
-# TODO export data from Colon - for some reason it's hitting and inifity, Nan, of max value
 # TODO get CDFC working & use it to reduce data
 
 K: typ.Final[int] = 10  # set the K for k fold cross validation
+
+
+def createPlot(df):
+    # *** Create the Plot *** #
+    outlierSymbol = dict(markerfacecolor='tab:red', marker='D')  # change the outliers to be red diamonds
+    medianSymbol = dict(linewidth=2.5, color='tab:green')        # change the medians to be green
+    meanlineSymbol = dict(linewidth=2.5, color='tab:blue')       # change the means to be blue
+    fig1 = df.boxplot(showmeans=True,                            # create boxplot, store it in fig1, & show the means
+                      meanline=True,                             # show mean as a mean line
+                      flierprops=outlierSymbol,                  # set the outlier properties
+                      medianprops=medianSymbol,                  # set the median properties
+                      meanprops=meanlineSymbol)                  # set the mean properties
+    fig1.set_title("Accuracy")                                   # set the title of the plot
+    fig1.set_xlabel("Accuracy Ratio")                            # set the label of the x-axis
+    fig1.set_ylabel("Model Type")                                # set the label of the y-axis
+    # *** Save the Plot as an Image *** #
+    # create a list of file formats that the plot may be saved as
+    images = [('Image Files', ['.jpeg', '.jpg', '.png', '.tiff', '.tif', '.bmp'])]
+    # ask the user where they want to save the plot
+    out = filedialog.asksaveasfilename(defaultextension='.png', filetypes=images)
+    # save the plot to the location provided by the user
+    plt.savefig(out)
 
 
 def discretization(data: np.ndarray) -> np.ndarray:
@@ -199,67 +222,97 @@ def buildModel(entries, model) -> typ.List[float]:
 
 
 def main() -> None:
+    hdr = '*' * 6
+    success = u' \u2713\n'
+    overWrite = '\r' + hdr
     
+    sysOut = sys.stdout
+    sysOut.write("Program initialized " + success)
+    
+    # formatting strings
     tk.Tk().withdraw()                   # prevent root window caused by Tkinter
     path = filedialog.askopenfilename()  # prompt user for file path
     
     # *** Parse the file into a numpy 2d array *** #
     entries = np.genfromtxt(path, delimiter=',', skip_header=1)  # + this line is used to read .csv files
-
+    sysOut.write('Parsed .csv file ' + success)
+    
     # accuracy is a float list, each value is the accuracy for a single run
-    knnAccuracy = buildModel(entries, KNeighborsClassifier(n_neighbors=3))    # Kth Nearest Neighbor Classifier
-    dtAccuracy = buildModel(entries, DecisionTreeClassifier(random_state=0))  # Decision Tree Classifier
-    nbAccuracy = buildModel(entries, GaussianNB())                            # Create a Gaussian Classifier (Naive Baye's)
+    sysOut.write("\nBuilding models...\n")
+    sysOut.write(hdr + ' KNN model starting ......')                          # print \tab * KNN model starting......
+    sysOut.flush()                                                            # since there's no newline push buffer to console
+    knnAccuracy = buildModel(entries, KNeighborsClassifier(n_neighbors=3))    # * Kth Nearest Neighbor Classifier
+    sysOut.write(overWrite +                                                  # replace starting with complete
+                 ' KNN model completed '.ljust(50, '-')+success)
+    
+    sysOut.write(hdr + ' Decision Tree model starting ......')                # print \tab * dt model starting......
+    sysOut.flush()                                                            # since there's no newline push buffer to console
+    dtAccuracy = buildModel(entries, DecisionTreeClassifier(random_state=0))  # * Decision Tree Classifier
+    sysOut.write(overWrite +                                                  # replace starting with complete
+                 ' Decision Tree model built '.ljust(50, '-')+success)
+    
+    sysOut.write(hdr + ' Naive Bayes model starting ......')                  # print \tab * nb model starting......
+    sysOut.flush()                                                            # since there's no newline push buffer to console
+    nbAccuracy = buildModel(entries, GaussianNB())                            # * Gaussian Classifier (Naive Baye's)
+    sysOut.write(overWrite +                                                  # replace starting with complete
+                 ' Naive Bayes model built '.ljust(50, '-')+success)
+    sysOut.write("Models built\n\n")
     
     # *** Create a Dataframe that Combines the Accuracy of all the Models *** #
+    sysOut.write("Creating accuracy dataframe...")
+    sysOut.flush()
+    
     # use accuracy data to create a dictionary. This will become the frame
     accuracyList = {'KNN': knnAccuracy, 'Decision Tree': dtAccuracy, 'Naive Bayes': nbAccuracy}
     # this will create labels for each instance ("fold") of the model, of the form "Fold i"
     rowList = [["Fold {}".format(i) for i in range(1, K+1)]]
     # create the dataframe. It will be used both by the latex & the plot exporter
     df = pd.DataFrame(accuracyList, columns=['KNN', 'Decision Tree', 'Naive Bayes'], index=rowList)
+    
+    sysOut.write('\rAccuracy Dataframe created without error'+success)
 
     # *** Modify the Dataframe to Match our LaTeX File *** #
     
-    latexFrame = df.transpose()  # transposing passes a copy, so as to avoid issues with plot (should we want it)
+    sysOut.write("\nConverting frame to LaTeX...\n")
     
+    sysOut.write(hdr + ' Transposing dataframe')
+    sysOut.flush()
+    latexFrame = df.transpose()  # transposing passes a copy, so as to avoid issues with plot (should we want it)
+    sysOut.write(overWrite + ' Dataframe transposed '.ljust(50, '-')+success)
+
+    sysOut.write(hdr + ' Calculating statistics...')
+    sysOut.flush()
     mn = [min(knnAccuracy), min(dtAccuracy), min(nbAccuracy)]                        # create the new min,
     median = [np.median(knnAccuracy), np.median(dtAccuracy), np.median(nbAccuracy)]  # median,
     mean = [np.mean(knnAccuracy), np.mean(dtAccuracy), np.mean(nbAccuracy)]          # mean,
     mx = [max(knnAccuracy), max(dtAccuracy), max(nbAccuracy)]                        # & max columns
-    
+    sysOut.write(overWrite + ' Statistics calculated '.ljust(50, '-')+success)
+
+    sysOut.write(hdr + ' Adding statistics to dataframe...')
+    sysOut.flush()
     latexFrame['min'] = mn             # add the min,
     latexFrame['median'] = median      # median,
     latexFrame['mean'] = mean          # mean,
     latexFrame['max'] = mx             # & max columns to the dataframe
+    sysOut.write(overWrite + ' Statistics added to dataframe '.ljust(50, '-')+success)
+    
+    sysOut.write(hdr + ' Converting dataframe to percentages...')
+    sysOut.flush()
     latexFrame *= 100                  # turn the decimal into a percent
     latexFrame = latexFrame.round(1)   # round to 1 decimal place
-    
-    # *** Export the Dataframe as a LaTeX File *** #
-    out = filedialog.asksaveasfilename(defaultextension='.tex')  # ask the user where they want to save the latex output
-    with open(out, "w") as texFile:                 # open the selected file
-        print(latexFrame.to_latex(), file=texFile)  # & write dataframe to it, converting it to latex
+    sysOut.write(overWrite + ' Converted dataframe values to percentages '.ljust(50, '-')+success)
 
-    '''   # *** Create the Plot *** #
-    outlierSymbol = dict(markerfacecolor='tab:red', marker='D')  # change the outliers to be red diamonds
-    medianSymbol = dict(linewidth=2.5, color='tab:green')        # change the medians to be green
-    meanlineSymbol = dict(linewidth=2.5, color='tab:blue')       # change the means to be blue
-    fig1 = df.boxplot(showmeans=True,                            # create boxplot, store it in fig1, & show the means
-                      meanline=True,                             # show mean as a mean line
-                      flierprops=outlierSymbol,                  # set the outlier properties
-                      medianprops=medianSymbol,                  # set the median properties
-                      meanprops=meanlineSymbol)                  # set the mean properties
-    fig1.set_title("Accuracy")                                   # set the title of the plot
-    fig1.set_xlabel("Accuracy Ratio")                            # set the label of the x-axis
-    fig1.set_ylabel("Model Type")                                # set the label of the y-axis
+    sysOut.write("Dataframe converted to LaTeX\n")
+
+    # *** Export the Dataframe as a LaTeX File *** #
+    sysOut.write('\nExporting LaTeX dataframe...')
     
-    # *** Save the Plot as an Image *** #
-    # create a list of file formats that the plot may be saved as
-    images = [('Image Files', ['.jpeg', '.jpg', '.png', '.tiff', '.tif', '.bmp'])]
-    # ask the user where they want to save the plot
-    out = filedialog.asksaveasfilename(defaultextension='.png', filetypes=images)
-    # save the plot to the location provided by the user
-    plt.savefig(out)'''
+    # ? BUG for some reason filedialog will not open. Path works however
+    # filePath = filedialog.asksaveasfilename(defaultextension='.tex')  # ask the user where they want to save the latex output
+    filePath = Path("data/outputs/debugOutput.tex")
+
+    with open(filePath, "w") as texFile:            # open the selected file
+        print(latexFrame.to_latex(), file=texFile)  # & write dataframe to it, converting it to latex
 
 
 if __name__ == "__main__":
