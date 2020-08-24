@@ -7,12 +7,35 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from tkinter import filedialog
 from pathlib import Path
+from pyfiglet import Figlet
 # from cdfc import cdfc
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
+
+
+'''
+                                       CSVs should be of the form
+
+           |  label/id   |   attribute 1   |   attribute 2   |   attribute 3   |   attribute 4   | ... |   attribute k   |
+--------------------------------------------------------------------------------------------------------------------------
+instance 1 | class value | attribute value | attribute value | attribute value | attribute value | ... | attribute value |
+--------------------------------------------------------------------------------------------------------------------------
+instance 2 | class value | attribute value | attribute value | attribute value | attribute value | ... | attribute value |
+--------------------------------------------------------------------------------------------------------------------------
+instance 3 | class value | attribute value | attribute value | attribute value | attribute value | ... | attribute value |
+--------------------------------------------------------------------------------------------------------------------------
+instance 4 | class value | attribute value | attribute value | attribute value | attribute value | ... | attribute value |
+--------------------------------------------------------------------------------------------------------------------------
+    ...    |    ...      |      ...        |       ...       |       ...       |       ...       | ... |       ...       |
+--------------------------------------------------------------------------------------------------------------------------
+instance n | class value | attribute value | attribute value | attribute value | attribute value | ... | attribute value |
+--------------------------------------------------------------------------------------------------------------------------
+
+'''
+
 
 # * Next Steps
 # TODO get CDFC working & use it to reduce data
@@ -222,19 +245,21 @@ def buildModel(entries, model) -> typ.List[float]:
 
 
 def main() -> None:
+    
+    # formatting strings
     hdr = '*' * 6
     success = u' \u2713\n'
     overWrite = '\r' + hdr
-    
+
     sysOut = sys.stdout
+    sysOut.write(Figlet(font='larry3d').renderText('C D F C'))
     sysOut.write("Program initialized " + success)
     
-    # formatting strings
-    tk.Tk().withdraw()                   # prevent root window caused by Tkinter
-    path = filedialog.askopenfilename()  # prompt user for file path
+    tk.Tk().withdraw()                           # prevent root window caused by Tkinter
+    inPath = Path(filedialog.askopenfilename())  # prompt user for file path
     
     # *** Parse the file into a numpy 2d array *** #
-    entries = np.genfromtxt(path, delimiter=',', skip_header=1)  # + this line is used to read .csv files
+    entries = np.genfromtxt(inPath, delimiter=',', skip_header=1)  # + this line is used to read .csv files
     sysOut.write('Parsed .csv file ' + success)
     
     # accuracy is a float list, each value is the accuracy for a single run
@@ -308,10 +333,11 @@ def main() -> None:
     sysOut.write('\nExporting LaTeX dataframe...')
     
     # ? BUG for some reason filedialog will not open. Path works however
-    # filePath = filedialog.asksaveasfilename(defaultextension='.tex')  # ask the user where they want to save the latex output
-    filePath = Path("data/outputs/debugOutput.tex")
+    # outPath = filedialog.asksaveasfilename(defaultextension='.tex')  # ask the user where they want to save the latex output
+    # save the .tex file under the same name as the input but in the outputs folder
+    outPath = Path.cwd() / 'data' / 'outputs' / (inPath.stem + '.tex')
 
-    with open(filePath, "w") as texFile:            # open the selected file
+    with open(outPath, "w") as texFile:             # open the selected file
         print(latexFrame.to_latex(), file=texFile)  # & write dataframe to it, converting it to latex
 
 
