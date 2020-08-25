@@ -1,20 +1,20 @@
 import copy
 import sys
-import typing as typ
-import numpy as np
 import tkinter as tk
-import pandas as pd
-import matplotlib.pyplot as plt
-from tkinter import filedialog
+import typing as typ
 from pathlib import Path
+from tkinter import filedialog
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from pyfiglet import Figlet
+from sklearn.metrics import accuracy_score
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neighbors import KNeighborsClassifier
 # from cdfc import cdfc
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import accuracy_score
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
-
 
 '''
                                        CSVs should be of the form
@@ -116,54 +116,66 @@ def normalize(entries: np.ndarray, scalar: typ.Union[None, StandardScaler, ]) ->
     return entries, stdScalar
 
 
-def fillBuckets(entries: np.ndarray) -> typ.List[typ.List[np.ndarray]]:
+def __mapInstanceToClass(entries: np.ndarray):
     # *** connect a class to every instance that occurs in it ***
     # this will map a classId to a 2nd dictionary that will hold the number of instances in that class &
     # the instances
     # classToInstances[classId] = list[counter, instance1[], instance2[], ...]
     classToInstances: typ.Dict[int, typ.List[typ.Union[int, typ.List[typ.Union[int, float]]]]] = {}
-
+    
     for e in entries:
-
+        
         label = e[0]  # get the class id from the entry
-
+        
         # if we already have an entry for that classId, append to it
         if classToInstances.get(label):
-            classToInstances.get(label)[0] += 1            # increment instance counter
-            idx = classToInstances.get(label)[0]           # get the index that the counter says is next
+            classToInstances.get(label)[0] += 1  # increment instance counter
+            idx = classToInstances.get(label)[0]  # get the index that the counter says is next
             classToInstances.get(label).insert(idx, e[:])  # at that index insert a list representing the instance
-            
+        
         # if this is the first time we've seen the class, create a new list for it
         else:
             # add a list, at index 0 put the counter, and at index 1 put a list containing the instance (values & label)
             classToInstances[label] = [1, e[:]]
+    
+    return classToInstances
 
+
+def dealToBuckets(classToInstances):
     # *** Now create a random permutation of the instances in a class, & put them in buckets ***
     buckets = [[] for _ in range(K)]  # create a list of empty lists that we will "deal" our "deck" of instances to
-    index = 0                         # this will be the index of the bucket we are "dealing" to
-
+    index = 0  # this will be the index of the bucket we are "dealing" to
+    
     for classId in classToInstances.keys():
-
+        
         # *** for each class use the class id to get it's instances ***
         # instances is of the form [instance1, instance2, ...]  (the counter has been removed)
         # where instanceN is a numpy array and where instanceN[0] is the classId & instanceN[1:] are the values
         instances: typ.List[typ.List[typ.Union[int, float]]] = classToInstances[classId][1:]
-
+        
         # *** create a permutation of a class's instances *** #
         # permutation is a 2D numpy array, where each line is an instance
         # seed = None
         seed = 498
-        rand = np.random.default_rng(seed)             # create a numpy random generator with/without seed
+        rand = np.random.default_rng(seed)  # create a numpy random generator with/without seed
         permutation = rand.permutation(instances)  # shuffle the instances
-
+        
         # *** assign instances to buckets *** #
         # loop over every instance in the class classId, in what is now a random order
         # p will be a single row from permutation & so will be a 1D numpy array representing an instance
-        for p in permutation:         # for every row in permutation
+        for p in permutation:  # for every row in permutation
             buckets[index].append(p)  # add the random instance to the bucket at index
-            index = (index+1) % K     # increment index in a round robin style
-
+            index = (index + 1) % K  # increment index in a round robin style
+    
     # *** The buckets are now full & together should contain every instance *** #
+    return buckets
+
+
+def fillBuckets(entries: np.ndarray) -> typ.List[typ.List[np.ndarray]]:
+    
+    classToInstances = __mapInstanceToClass(entries)
+    buckets = dealToBuckets(classToInstances)
+    
     return buckets
 
 
