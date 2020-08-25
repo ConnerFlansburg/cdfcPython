@@ -255,8 +255,12 @@ def main() -> None:
     sysOut.write(Figlet(font='larry3d').renderText('C D F C'))
     sysOut.write("Program initialized " + success)
     
-    tk.Tk().withdraw()                           # prevent root window caused by Tkinter
-    inPath = Path(filedialog.askopenfilename())  # prompt user for file path
+    tk.Tk().withdraw()                                          # prevent root window caused by Tkinter
+    try:
+        inPath = Path(filedialog.askopenfilename())             # prompt user for file path
+    except PermissionError:
+        sys.stderr.write("Permission Denied\nExiting...")       # exit gracefully
+        sys.exit("Could not access file/No file was selected")
     
     # *** Parse the file into a numpy 2d array *** #
     entries = np.genfromtxt(inPath, delimiter=',', skip_header=1)  # + this line is used to read .csv files
