@@ -41,6 +41,14 @@ instance n | class value | attribute value | attribute value | attribute value |
 # TODO get CDFC working & use it to reduce data
 
 K: typ.Final[int] = 10  # set the K for k fold cross validation
+ModelList = typ.Tuple[typ.List[float], typ.List[float], typ.List[float]]  # type hinting alias
+ModelTypes = typ.Union[KNeighborsClassifier, GaussianNB, DecisionTreeClassifier]  # type hinting alias
+
+# console formatting strings
+HDR = '*' * 6
+SUCCESS = u' \u2713\n'
+OVERWRITE = '\r' + HDR
+SYSOUT = sys.stdout
 
 
 def createPlot(df):
@@ -141,7 +149,15 @@ def __mapInstanceToClass(entries: np.ndarray):
     return classToInstances
 
 
-def dealToBuckets(classToInstances):
+def __getPermutation(instances: typ.List[typ.List[typ.Union[int, float]]], seed: int = None):
+    # *** create a permutation of a class's instances *** #
+    # permutation is a 2D numpy array, where each line is an instance
+    rand = np.random.default_rng(seed)  # create a numpy random generator with/without seed
+    permutation = rand.permutation(instances)  # shuffle the instances
+    return permutation
+
+
+def __dealToBuckets(classToInstances):
     # *** Now create a random permutation of the instances in a class, & put them in buckets ***
     buckets = [[] for _ in range(K)]  # create a list of empty lists that we will "deal" our "deck" of instances to
     index = 0  # this will be the index of the bucket we are "dealing" to
@@ -151,15 +167,8 @@ def dealToBuckets(classToInstances):
         # *** for each class use the class id to get it's instances ***
         # instances is of the form [instance1, instance2, ...]  (the counter has been removed)
         # where instanceN is a numpy array and where instanceN[0] is the classId & instanceN[1:] are the values
-        instances: typ.List[typ.List[typ.Union[int, float]]] = classToInstances[classId][1:]
-        
-        # *** create a permutation of a class's instances *** #
-        # permutation is a 2D numpy array, where each line is an instance
-        # seed = None
-        seed = 498
-        rand = np.random.default_rng(seed)  # create a numpy random generator with/without seed
-        permutation = rand.permutation(instances)  # shuffle the instances
-        
+        permutation = __getPermutation(classToInstances[classId][1:])
+
         # *** assign instances to buckets *** #
         # loop over every instance in the class classId, in what is now a random order
         # p will be a single row from permutation & so will be a 1D numpy array representing an instance
@@ -174,12 +183,12 @@ def dealToBuckets(classToInstances):
 def fillBuckets(entries: np.ndarray) -> typ.List[typ.List[np.ndarray]]:
     
     classToInstances = __mapInstanceToClass(entries)
-    buckets = dealToBuckets(classToInstances)
+    buckets = __dealToBuckets(classToInstances)
     
     return buckets
 
 
-def buildModel(entries, model) -> typ.List[float]:
+def buildModel(entries: np.ndarray, model: ModelTypes) -> typ.List[float]:
     
     # *** create a set of K buckets filled with our instances *** #
     buckets = fillBuckets(entries)  # using the parsed data, fill the k buckets
@@ -256,16 +265,111 @@ def buildModel(entries, model) -> typ.List[float]:
     return accuracy
 
 
-def main() -> None:
-    
-    # formatting strings
-    hdr = '*' * 6
-    success = u' \u2713\n'
-    overWrite = '\r' + hdr
+def __runSciKitModels(entries: np.ndarray) -> ModelList:
+    # NOTE adding more models requires updating the Models type at top of file
+    # hdr, overWrite, & success are just used to format string for the console
+    # accuracy is a float list, each value is the accuracy for a single run
 
-    sysOut = sys.stdout
-    sysOut.write(Figlet(font='larry3d').renderText('C D F C'))
-    sysOut.write("Program initialized " + success)
+    SYSOUT.write("\nBuilding models...\n")  # update user
+    
+    # *** Kth Nearest Neighbor Classifier *** #
+    SYSOUT.write(HDR + ' KNN model starting ......')                        # print \tab * KNN model starting......
+    SYSOUT.flush()                                                          # since there's no newline push buffer to console
+    knnAccuracy: typ.List[float] = buildModel(entries, KNeighborsClassifier(n_neighbors=3))  # build the model
+    SYSOUT.write(OVERWRITE+' KNN model completed '.ljust(50, '-')+SUCCESS)  # replace starting with complete
+
+    # *** Decision Tree Classifier *** #
+    SYSOUT.write(HDR + ' Decision Tree model starting ......')              # print \tab * dt model starting......
+    SYSOUT.flush()                                                          # since there's no newline push buffer to console
+    dtAccuracy: typ.List[float] = buildModel(entries, DecisionTreeClassifier(random_state=0))  # build the model
+    SYSOUT.write(OVERWRITE +                                                # replace starting with complete
+                 ' Decision Tree model built '.ljust(50, '-') + SUCCESS)
+
+    # *** Gaussian Classifier (Naive Baye's) *** #
+    SYSOUT.write(HDR + ' Naive Bayes model starting ......')                # print \tab * nb model starting......
+    SYSOUT.flush()                                                          # since there's no newline push buffer to console
+    nbAccuracy: typ.List[float] = buildModel(entries, GaussianNB())         # build the model
+    SYSOUT.write(OVERWRITE +                                                # replace starting with complete
+                 ' Naive Bayes model built '.ljust(50, '-') + SUCCESS)
+    
+    SYSOUT.write("Models built\n\n")  # update user
+
+    return knnAccuracy, dtAccuracy, nbAccuracy
+
+
+def __buildAccuracyFrame(modelsTuple: ModelList) -> pd.DataFrame:
+
+    SYSOUT.write("Creating accuracy dataframe...")  # update user
+    SYSOUT.flush()
+    
+    # get the models from the tuple
+    knnAccuracy = modelsTuple[0]
+    dtAccuracy = modelsTuple[1]
+    nbAccuracy = modelsTuple[2]
+    
+    # use accuracy data to create a dictionary. This will become the frame
+    accuracyList = {'KNN': knnAccuracy, 'Decision Tree': dtAccuracy, 'Naive Bayes': nbAccuracy}
+    # this will create labels for each instance ("fold") of the model, of the form "Fold i"
+    rowList = [["Fold {}".format(i) for i in range(1, K + 1)]]
+    # create the dataframe. It will be used both by the latex & the plot exporter
+    df = pd.DataFrame(accuracyList, columns=['KNN', 'Decision Tree', 'Naive Bayes'], index=rowList)
+
+    SYSOUT.write('\rAccuracy Dataframe created without error' + SUCCESS)  # update user
+    
+    return df
+
+
+def __accuracyFrameToLatex(modelsTuple, df):
+    
+    SYSOUT.write("\nConverting frame to LaTeX...\n")  # update user
+    SYSOUT.write(HDR + ' Transposing dataframe')      # update user
+    SYSOUT.flush()  # no newline, so buffer must be flushed to console
+    
+    # transposing passes a copy, so as to avoid issues with plot (should we want it)
+    frame = df.transpose()  # update user
+    
+    SYSOUT.write(OVERWRITE + ' Dataframe transposed '.ljust(50, '-') + SUCCESS)
+    
+    # get the models from the tuple
+    knnAccuracy = modelsTuple[0]
+    dtAccuracy = modelsTuple[1]
+    nbAccuracy = modelsTuple[2]
+    
+    SYSOUT.write(HDR + ' Calculating statistics...')  # update user
+    SYSOUT.flush()  # no newline, so buffer must be flushed to console
+    
+    mn = [min(knnAccuracy), min(dtAccuracy), min(nbAccuracy)]                        # create the new min,
+    median = [np.median(knnAccuracy), np.median(dtAccuracy), np.median(nbAccuracy)]  # median,
+    mean = [np.mean(knnAccuracy), np.mean(dtAccuracy), np.mean(nbAccuracy)]          # mean,
+    mx = [max(knnAccuracy), max(dtAccuracy), max(nbAccuracy)]                        # & max columns
+    
+    SYSOUT.write(OVERWRITE + ' Statistics calculated '.ljust(50, '-') + SUCCESS)     # update user
+    
+    SYSOUT.write(HDR + ' Adding statistics to dataframe...')  # update user
+    SYSOUT.flush()  # no newline, so buffer must be flushed to console
+    
+    frame['min'] = mn         # add the min,
+    frame['median'] = median  # median,
+    frame['mean'] = mean      # mean,
+    frame['max'] = mx         # & max columns to the dataframe
+    
+    SYSOUT.write(OVERWRITE + ' Statistics added to dataframe '.ljust(50, '-') + SUCCESS)  # update user
+    SYSOUT.write(HDR + ' Converting dataframe to percentages...')                         # update user
+    SYSOUT.flush()  # no newline, so buffer must be flushed to console
+    
+    frame *= 100  # turn the decimal into a percent
+    frame = frame.round(1)  # round to 1 decimal place
+    
+    SYSOUT.write(OVERWRITE + ' Converted dataframe values to percentages '.ljust(50, '-') + SUCCESS)  # update user
+    SYSOUT.write("Dataframe converted to LaTeX\n")
+    
+    return frame
+
+
+def main() -> None:
+
+    SYSOUT.write(Figlet(font='larry3d').renderText('C D F C'))
+    SYSOUT.write("Program initialized " + SUCCESS)
     
     tk.Tk().withdraw()                                          # prevent root window caused by Tkinter
     try:
@@ -276,77 +380,19 @@ def main() -> None:
     
     # *** Parse the file into a numpy 2d array *** #
     entries = np.genfromtxt(inPath, delimiter=',', skip_header=1)  # + this line is used to read .csv files
-    sysOut.write('Parsed .csv file ' + success)
+    SYSOUT.write('Parsed .csv file ' + SUCCESS)
     
-    # accuracy is a float list, each value is the accuracy for a single run
-    sysOut.write("\nBuilding models...\n")
-    sysOut.write(hdr + ' KNN model starting ......')                          # print \tab * KNN model starting......
-    sysOut.flush()                                                            # since there's no newline push buffer to console
-    knnAccuracy = buildModel(entries, KNeighborsClassifier(n_neighbors=3))    # * Kth Nearest Neighbor Classifier
-    sysOut.write(overWrite +                                                  # replace starting with complete
-                 ' KNN model completed '.ljust(50, '-')+success)
-    
-    sysOut.write(hdr + ' Decision Tree model starting ......')                # print \tab * dt model starting......
-    sysOut.flush()                                                            # since there's no newline push buffer to console
-    dtAccuracy = buildModel(entries, DecisionTreeClassifier(random_state=0))  # * Decision Tree Classifier
-    sysOut.write(overWrite +                                                  # replace starting with complete
-                 ' Decision Tree model built '.ljust(50, '-')+success)
-    
-    sysOut.write(hdr + ' Naive Bayes model starting ......')                  # print \tab * nb model starting......
-    sysOut.flush()                                                            # since there's no newline push buffer to console
-    nbAccuracy = buildModel(entries, GaussianNB())                            # * Gaussian Classifier (Naive Baye's)
-    sysOut.write(overWrite +                                                  # replace starting with complete
-                 ' Naive Bayes model built '.ljust(50, '-')+success)
-    sysOut.write("Models built\n\n")
-    
+    # *** Build the Models *** #
+    modelsTuple = __runSciKitModels(entries)  # knnAccuracy, dtAccuracy, nbAccuracy
+
     # *** Create a Dataframe that Combines the Accuracy of all the Models *** #
-    sysOut.write("Creating accuracy dataframe...")
-    sysOut.flush()
-    
-    # use accuracy data to create a dictionary. This will become the frame
-    accuracyList = {'KNN': knnAccuracy, 'Decision Tree': dtAccuracy, 'Naive Bayes': nbAccuracy}
-    # this will create labels for each instance ("fold") of the model, of the form "Fold i"
-    rowList = [["Fold {}".format(i) for i in range(1, K+1)]]
-    # create the dataframe. It will be used both by the latex & the plot exporter
-    df = pd.DataFrame(accuracyList, columns=['KNN', 'Decision Tree', 'Naive Bayes'], index=rowList)
-    
-    sysOut.write('\rAccuracy Dataframe created without error'+success)
+    accuracyFrame = __buildAccuracyFrame(modelsTuple)
 
     # *** Modify the Dataframe to Match our LaTeX File *** #
+    latexFrame = __accuracyFrameToLatex(modelsTuple, accuracyFrame)
     
-    sysOut.write("\nConverting frame to LaTeX...\n")
-    
-    sysOut.write(hdr + ' Transposing dataframe')
-    sysOut.flush()
-    latexFrame = df.transpose()  # transposing passes a copy, so as to avoid issues with plot (should we want it)
-    sysOut.write(overWrite + ' Dataframe transposed '.ljust(50, '-')+success)
-
-    sysOut.write(hdr + ' Calculating statistics...')
-    sysOut.flush()
-    mn = [min(knnAccuracy), min(dtAccuracy), min(nbAccuracy)]                        # create the new min,
-    median = [np.median(knnAccuracy), np.median(dtAccuracy), np.median(nbAccuracy)]  # median,
-    mean = [np.mean(knnAccuracy), np.mean(dtAccuracy), np.mean(nbAccuracy)]          # mean,
-    mx = [max(knnAccuracy), max(dtAccuracy), max(nbAccuracy)]                        # & max columns
-    sysOut.write(overWrite + ' Statistics calculated '.ljust(50, '-')+success)
-
-    sysOut.write(hdr + ' Adding statistics to dataframe...')
-    sysOut.flush()
-    latexFrame['min'] = mn             # add the min,
-    latexFrame['median'] = median      # median,
-    latexFrame['mean'] = mean          # mean,
-    latexFrame['max'] = mx             # & max columns to the dataframe
-    sysOut.write(overWrite + ' Statistics added to dataframe '.ljust(50, '-')+success)
-    
-    sysOut.write(hdr + ' Converting dataframe to percentages...')
-    sysOut.flush()
-    latexFrame *= 100                  # turn the decimal into a percent
-    latexFrame = latexFrame.round(1)   # round to 1 decimal place
-    sysOut.write(overWrite + ' Converted dataframe values to percentages '.ljust(50, '-')+success)
-
-    sysOut.write("Dataframe converted to LaTeX\n")
-
     # *** Export the Dataframe as a LaTeX File *** #
-    sysOut.write('\nExporting LaTeX dataframe...')
+    SYSOUT.write('\nExporting LaTeX dataframe...')
     
     # ? BUG for some reason filedialog will not open. Path works however
     # outPath = filedialog.asksaveasfilename(defaultextension='.tex')  # ask the user where they want to save the latex output
