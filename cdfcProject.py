@@ -51,7 +51,7 @@ OVERWRITE = '\r' + HDR
 SYSOUT = sys.stdout
 
 
-def createPlot(df):
+def __createPlot(df):
     # *** Create the Plot *** #
     outlierSymbol = dict(markerfacecolor='tab:red', marker='D')  # change the outliers to be red diamonds
     medianSymbol = dict(linewidth=2.5, color='tab:green')        # change the medians to be green
@@ -73,7 +73,7 @@ def createPlot(df):
     plt.savefig(out)
 
 
-def discretization(data: np.ndarray) -> np.ndarray:
+def __discretization(data: np.ndarray) -> np.ndarray:
     
     for index, item in np.ndenumerate(data):
 
@@ -89,7 +89,7 @@ def discretization(data: np.ndarray) -> np.ndarray:
     return data
 
 
-def normalize(entries: np.ndarray, scalar: typ.Union[None, StandardScaler, ]) -> typ.Tuple[np.ndarray, StandardScaler]:
+def __normalize(entries: np.ndarray, scalar: typ.Union[None, StandardScaler, ]) -> typ.Tuple[np.ndarray, StandardScaler]:
 
     # remove the class IDs so the don't get normalized
     noIds = np.array(entries[:, 1:])
@@ -107,7 +107,7 @@ def normalize(entries: np.ndarray, scalar: typ.Union[None, StandardScaler, ]) ->
         stdScalar = StandardScaler()        # create a scalar object
         stdScalar.fit(noIds)                # fit the scalar using the data
         tData = stdScalar.transform(noIds)  # perform the transformation
-        tData = discretization(tData)       # discrete transformation
+        tData = __discretization(tData)       # discrete transformation
 
     # if we are dealing with testing data
     else:
@@ -115,7 +115,7 @@ def normalize(entries: np.ndarray, scalar: typ.Union[None, StandardScaler, ]) ->
         # *** transform the data *** #
         stdScalar = scalar                  # used the passed scalar object
         tData = stdScalar.transform(noIds)  # transform the scalar using passed fit
-        tData = discretization(tData)       # discrete transformation
+        tData = __discretization(tData)       # discrete transformation
 
     # *** add the IDs back on *** #
     entries[:, 1:] = tData  # this overwrites everything in entries BUT the ids
@@ -180,7 +180,7 @@ def __dealToBuckets(classToInstances):
     return buckets
 
 
-def fillBuckets(entries: np.ndarray) -> typ.List[typ.List[np.ndarray]]:
+def __fillBuckets(entries: np.ndarray) -> typ.List[typ.List[np.ndarray]]:
     
     classToInstances = __mapInstanceToClass(entries)
     buckets = __dealToBuckets(classToInstances)
@@ -188,10 +188,34 @@ def fillBuckets(entries: np.ndarray) -> typ.List[typ.List[np.ndarray]]:
     return buckets
 
 
-def buildModel(entries: np.ndarray, model: ModelTypes) -> typ.List[float]:
+# TODO type hints
+def __flattenTrainingData(trainList):
+    train = []             # currently training is a list of lists of lists because of the buckets.
+    for lst in trainList:  # we can now remove the buckets by concatenating the lists of instance
+        train += lst       # into one list of instances, flattening our data, & making it easier to work with
+    
+    # transform the training & testing data into numpy arrays & free the List vars to be reused
+    train = np.array(train)  # turn training data into a numpy array
+    return train
+
+
+# TODO type hints
+def __formatForSciKit(data):
+    # create the label array Y (the target of our training)
+    flat = np.ravel(data[:, :1])  # get a list of all the labels as a list of lists & then flatten it
+    labels = np.array(flat)       # convert the label list to a numpy array
+    
+    # create the feature matrix X ()
+    ftrs = np.array(data[:, 1:])  # get everything BUT the labels/ids
+    
+    return ftrs, labels
+
+
+# TODO type hints
+def __buildModel(entries: np.ndarray, model: ModelTypes) -> typ.List[float]:
     
     # *** create a set of K buckets filled with our instances *** #
-    buckets = fillBuckets(entries)  # using the parsed data, fill the k buckets
+    buckets = __fillBuckets(entries)  # using the parsed data, fill the k buckets
 
     # *** Loop over our buckets K times, each time running creating a new hypothesis *** #
     oldR = 0                            # used to remember previous r in loop
@@ -216,16 +240,12 @@ def buildModel(entries: np.ndarray, model: ModelTypes) -> typ.List[float]:
             oldR = r                             # save the current r value for then next loop
     
         # *** Flatten the Training Data *** #
-        train = []              # currently training is a list of lists of lists because of the buckets.
-        for lst in trainList:   # we can now remove the buckets by concatenating the lists of instance
-            train += lst        # into one list of instances, flattening our data, & making it easier to work with
+        train = __flattenTrainingData(trainList)
 
-        # transform the training & testing data into numpy arrays & free the List vars to be reused
-        train = np.array(train)          # turn training data into a numpy array
         testing = np.array(testingList)  # turn testing data into a numpy array, testing doesn't need to be flattened
-    
+
         # *** 3A Normalize the Training Data *** #
-        train, scalar = normalize(train, None)  # now normalize the training, and keep the scalar used
+        train, scalar = __normalize(train, None)  # now normalize the training, and keep the scalar used
     
         # *** 3B Train the CDFC Model & Transform the Training Data using It *** #
         # CDFC_Hypothesis = cdfc(train)  # now that we have our train & test data create our hypothesis
@@ -234,27 +254,18 @@ def buildModel(entries: np.ndarray, model: ModelTypes) -> typ.List[float]:
         # *** 3C Train the Learning Algorithm *** #
         # format data for SciKit Learn
         # TODO change the below to use transformedData instead of train
-        # create the label array Y (the target of our training)
-        flat = np.ravel(train[:, :1])  # get a list of all the labels as a list of lists & then flatten it
-        labels = np.array(flat)        # convert the label list to a numpy array
-        # create the feature matrix X ()
-        ftrs = np.array(train[:, 1:])  # get everything BUT the labels/ids
-    
+        ftrs, labels = __formatForSciKit(train)
         # now that the data is formatted, run the learning algorithm
-        model.fit(ftrs, labels)                         # Train the model
+        model.fit(ftrs, labels)        # Train the model
     
         # *** 3D.1 Normalize the Testing Data *** #
-        testing, scalar = normalize(testing, scalar)
+        testing, scalar = __normalize(testing, scalar)
     
         # *** 3D.2 Reduce the Testing Data Using the CDFC Model *** #
         # + testing = CDFC_Hypothesis.transform(testing)  # use the cdfc model to reduce the data's size
     
-        # format data for SciKit Learn
-        # create the label array Y (the target of our training)
-        flat = np.ravel(testing[:, :1])  # get a list of all the labels as a list of lists & then flatten it
-        trueLabels = np.array(flat)      # convert the label list to a numpy array
-        # create the feature matrix X ()
-        ftrs = np.array(testing[:, 1:])  # get everything BUT the labels/ids
+        # format testing data for SciKit Learn
+        ftrs, trueLabels = __formatForSciKit(testing)
     
         # *** 3D.3 Feed the Training Data into the Model & get Accuracy *** #
         labelPrediction = model.predict(ftrs)  # use model to predict labels
@@ -275,20 +286,20 @@ def __runSciKitModels(entries: np.ndarray) -> ModelList:
     # *** Kth Nearest Neighbor Classifier *** #
     SYSOUT.write(HDR + ' KNN model starting ......')                        # print \tab * KNN model starting......
     SYSOUT.flush()                                                          # since there's no newline push buffer to console
-    knnAccuracy: typ.List[float] = buildModel(entries, KNeighborsClassifier(n_neighbors=3))  # build the model
+    knnAccuracy: typ.List[float] = __buildModel(entries, KNeighborsClassifier(n_neighbors=3))  # build the model
     SYSOUT.write(OVERWRITE+' KNN model completed '.ljust(50, '-')+SUCCESS)  # replace starting with complete
 
     # *** Decision Tree Classifier *** #
     SYSOUT.write(HDR + ' Decision Tree model starting ......')              # print \tab * dt model starting......
     SYSOUT.flush()                                                          # since there's no newline push buffer to console
-    dtAccuracy: typ.List[float] = buildModel(entries, DecisionTreeClassifier(random_state=0))  # build the model
+    dtAccuracy: typ.List[float] = __buildModel(entries, DecisionTreeClassifier(random_state=0))  # build the model
     SYSOUT.write(OVERWRITE +                                                # replace starting with complete
                  ' Decision Tree model built '.ljust(50, '-') + SUCCESS)
 
     # *** Gaussian Classifier (Naive Baye's) *** #
     SYSOUT.write(HDR + ' Naive Bayes model starting ......')                # print \tab * nb model starting......
     SYSOUT.flush()                                                          # since there's no newline push buffer to console
-    nbAccuracy: typ.List[float] = buildModel(entries, GaussianNB())         # build the model
+    nbAccuracy: typ.List[float] = __buildModel(entries, GaussianNB())         # build the model
     SYSOUT.write(OVERWRITE +                                                # replace starting with complete
                  ' Naive Bayes model built '.ljust(50, '-') + SUCCESS)
     

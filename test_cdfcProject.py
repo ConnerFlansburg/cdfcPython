@@ -4,6 +4,10 @@ from cdfcProject import normalize, discretization, __mapInstanceToClass, __dealT
 from sklearn.preprocessing import StandardScaler
 from collections import namedtuple
 
+# TODO test for normalize
+# TODO test for map instance
+# TODO test for deal buckets
+# TODO test for build model
 
 def test_discretization():
     # * This test checks that the discrete function we are using has the expected outcomes
@@ -47,7 +51,11 @@ def test__getPermutationMixedAll():
     assert __getPermutation([[-1.5, 2.6, -3.1], [4.001, 5, 6], [-7.000, -8, -9.912]], 498) == [[4.001, 5, 6], [-7.000, -8, -9.912], [-1.5, 2.6, -3.1]]
 
 
-def test_normalize(data):
+def test_normalize():
+    assert False
+
+
+def test__formatForSciKit():
     assert False
 
 
@@ -56,8 +64,4 @@ def test__mapInstanceToClass():
 
 
 def test__dealToBuckets():
-    assert False
-
-
-def test_fill_buckets():
     assert False
