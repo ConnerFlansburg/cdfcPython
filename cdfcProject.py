@@ -38,6 +38,7 @@ instance n | class value | attribute value | attribute value | attribute value |
 
 
 # * Next Steps
+# TODO finish testing suite
 # TODO get CDFC working & use it to reduce data
 
 K: typ.Final[int] = 10  # set the K for k fold cross validation
@@ -199,9 +200,9 @@ def __flattenTrainingData(trainList):
     return train
 
 
-# TODO type hints
 def __formatForSciKit(data):
     # create the label array Y (the target of our training)
+    # from all rows, pick the 0th column
     flat = np.ravel(data[:, :1])  # get a list of all the labels as a list of lists & then flatten it
     labels = np.array(flat)       # convert the label list to a numpy array
     
@@ -240,7 +241,7 @@ def __buildModel(entries: np.ndarray, model: ModelTypes) -> typ.List[float]:
             oldR = r                             # save the current r value for then next loop
     
         # *** Flatten the Training Data *** #
-        train = __flattenTrainingData(trainList)
+        train = __flattenTrainingData(trainList)  # remove buckets to create a single pool
 
         testing = np.array(testingList)  # turn testing data into a numpy array, testing doesn't need to be flattened
 
