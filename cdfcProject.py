@@ -138,8 +138,8 @@ def __mapInstanceToClass(entries: np.ndarray):
         
         # if we already have an entry for that classId, append to it
         if classToInstances.get(label):
-            classToInstances.get(label)[0] += 1  # increment instance counter
-            idx = classToInstances.get(label)[0]  # get the index that the counter says is next
+            classToInstances.get(label)[0] += 1            # increment instance counter
+            idx = classToInstances.get(label)[0]           # get the index that the counter says is next
             classToInstances.get(label).insert(idx, e[:])  # at that index insert a list representing the instance
         
         # if this is the first time we've seen the class, create a new list for it
@@ -189,8 +189,7 @@ def __fillBuckets(entries: np.ndarray) -> typ.List[typ.List[np.ndarray]]:
     return buckets
 
 
-# TODO type hints
-def __flattenTrainingData(trainList):
+def __flattenTrainingData(trainList: typ.List[typ.List[np.ndarray]]) -> np.ndarray:
     train = []             # currently training is a list of lists of lists because of the buckets.
     for lst in trainList:  # we can now remove the buckets by concatenating the lists of instance
         train += lst       # into one list of instances, flattening our data, & making it easier to work with
@@ -200,7 +199,7 @@ def __flattenTrainingData(trainList):
     return train
 
 
-def __formatForSciKit(data):
+def __formatForSciKit(data: np.ndarray) -> (np.ndarray, np.ndarray):
     # create the label array Y (the target of our training)
     # from all rows, pick the 0th column
     flat = np.ravel(data[:, :1])  # get a list of all the labels as a list of lists & then flatten it
@@ -413,6 +412,7 @@ def main() -> None:
 
     with open(outPath, "w") as texFile:             # open the selected file
         print(latexFrame.to_latex(), file=texFile)  # & write dataframe to it, converting it to latex
+    texFile.close()                                 # close the file
 
 
 if __name__ == "__main__":
