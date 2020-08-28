@@ -6,7 +6,7 @@ from cdfcProject import __normalize, __discretization, __mapInstanceToClass, __g
 # TODO test for normalize
 
 
-def test_discretization():
+def test_discretization() -> None:
     # * This test checks that the discrete function we are using has the expected outcomes
     # the values should become           -1   -1   1   1    0     0   0  1  -1
     actual = __discretization(np.array((-10, -5.7, 2, 9.5, 0.5, -0.5, 0, 1, -1)))
@@ -71,13 +71,13 @@ data = np.array([['class1', 'feature1', 'feature2', 'feature3'],   # instance 1
                  ['class3', 'feature1', 'feature2', 'feature3']])  # instance 3
 
 
-def test__formatForSciKitLabels():
+def test__formatForSciKitLabels() -> None:
     exLabels = np.array(['class1', 'class2', 'class3'])  # setup expected data
     ftrs, labels = __formatForSciKit(data)               # make the function call
     assert np.array_equal(labels, exLabels)
 
 
-def test_formatForSciKitFeatures():
+def test_formatForSciKitFeatures() -> None:
     # setup expected data values
     exFeatures = np.array([['feature1', 'feature2', 'feature3'],   # instance 1
                            ['feature1', 'feature2', 'feature3'],   # instance 2
@@ -86,7 +86,7 @@ def test_formatForSciKitFeatures():
     assert np.array_equal(ftrs, exFeatures)
 
 
-def test_flattenTrainingData():
+def test_flattenTrainingData() -> None:
     # setup expected data values
     trainIn = [['instance1', 'instance2', 'instance3'],                # This should be a list
                ['instance4', 'instance5', 'instance6'],                # of buckets with the
@@ -99,7 +99,7 @@ def test_flattenTrainingData():
     assert np.array_equal(trainOut, trainExp)
 
 
-def test__mapInstanceToClass():
+def test__mapInstanceToClass() -> None:
     # BUG each instance somehow gets an array around it's self. Trimming them causes index errors
     # setup test data
     # create a numpy array of the same form as entries would be
@@ -114,9 +114,8 @@ def test__mapInstanceToClass():
                 2.0: [1, [2, -4, 5000, 6]],                    # ls[classId] = ls[counter, instance1[]]
                 3.0: [2, [3, -2, -100, 5], [3, 2.67, 65, 4]]}  # ls[classId] = ls[counter, instance1[], instance2[]]
     actual = __mapInstanceToClass(entries)
-    assert all(actual == expected)
+    assert (actual == expected).all()
 
 
-def test_normalize():
+def test_normalize() -> None:
     assert True
-

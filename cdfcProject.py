@@ -14,6 +14,7 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 # from cdfc import cdfc
 from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import Normalizer
 from sklearn.tree import DecisionTreeClassifier
 
 '''
@@ -44,6 +45,8 @@ instance n | class value | attribute value | attribute value | attribute value |
 K: typ.Final[int] = 10  # set the K for k fold cross validation
 ModelList = typ.Tuple[typ.List[float], typ.List[float], typ.List[float]]  # type hinting alias
 ModelTypes = typ.Union[KNeighborsClassifier, GaussianNB, DecisionTreeClassifier]  # type hinting alias
+ScalarsOut = typ.Tuple[np.ndarray, typ.Union[Normalizer, StandardScaler]]
+ScalarsIn = typ.Union[None, typ.Union[StandardScaler, Normalizer]]
 
 # console formatting strings
 HDR = '*' * 6
@@ -90,9 +93,9 @@ def __discretization(data: np.ndarray) -> np.ndarray:
     return data
 
 
-def __normalize(entries: np.ndarray, scalar: typ.Union[None, StandardScaler, ]) -> typ.Tuple[np.ndarray, StandardScaler]:
+def __fitToScalar(entries: np.ndarray, normalize: bool, scalarPassed: ScalarsIn) -> ScalarsOut:
 
-    # remove the class IDs so the don't get normalized
+    # remove the class IDs so they don't get normalized
     noIds = np.array(entries[:, 1:])
 
     # noIds is a list of instances without IDs of the form:
@@ -102,27 +105,31 @@ def __normalize(entries: np.ndarray, scalar: typ.Union[None, StandardScaler, ]) 
     # set stdScalar either using parameter in the case of testing data,
     # or making it in the case of training data
     # if we are dealing with training data, not testing data
-    if scalar is None:
+    # ??? Are we actually Normalizing the data at any point ???
+    if scalarPassed is None:
 
         # *** transform the data *** #
-        stdScalar = StandardScaler()        # create a scalar object
-        stdScalar.fit(noIds)                # fit the scalar using the data
-        tData = stdScalar.transform(noIds)  # perform the transformation
-        tData = __discretization(tData)       # discrete transformation
+        if normalize:
+            scalar = Normalizer()        # create a normalization scalar object
+        else:
+            scalar = StandardScaler()    # TODO how dow we use the raw data
+        scalar.fit(noIds)                # fit the scalar's distribution using the data
+        tData = scalar.transform(noIds)  # transform the data to fit the scalar's distribution
+        tData = __discretization(tData)  # discrete transformation on the data
 
     # if we are dealing with testing data
     else:
 
         # *** transform the data *** #
-        stdScalar = scalar                  # used the passed scalar object
-        tData = stdScalar.transform(noIds)  # transform the scalar using passed fit
-        tData = __discretization(tData)       # discrete transformation
+        scalar = scalarPassed            # used the passed scalar object
+        tData = scalar.transform(noIds)  # transform the scalar using passed fit
+        tData = __discretization(tData)  # discrete transformation
 
     # *** add the IDs back on *** #
     entries[:, 1:] = tData  # this overwrites everything in entries BUT the ids
 
     # stdScalar - Standard Scalar, will used to on test & training data
-    return entries, stdScalar
+    return entries, scalar
 
 
 def __mapInstanceToClass(entries: np.ndarray):
@@ -212,7 +219,7 @@ def __formatForSciKit(data: np.ndarray) -> (np.ndarray, np.ndarray):
 
 
 # TODO type hints
-def __buildModel(entries: np.ndarray, model: ModelTypes) -> typ.List[float]:
+def __buildModel(entries: np.ndarray, model: ModelTypes, useNormalize=True) -> typ.List[float]:
     
     # *** create a set of K buckets filled with our instances *** #
     buckets = __fillBuckets(entries)  # using the parsed data, fill the k buckets
@@ -244,8 +251,9 @@ def __buildModel(entries: np.ndarray, model: ModelTypes) -> typ.List[float]:
 
         testing = np.array(testingList)  # turn testing data into a numpy array, testing doesn't need to be flattened
 
-        # *** 3A Normalize the Training Data *** #
-        train, scalar = __normalize(train, None)  # now normalize the training, and keep the scalar used
+        # *** 3A Normalize the Training Data (if useNormalize is True) *** #
+        # this is also fitting the data to a distribution
+        train, scalar = __fitToScalar(train, useNormalize, None)  # now normalize the training, and keep the scalar used
     
         # *** 3B Train the CDFC Model & Transform the Training Data using It *** #
         # CDFC_Hypothesis = cdfc(train)  # now that we have our train & test data create our hypothesis
@@ -259,7 +267,7 @@ def __buildModel(entries: np.ndarray, model: ModelTypes) -> typ.List[float]:
         model.fit(ftrs, labels)        # Train the model
     
         # *** 3D.1 Normalize the Testing Data *** #
-        testing, scalar = __normalize(testing, scalar)
+        testing, scalar = __fitToScalar(testing, useNormalize, scalar)
     
         # *** 3D.2 Reduce the Testing Data Using the CDFC Model *** #
         # + testing = CDFC_Hypothesis.transform(testing)  # use the cdfc model to reduce the data's size
