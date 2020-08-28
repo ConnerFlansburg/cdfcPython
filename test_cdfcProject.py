@@ -2,7 +2,6 @@ import pytest
 import numpy as np
 from cdfcProject import __normalize, __discretization, __mapInstanceToClass, __dealToBuckets, __getPermutation, __formatForSciKit, __flattenTrainingData
 
-# TODO test for flatten training data (should remove buckets to create single pool)
 # TODO test for map instance
 # TODO test for deal buckets
 # TODO test for normalize
@@ -86,7 +85,15 @@ def test_formatForSciKitFeatures():
 
 
 def test_flattenTrainingData():
-    assert False
+    # setup expected data values
+    trainIn = [['instance1', 'instance2', 'instance3'],  # This should be a list
+               ['instance4', 'instance5', 'instance6'],  # of buckets with the
+               ['instance7', 'instance8', 'instance9']]  # instances inside
+
+    trainOut = np.array(['instance1', 'instance2', 'instance3',   # This should be the list
+                         'instance4', 'instance5', 'instance6',   # of instances with the
+                         'instance7', 'instance8', 'instance9'])  # buckets removed
+    assert __flattenTrainingData(trainIn) == trainOut
 
 
 def test_normalize():
