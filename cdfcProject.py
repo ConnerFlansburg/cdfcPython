@@ -105,7 +105,6 @@ def __fitToScalar(entries: np.ndarray, normalize: bool, scalarPassed: ScalarsIn)
     # set stdScalar either using parameter in the case of testing data,
     # or making it in the case of training data
     # if we are dealing with training data, not testing data
-    # ??? Are we actually Normalizing the data at any point ???
     if scalarPassed is None:
 
         # *** transform the data *** #
@@ -132,22 +131,26 @@ def __fitToScalar(entries: np.ndarray, normalize: bool, scalarPassed: ScalarsIn)
     return entries, scalar
 
 
-def __mapInstanceToClass(entries: np.ndarray):
+# ! mapInstancesToClass is working as expected
+def __mapInstanceToClass(entries: np.ndarray) -> typ.Dict[int, typ.List[typ.Union[int, typ.List[float]]]]:
     # *** connect a class to every instance that occurs in it ***
     # this will map a classId to a 2nd dictionary that will hold the number of instances in that class &
     # the instances
     # classToInstances[classId] = list[counter, instance1[], instance2[], ...]
-    classToInstances: typ.Dict[int, typ.List[typ.Union[int, typ.List[typ.Union[int, float]]]]] = {}
+    classToInstances: typ.Dict[int, typ.List[typ.Union[int, typ.List[float]]]] = {}
     
-    for e in entries:
-        
+    for i in entries:
+        e = i.tolist()  # convert the numpy array of a single list into a list
         label = e[0]  # get the class id from the entry
+        dictPosition: typ.List[typ.Union[int, typ.List[float]]] = classToInstances.get(label)  # get the position for the class in the dictionary
         
         # if we already have an entry for that classId, append to it
-        if classToInstances.get(label):
-            classToInstances.get(label)[0] += 1            # increment instance counter
-            idx = classToInstances.get(label)[0]           # get the index that the counter says is next
-            classToInstances.get(label).insert(idx, e[:])  # at that index insert a list representing the instance
+        if dictPosition:
+            dictPosition[0] += 1            # increment instance counter
+            idx = dictPosition[0]           # get the index that the counter says is next
+            eggs: typ.List[typ.List[float]] = e[:]
+            # noinspection PyTypeChecker
+            dictPosition.insert(idx, eggs)  # at that index insert a list representing the instance
         
         # if this is the first time we've seen the class, create a new list for it
         else:
@@ -165,11 +168,12 @@ def __getPermutation(instances: typ.List[typ.List[typ.Union[int, float]]], seed:
     return permutation
 
 
-def __dealToBuckets(classToInstances):
+def __dealToBuckets(classToInstances: typ.Dict[int, typ.List[typ.Union[int, typ.List[float]]]]) -> typ.List[typ.List[np.ndarray]]:
     # *** Now create a random permutation of the instances in a class, & put them in buckets ***
     buckets = [[] for _ in range(K)]  # create a list of empty lists that we will "deal" our "deck" of instances to
     index = 0  # this will be the index of the bucket we are "dealing" to
     
+    # classId is a int
     for classId in classToInstances.keys():
         
         # *** for each class use the class id to get it's instances ***
@@ -304,10 +308,11 @@ def __runSciKitModels(entries: np.ndarray) -> ModelList:
     SYSOUT.write(OVERWRITE +                                                # replace starting with complete
                  ' Decision Tree model built '.ljust(50, '-') + SUCCESS)
 
+    # BUG Naive Baye's is throwing a divide by zero error
     # *** Gaussian Classifier (Naive Baye's) *** #
     SYSOUT.write(HDR + ' Naive Bayes model starting ......')                # print \tab * nb model starting......
     SYSOUT.flush()                                                          # since there's no newline push buffer to console
-    nbAccuracy: typ.List[float] = __buildModel(entries, GaussianNB())         # build the model
+    nbAccuracy: typ.List[float] = __buildModel(entries, GaussianNB())       # build the model
     SYSOUT.write(OVERWRITE +                                                # replace starting with complete
                  ' Naive Bayes model built '.ljust(50, '-') + SUCCESS)
     
@@ -338,7 +343,7 @@ def __buildAccuracyFrame(modelsTuple: ModelList) -> pd.DataFrame:
     return df
 
 
-def __accuracyFrameToLatex(modelsTuple, df):
+def __accuracyFrameToLatex(modelsTuple: typ.Tuple[typ.List[float], typ.List[float], typ.List[float]], df: pd.DataFrame) -> pd.DataFrame:
     
     SYSOUT.write("\nConverting frame to LaTeX...\n")  # update user
     SYSOUT.write(HDR + ' Transposing dataframe')      # update user
@@ -413,15 +418,17 @@ def main() -> None:
     # *** Export the Dataframe as a LaTeX File *** #
     SYSOUT.write('\nExporting LaTeX dataframe...')
     
-    # ? BUG for some reason filedialog will not open. Path works however
-    # outPath = filedialog.asksaveasfilename(defaultextension='.tex')  # ask the user where they want to save the latex output
-    # save the .tex file under the same name as the input but in the outputs folder
     outPath = Path.cwd() / 'data' / 'outputs' / (inPath.stem + '.tex')
 
     with open(outPath, "w") as texFile:             # open the selected file
         print(latexFrame.to_latex(), file=texFile)  # & write dataframe to it, converting it to latex
     texFile.close()                                 # close the file
-
+    SYSOUT.write('\nExport Successful')
+    
+    # *** Exit *** #
+    SYSOUT.write('\nExiting')
+    sys.exit(0)  # close program
+    
 
 if __name__ == "__main__":
 

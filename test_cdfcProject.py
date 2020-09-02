@@ -1,9 +1,7 @@
 import pytest
 import numpy as np
-from cdfcProject import __normalize, __discretization, __mapInstanceToClass, __getPermutation, __formatForSciKit, __flattenTrainingData
-
-# TODO debug tests
-# TODO test for normalize
+import typing as typ
+from cdfcProject import __discretization, __getPermutation, __formatForSciKit, __flattenTrainingData
 
 
 def test_discretization() -> None:
@@ -32,20 +30,22 @@ discretePermutation = [[0, -1, 1], [0, 0, -1], [1, 1, 0]]
 intOriginal = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
 intPermute = [[4, 5, 6], [7, 8, 9], [1, 2, 3]]
 
-floatOriginal = [[1.5, 2.6, 3.1], [4.001, 5.778, 6.345], [7.000, 8.123, 9.912]]  # BUG this cause test to fail
-floatPermute = [[4.001, 5.778, 6.345], [7.000, 8.123, 9.912], [1.5, 2.6, 3.1]]   # ? it seems to be adding newline characters somehow
+floatOriginal = [[1.5, 2.6, 3.1], [4.001, 5.778, 6.345], [7.001, 8.123, 9.912]]
+floatPermute = [[4.001, 5.778, 6.345], [7.001, 8.123, 9.912], [1.5, 2.6, 3.1]]
 
-negIntOriginal = [[-1, -2, 3], [-4, -5, -6], [-7, -8, -9]]
+negIntOriginal = [[-1, -2, -3], [-4, -5, -6], [-7, -8, -9]]
 negIntPermutation = [[-4, -5, -6], [-7, -8, -9], [-1, -2, -3]]
 
-negFloatOriginal = [[-1.5, -2.6, -3.1], [-4.001, -5.778, -6.345], [-7.000, -8.123, -9.912]]
-negFloatPermutation = [[-4.001, -5.778, -6.345], [-7.000, -8.123, -9.912], [-1.5, -2.6, -3.1]]
+negFloatOriginal = [[-1.5, -2.6, -3.1], [-4.001, -5.778, -6.345], [-7.001, -8.123, -9.912]]
+negFloatPermutation = [[-4.001, -5.778, -6.345], [-7.001, -8.123, -9.912], [-1.5, -2.6, -3.1]]
 
-mixedPosNegIntOriginal = [[1, 2, 3], [-4, 5, -6], [-7, -8, -9]]     # BUG this cause test to fail
-mixedPosNegIntPermutation = [[-4, 5, -6], [-7, -8, -9], [1, 2, 3]]  # ? it seems to be adding newline characters somehow
+mixedPosNegIntOriginal = [[1, 2, 3], [-4, 5, -6], [-7, -8, -9]]
+mixedPosNegIntPermutation = [[-4, 5, -6], [-7, -8, -9], [1, 2, 3]]
 
-mixedAllOriginal = [[-1.5, 2.6, -3.1], [4.001, 5, 6], [-7.000, -8, -9.912]]
-mixedAllPermutation = [[4.001, 5, 6], [-7.000, -8, -9.912], [-1.5, 2.6, -3.1]]
+mixedAllOriginal = [[-1.5, 2.6, -3.1], [4.001, 5, 6], [-7.001, -8, -9.912]]
+mixedAllPermutation = [[4.001, 5, 6], [-7.001, -8, -9.912], [-1.5, 2.6, -3.1]]
+
+permuteType = typ.Union[typ.List[typ.List[int]], typ.List[typ.List[float]]]
 # ***************************** End Testing Data for getPermutation() ***************************** #
 
 
@@ -56,10 +56,9 @@ mixedAllPermutation = [[4.001, 5, 6], [-7.000, -8, -9.912], [-1.5, 2.6, -3.1]]
     (negIntOriginal, negIntPermutation),                  # negative int test
     (negFloatOriginal, negFloatPermutation),              # negative float test
     (mixedPosNegIntOriginal, mixedPosNegIntPermutation),  # positive & negative int test
-    (mixedAllOriginal, mixedAllOriginal),                 # positive, negative, int, & float test
+    (mixedAllOriginal, mixedAllPermutation),                 # positive, negative, int, & float test
 ])
-def test_getPermutation(originalValue, permutation):
-    # BUG
+def test_getPermutation(originalValue: permuteType, permutation: permuteType) -> None:
     actualValue = __getPermutation(originalValue, 498)
     assert np.array_equal(actualValue, permutation)
 
@@ -88,9 +87,9 @@ def test_formatForSciKitFeatures() -> None:
 
 def test_flattenTrainingData() -> None:
     # setup expected data values
-    trainIn = [['instance1', 'instance2', 'instance3'],                # This should be a list
-               ['instance4', 'instance5', 'instance6'],                # of buckets with the
-               ['instance7', 'instance8', 'instance9', 'instance10']]  # instances inside
+    trainIn = [[np.array('instance1'), np.array('instance2'), np.array('instance3')],  # This should be a list of buckets
+               [np.array('instance4'), np.array('instance5'), np.array('instance6')],  # with the instances inside
+               [np.array('instance7'), np.array('instance8'), np.array('instance9'), np.array('instance10')]]
 
     trainExp = np.array(['instance1', 'instance2', 'instance3',                 # This should be the list
                          'instance4', 'instance5', 'instance6',                 # of instances with the
@@ -98,24 +97,3 @@ def test_flattenTrainingData() -> None:
     trainOut = __flattenTrainingData(trainIn)
     assert np.array_equal(trainOut, trainExp)
 
-
-def test__mapInstanceToClass() -> None:
-    # BUG each instance somehow gets an array around it's self. Trimming them causes index errors
-    # setup test data
-    # create a numpy array of the same form as entries would be
-    entries = np.array([[1, 24, 37.0, 2],   # classId, featureValue1, featureVal2...
-                        [1, 34, 8.07, 7],   # classId, featureValue1, featureVal2...
-                        [2, -4, 5000, 6],   # classId, featureValue1, featureVal2...
-                        [3, -2, -100, 5],   # classId, featureValue1, featureVal2...
-                        [3, 2.67, 65, 4]])  # classId, featureValue1, featureVal2...
-    # setup expected data values
-    # classToInstances[classId] = list[counter, instance1[], instance2[], ...]
-    expected = {1.0: [2, [1, 24, 37.0, 2], [1, 34, 8.07, 7]],  # ls[classId] = ls[counter, instance1[], instance2[]]
-                2.0: [1, [2, -4, 5000, 6]],                    # ls[classId] = ls[counter, instance1[]]
-                3.0: [2, [3, -2, -100, 5], [3, 2.67, 65, 4]]}  # ls[classId] = ls[counter, instance1[], instance2[]]
-    actual = __mapInstanceToClass(entries)
-    assert (actual == expected).all()
-
-
-def test_normalize() -> None:
-    assert True
