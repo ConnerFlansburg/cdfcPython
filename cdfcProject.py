@@ -4,6 +4,7 @@ import tkinter as tk
 import typing as typ
 from pathlib import Path
 from tkinter import filedialog
+from tkinter import messagebox
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -39,8 +40,9 @@ instance n | class value | attribute value | attribute value | attribute value |
 
 
 # * Next Steps
-# TODO finish testing suite
+# TODO Fix divide by zero bug in Naive Bayes
 # TODO get CDFC working & use it to reduce data
+# TODO add doc strings
 
 K: typ.Final[int] = 10  # set the K for k fold cross validation
 ModelList = typ.Tuple[typ.List[float], typ.List[float], typ.List[float]]  # type hinting alias
@@ -93,7 +95,8 @@ def __discretization(data: np.ndarray) -> np.ndarray:
     return data
 
 
-def __fitToScalar(entries: np.ndarray, normalize: bool, scalarPassed: ScalarsIn) -> ScalarsOut:
+def __transform(entries: np.ndarray, scalarPassed: ScalarsIn) -> ScalarsOut:
+    # NOTE: this should only ever be called if useNormalize is true!
 
     # remove the class IDs so they don't get normalized
     noIds = np.array(entries[:, 1:])
@@ -108,21 +111,22 @@ def __fitToScalar(entries: np.ndarray, normalize: bool, scalarPassed: ScalarsIn)
     if scalarPassed is None:
 
         # *** transform the data *** #
-        if normalize:
-            scalar = Normalizer()        # create a normalization scalar object
-        else:
-            scalar = StandardScaler()    # TODO how dow we use the raw data
+        scalar = Normalizer()            # create a normalization scalar object
         scalar.fit(noIds)                # fit the scalar's distribution using the data
         tData = scalar.transform(noIds)  # transform the data to fit the scalar's distribution
-        tData = __discretization(tData)  # discrete transformation on the data
+        
+        # since we are using normalize, perform a discrete transformation on the data
+        tData = __discretization(tData)
 
-    # if we are dealing with testing data
+    # if we are dealing with testing data, we don't want to fit the scalar; just transform the fit
     else:
 
         # *** transform the data *** #
         scalar = scalarPassed            # used the passed scalar object
         tData = scalar.transform(noIds)  # transform the scalar using passed fit
-        tData = __discretization(tData)  # discrete transformation
+
+        # since we are using normalize, perform a discrete transformation on the data
+        tData = __discretization(tData)
 
     # *** add the IDs back on *** #
     entries[:, 1:] = tData  # this overwrites everything in entries BUT the ids
@@ -131,7 +135,6 @@ def __fitToScalar(entries: np.ndarray, normalize: bool, scalarPassed: ScalarsIn)
     return entries, scalar
 
 
-# ! mapInstancesToClass is working as expected
 def __mapInstanceToClass(entries: np.ndarray) -> typ.Dict[int, typ.List[typ.Union[int, typ.List[float]]]]:
     # *** connect a class to every instance that occurs in it ***
     # this will map a classId to a 2nd dictionary that will hold the number of instances in that class &
@@ -139,24 +142,23 @@ def __mapInstanceToClass(entries: np.ndarray) -> typ.Dict[int, typ.List[typ.Unio
     # classToInstances[classId] = list[counter, instance1[], instance2[], ...]
     classToInstances: typ.Dict[int, typ.List[typ.Union[int, typ.List[float]]]] = {}
     
-    for i in entries:
-        e = i.tolist()  # convert the numpy array of a single list into a list
-        label = e[0]  # get the class id from the entry
+    for e in entries:
+        label = e[0]  # get the class id
         dictPosition: typ.List[typ.Union[int, typ.List[float]]] = classToInstances.get(label)  # get the position for the class in the dictionary
         
         # if we already have an entry for that classId, append to it
         if dictPosition:
             dictPosition[0] += 1            # increment instance counter
             idx = dictPosition[0]           # get the index that the counter says is next
-            eggs: typ.List[typ.List[float]] = e[:]
+            eggs: typ.List[typ.List[float]] = e.tolist()  # get the instances from the entry
             # noinspection PyTypeChecker
             dictPosition.insert(idx, eggs)  # at that index insert a list representing the instance
         
         # if this is the first time we've seen the class, create a new list for it
         else:
             # add a list, at index 0 put the counter, and at index 1 put a list containing the instance (values & label)
-            classToInstances[label] = [1, e[:]]
-    
+            classToInstances[label] = [1, e.tolist()]
+
     return classToInstances
 
 
@@ -196,7 +198,7 @@ def __fillBuckets(entries: np.ndarray) -> typ.List[typ.List[np.ndarray]]:
     
     classToInstances = __mapInstanceToClass(entries)
     buckets = __dealToBuckets(classToInstances)
-    
+
     return buckets
 
 
@@ -207,6 +209,7 @@ def __flattenTrainingData(trainList: typ.List[typ.List[np.ndarray]]) -> np.ndarr
     
     # transform the training & testing data into numpy arrays & free the List vars to be reused
     train = np.array(train)  # turn training data into a numpy array
+
     return train
 
 
@@ -218,12 +221,12 @@ def __formatForSciKit(data: np.ndarray) -> (np.ndarray, np.ndarray):
     
     # create the feature matrix X ()
     ftrs = np.array(data[:, 1:])  # get everything BUT the labels/ids
-    
+
     return ftrs, labels
 
 
 # TODO type hints
-def __buildModel(entries: np.ndarray, model: ModelTypes, useNormalize=True) -> typ.List[float]:
+def __buildModel(entries: np.ndarray, model: ModelTypes, useNormalize) -> typ.List[float]:
     
     # *** create a set of K buckets filled with our instances *** #
     buckets = __fillBuckets(entries)  # using the parsed data, fill the k buckets
@@ -238,7 +241,7 @@ def __buildModel(entries: np.ndarray, model: ModelTypes, useNormalize=True) -> t
     # loop over all the random index values
     for r in range(0, K):  # len(r) = K so this will be done K times
     
-        # *** Get the Training & Testing Data *** #
+        # ********** Get the Training & Testing Data ********** #
         # the Rth bucket becomes our testing data, everything else becomes training data
         # this is done in order to prevent accidental overwrites
         if testingList is None:                  # if this is not the first time though the loop
@@ -250,36 +253,45 @@ def __buildModel(entries: np.ndarray, model: ModelTypes, useNormalize=True) -> t
             testingList = trainList.pop(r)       # then set train & testing
             oldR = r                             # save the current r value for then next loop
     
-        # *** Flatten the Training Data *** #
+        # ********** Flatten the Training Data ********** #
         train = __flattenTrainingData(trainList)  # remove buckets to create a single pool
 
         testing = np.array(testingList)  # turn testing data into a numpy array, testing doesn't need to be flattened
 
-        # *** 3A Normalize the Training Data (if useNormalize is True) *** #
+        # ********** 3A Normalize the Training Data (if useNormalize is True) ********** #
         # this is also fitting the data to a distribution
-        train, scalar = __fitToScalar(train, useNormalize, None)  # now normalize the training, and keep the scalar used
+        if useNormalize:
+            train, scalar = __transform(train, None)  # now normalize the training, and keep the scalar used
+        else:  # this case is not strictly needed, but helps the editor/IDE not throw errors
+            scalar = None
     
-        # *** 3B Train the CDFC Model & Transform the Training Data using It *** #
+        # ********** 3B Train the CDFC Model & Transform the Training Data using It ********** #
         # CDFC_Hypothesis = cdfc(train)  # now that we have our train & test data create our hypothesis
         # train = CDFC_Hypothesis.transform(train)  # transform data using the CDFC model
 
-        # *** 3C Train the Learning Algorithm *** #
+        # ********** 3C Train the Learning Algorithm ********** #
         # format data for SciKit Learn
         # TODO change the below to use transformedData instead of train
         ftrs, labels = __formatForSciKit(train)
-        # now that the data is formatted, run the learning algorithm
-        model.fit(ftrs, labels)        # Train the model
+        
+        # now that the data is formatted, run the learning algorithm.
+        # if useNormalize is True the data has been transformed to fit
+        # a scalar & gone through discretization. If False, it has not
+        model.fit(ftrs, labels)
     
-        # *** 3D.1 Normalize the Testing Data *** #
-        testing, scalar = __fitToScalar(testing, useNormalize, scalar)
+        # ********** 3D.1 Normalize the Testing Data ********** #
+        # if use
+        if useNormalize:
+            testing, scalar = __transform(testing, scalar)
     
-        # *** 3D.2 Reduce the Testing Data Using the CDFC Model *** #
+        # ********** 3D.2 Reduce the Testing Data Using the CDFC Model ********** #
         # + testing = CDFC_Hypothesis.transform(testing)  # use the cdfc model to reduce the data's size
     
         # format testing data for SciKit Learn
         ftrs, trueLabels = __formatForSciKit(testing)
     
-        # *** 3D.3 Feed the Training Data into the Model & get Accuracy *** #
+        # ********** 3D.3 Feed the Training Data into the Model & get Accuracy ********** #
+        # BUG Naive Bayes throws error here
         labelPrediction = model.predict(ftrs)  # use model to predict labels
         # compute the accuracy score by comparing the actual labels with those predicted
         accuracy.append(accuracy_score(trueLabels, labelPrediction))
@@ -288,7 +300,7 @@ def __buildModel(entries: np.ndarray, model: ModelTypes, useNormalize=True) -> t
     return accuracy
 
 
-def __runSciKitModels(entries: np.ndarray) -> ModelList:
+def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> ModelList:
     # NOTE adding more models requires updating the Models type at top of file
     # hdr, overWrite, & success are just used to format string for the console
     # accuracy is a float list, each value is the accuracy for a single run
@@ -298,21 +310,22 @@ def __runSciKitModels(entries: np.ndarray) -> ModelList:
     # *** Kth Nearest Neighbor Classifier *** #
     SYSOUT.write(HDR + ' KNN model starting ......')                        # print \tab * KNN model starting......
     SYSOUT.flush()                                                          # since there's no newline push buffer to console
-    knnAccuracy: typ.List[float] = __buildModel(entries, KNeighborsClassifier(n_neighbors=3))  # build the model
+    knnAccuracy: typ.List[float] = __buildModel(entries, KNeighborsClassifier(n_neighbors=3), useNormalize)  # build the model
     SYSOUT.write(OVERWRITE+' KNN model completed '.ljust(50, '-')+SUCCESS)  # replace starting with complete
 
     # *** Decision Tree Classifier *** #
     SYSOUT.write(HDR + ' Decision Tree model starting ......')              # print \tab * dt model starting......
     SYSOUT.flush()                                                          # since there's no newline push buffer to console
-    dtAccuracy: typ.List[float] = __buildModel(entries, DecisionTreeClassifier(random_state=0))  # build the model
+    dtAccuracy: typ.List[float] = __buildModel(entries, DecisionTreeClassifier(random_state=0), useNormalize)  # build the model
     SYSOUT.write(OVERWRITE +                                                # replace starting with complete
                  ' Decision Tree model built '.ljust(50, '-') + SUCCESS)
 
-    # BUG Naive Baye's is throwing a divide by zero error
+    # BUG Naive Bayes is throwing a divide by zero error
+    # !    This seems to be because the standard deviation for 1 class/label is 0
     # *** Gaussian Classifier (Naive Baye's) *** #
     SYSOUT.write(HDR + ' Naive Bayes model starting ......')                # print \tab * nb model starting......
     SYSOUT.flush()                                                          # since there's no newline push buffer to console
-    nbAccuracy: typ.List[float] = __buildModel(entries, GaussianNB())       # build the model
+    nbAccuracy: typ.List[float] = __buildModel(entries, GaussianNB(), useNormalize)       # build the model
     SYSOUT.write(OVERWRITE +                                                # replace starting with complete
                  ' Naive Bayes model built '.ljust(50, '-') + SUCCESS)
     
@@ -323,7 +336,7 @@ def __runSciKitModels(entries: np.ndarray) -> ModelList:
 
 def __buildAccuracyFrame(modelsTuple: ModelList) -> pd.DataFrame:
 
-    SYSOUT.write("Creating accuracy dataframe...")  # update user
+    SYSOUT.write(HDR + "Creating accuracy dataframe...")  # update user
     SYSOUT.flush()
     
     # get the models from the tuple
@@ -338,7 +351,7 @@ def __buildAccuracyFrame(modelsTuple: ModelList) -> pd.DataFrame:
     # create the dataframe. It will be used both by the latex & the plot exporter
     df = pd.DataFrame(accuracyList, columns=['KNN', 'Decision Tree', 'Naive Bayes'], index=rowList)
 
-    SYSOUT.write('\rAccuracy Dataframe created without error' + SUCCESS)  # update user
+    SYSOUT.write(OVERWRITE + 'Accuracy Dataframe created without error')  # update user
     
     return df
 
@@ -385,7 +398,6 @@ def __accuracyFrameToLatex(modelsTuple: typ.Tuple[typ.List[float], typ.List[floa
     frame = frame.round(1)  # round to 1 decimal place
     
     SYSOUT.write(OVERWRITE + ' Converted dataframe values to percentages '.ljust(50, '-') + SUCCESS)  # update user
-    SYSOUT.write("Dataframe converted to LaTeX\n")
     
     return frame
 
@@ -393,21 +405,30 @@ def __accuracyFrameToLatex(modelsTuple: typ.Tuple[typ.List[float], typ.List[floa
 def main() -> None:
 
     SYSOUT.write(Figlet(font='larry3d').renderText('C D F C'))
-    SYSOUT.write("Program initialized " + SUCCESS)
+    SYSOUT.write("Program Initialized Successfully\n")
     
     tk.Tk().withdraw()                                          # prevent root window caused by Tkinter
+
+    SYSOUT.write('\nGetting File...\n')
     try:
         inPath = Path(filedialog.askopenfilename())             # prompt user for file path
+        SYSOUT.write(f"{HDR} File {inPath.name} selected...")
     except PermissionError:
-        sys.stderr.write("Permission Denied\nExiting...")       # exit gracefully
+        sys.stderr.write(f"\n{HDR} Permission Denied, or No File was Selected\nExiting...")  # exit gracefully
         sys.exit("Could not access file/No file was selected")
+
+    SYSOUT.write(f"{OVERWRITE} File {inPath.name} found ".ljust(57, '-') + SUCCESS)
+
+    useNormalize = messagebox.askyesno('CDFC - Normalization', 'Run with Normalization?')  # Yes / No
     
     # *** Parse the file into a numpy 2d array *** #
+    SYSOUT.write(HDR + ' Parsing .csv file...')  # update user
     entries = np.genfromtxt(inPath, delimiter=',', skip_header=1)  # + this line is used to read .csv files
-    SYSOUT.write('Parsed .csv file ' + SUCCESS)
+    SYSOUT.write(OVERWRITE + ' .csv file parsed successfully '.ljust(50, '-') + SUCCESS)  # update user
+    SYSOUT.write('\rFile Found & Loaded Successfully\n')  # update user
     
     # *** Build the Models *** #
-    modelsTuple = __runSciKitModels(entries)  # knnAccuracy, dtAccuracy, nbAccuracy
+    modelsTuple = __runSciKitModels(entries, useNormalize)  # knnAccuracy, dtAccuracy, nbAccuracy
 
     # *** Create a Dataframe that Combines the Accuracy of all the Models *** #
     accuracyFrame = __buildAccuracyFrame(modelsTuple)
@@ -416,14 +437,23 @@ def main() -> None:
     latexFrame = __accuracyFrameToLatex(modelsTuple, accuracyFrame)
     
     # *** Export the Dataframe as a LaTeX File *** #
-    SYSOUT.write('\nExporting LaTeX dataframe...')
+    SYSOUT.write(HDR + ' Exporting LaTeX dataframe...')
     
-    outPath = Path.cwd() / 'data' / 'outputs' / (inPath.stem + '.tex')
+    # set the output file path
+    if useNormalize:                       # if we are using the transformations
+        stm = inPath.stem + 'Transformed'  # add 'Transformed' to the file name
+    
+    else:                          # if we are not transforming the data
+        stm = inPath.stem + 'Raw'  # add 'Raw' to the file name
+    
+    outPath = Path.cwd() / 'data' / 'outputs' / (stm + '.tex')  # create the file path
 
     with open(outPath, "w") as texFile:             # open the selected file
         print(latexFrame.to_latex(), file=texFile)  # & write dataframe to it, converting it to latex
     texFile.close()                                 # close the file
-    SYSOUT.write('\nExport Successful')
+    
+    SYSOUT.write(OVERWRITE + ' Export Successful '.ljust(50, '-') + SUCCESS)
+    SYSOUT.write('Dataframe converted to LaTeX & Exported\n')
     
     # *** Exit *** #
     SYSOUT.write('\nExiting')
