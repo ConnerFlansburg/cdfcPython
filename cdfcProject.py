@@ -43,9 +43,10 @@ instance n | class value | attribute value | attribute value | attribute value |
 # TODO Fix divide by zero bug in Naive Bayes
 # TODO get CDFC working & use it to reduce data
 # TODO add doc strings
+# TODO add more unit tests
 
 K: typ.Final[int] = 10  # set the K for k fold cross validation
-ModelList = typ.Tuple[typ.List[float], typ.List[float], typ.List[float]]  # type hinting alias
+ModelList = typ.Tuple[typ.List[float], typ.List[float], typ.List[float]]          # type hinting alias
 ModelTypes = typ.Union[KNeighborsClassifier, GaussianNB, DecisionTreeClassifier]  # type hinting alias
 ScalarsOut = typ.Tuple[np.ndarray, typ.Union[Normalizer, StandardScaler]]
 ScalarsIn = typ.Union[None, typ.Union[StandardScaler, Normalizer]]
@@ -61,12 +62,12 @@ def __createPlot(df):
     # *** Create the Plot *** #
     outlierSymbol = dict(markerfacecolor='tab:red', marker='D')  # change the outliers to be red diamonds
     medianSymbol = dict(linewidth=2.5, color='tab:green')        # change the medians to be green
-    meanlineSymbol = dict(linewidth=2.5, color='tab:blue')       # change the means to be blue
+    meanSymbol = dict(linewidth=2.5, color='tab:blue')           # change the means to be blue
     fig1 = df.boxplot(showmeans=True,                            # create boxplot, store it in fig1, & show the means
                       meanline=True,                             # show mean as a mean line
                       flierprops=outlierSymbol,                  # set the outlier properties
                       medianprops=medianSymbol,                  # set the median properties
-                      meanprops=meanlineSymbol)                  # set the mean properties
+                      meanprops=meanSymbol)                      # set the mean properties
     fig1.set_title("Accuracy")                                   # set the title of the plot
     fig1.set_xlabel("Accuracy Ratio")                            # set the label of the x-axis
     fig1.set_ylabel("Model Type")                                # set the label of the y-axis
@@ -225,7 +226,6 @@ def __formatForSciKit(data: np.ndarray) -> (np.ndarray, np.ndarray):
     return ftrs, labels
 
 
-# TODO type hints
 def __buildModel(entries: np.ndarray, model: ModelTypes, useNormalize) -> typ.List[float]:
     
     # *** create a set of K buckets filled with our instances *** #
@@ -291,7 +291,7 @@ def __buildModel(entries: np.ndarray, model: ModelTypes, useNormalize) -> typ.Li
         ftrs, trueLabels = __formatForSciKit(testing)
     
         # ********** 3D.3 Feed the Training Data into the Model & get Accuracy ********** #
-        # BUG Naive Bayes throws error here
+        # BUG Naive Bayes throws divide by 0 error here
         labelPrediction = model.predict(ftrs)  # use model to predict labels
         # compute the accuracy score by comparing the actual labels with those predicted
         accuracy.append(accuracy_score(trueLabels, labelPrediction))
@@ -322,7 +322,7 @@ def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> ModelList:
 
     # BUG Naive Bayes is throwing a divide by zero error
     # !    This seems to be because the standard deviation for 1 class/label is 0
-    # *** Gaussian Classifier (Naive Baye's) *** #
+    # *** Gaussian Classifier (Naive Bayes) *** #
     SYSOUT.write(HDR + ' Naive Bayes model starting ......')                # print \tab * nb model starting......
     SYSOUT.flush()                                                          # since there's no newline push buffer to console
     nbAccuracy: typ.List[float] = __buildModel(entries, GaussianNB(), useNormalize)       # build the model
@@ -336,22 +336,29 @@ def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> ModelList:
 
 def __buildAccuracyFrame(modelsTuple: ModelList) -> pd.DataFrame:
 
-    SYSOUT.write(HDR + "Creating accuracy dataframe...")  # update user
-    SYSOUT.flush()
+    SYSOUT.write("Creating accuracy dataframe...\n")  # update user
     
     # get the models from the tuple
     knnAccuracy = modelsTuple[0]
     dtAccuracy = modelsTuple[1]
     nbAccuracy = modelsTuple[2]
-    
+
+    SYSOUT.write(HDR + ' Creating dictionary ......')
     # use accuracy data to create a dictionary. This will become the frame
     accuracyList = {'KNN': knnAccuracy, 'Decision Tree': dtAccuracy, 'Naive Bayes': nbAccuracy}
+    SYSOUT.write(OVERWRITE + ' Dictionary created '.ljust(50, '-') + SUCCESS)
+    
+    SYSOUT.write(HDR + ' Creating labels ......')
     # this will create labels for each instance ("fold") of the model, of the form "Fold i"
     rowList = [["Fold {}".format(i) for i in range(1, K + 1)]]
+    SYSOUT.write(OVERWRITE + ' Labels created successfully '.ljust(50, '-') + SUCCESS)
+    
+    SYSOUT.write(HDR + ' Creating dataframe ......')
     # create the dataframe. It will be used both by the latex & the plot exporter
     df = pd.DataFrame(accuracyList, columns=['KNN', 'Decision Tree', 'Naive Bayes'], index=rowList)
+    SYSOUT.write(OVERWRITE + ' Dataframe created successfully '.ljust(50, '-') + SUCCESS)
 
-    SYSOUT.write(OVERWRITE + 'Accuracy Dataframe created without error')  # update user
+    SYSOUT.write('Accuracy Dataframe created without error\n')  # update user
     
     return df
 
@@ -419,7 +426,7 @@ def main() -> None:
 
     SYSOUT.write(f"{OVERWRITE} File {inPath.name} found ".ljust(57, '-') + SUCCESS)
 
-    useNormalize = messagebox.askyesno('CDFC - Normalization', 'Run with Normalization?')  # Yes / No
+    useNormalize = messagebox.askyesno('CDFC - Transformations', 'Do you want to transform the data before using it?')  # Yes / No
     
     # *** Parse the file into a numpy 2d array *** #
     SYSOUT.write(HDR + ' Parsing .csv file...')  # update user
