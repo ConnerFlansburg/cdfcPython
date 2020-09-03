@@ -15,7 +15,6 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 # from cdfc import cdfc
 from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import Normalizer
 from sklearn.tree import DecisionTreeClassifier
 
 '''
@@ -40,7 +39,7 @@ instance n | class value | attribute value | attribute value | attribute value |
 
 
 # * Next Steps
-# TODO Fix divide by zero bug in Naive Bayes
+# TODO fix divide by zero bug in Naive Bayes
 # TODO get CDFC working & use it to reduce data
 # TODO add doc strings
 # TODO add more unit tests
@@ -48,8 +47,8 @@ instance n | class value | attribute value | attribute value | attribute value |
 K: typ.Final[int] = 10  # set the K for k fold cross validation
 ModelList = typ.Tuple[typ.List[float], typ.List[float], typ.List[float]]          # type hinting alias
 ModelTypes = typ.Union[KNeighborsClassifier, GaussianNB, DecisionTreeClassifier]  # type hinting alias
-ScalarsOut = typ.Tuple[np.ndarray, typ.Union[Normalizer, StandardScaler]]
-ScalarsIn = typ.Union[None, typ.Union[StandardScaler, Normalizer]]
+ScalarsOut = typ.Tuple[np.ndarray, StandardScaler]
+ScalarsIn = typ.Union[None, StandardScaler]
 
 # console formatting strings
 HDR = '*' * 6
@@ -112,7 +111,7 @@ def __transform(entries: np.ndarray, scalarPassed: ScalarsIn) -> ScalarsOut:
     if scalarPassed is None:
 
         # *** transform the data *** #
-        scalar = Normalizer()            # create a normalization scalar object
+        scalar = StandardScaler()        # create a standard scalar object (this will make the mean 0 & the sd 1)
         scalar.fit(noIds)                # fit the scalar's distribution using the data
         tData = scalar.transform(noIds)  # transform the data to fit the scalar's distribution
         
@@ -291,7 +290,6 @@ def __buildModel(entries: np.ndarray, model: ModelTypes, useNormalize) -> typ.Li
         ftrs, trueLabels = __formatForSciKit(testing)
     
         # ********** 3D.3 Feed the Training Data into the Model & get Accuracy ********** #
-        # BUG Naive Bayes throws divide by 0 error here
         labelPrediction = model.predict(ftrs)  # use model to predict labels
         # compute the accuracy score by comparing the actual labels with those predicted
         accuracy.append(accuracy_score(trueLabels, labelPrediction))
@@ -307,22 +305,20 @@ def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> ModelList:
 
     SYSOUT.write("\nBuilding models...\n")  # update user
     
-    # *** Kth Nearest Neighbor Classifier *** #
+    # ************ Kth Nearest Neighbor Classifier ************ #
     SYSOUT.write(HDR + ' KNN model starting ......')                        # print \tab * KNN model starting......
     SYSOUT.flush()                                                          # since there's no newline push buffer to console
     knnAccuracy: typ.List[float] = __buildModel(entries, KNeighborsClassifier(n_neighbors=3), useNormalize)  # build the model
     SYSOUT.write(OVERWRITE+' KNN model completed '.ljust(50, '-')+SUCCESS)  # replace starting with complete
 
-    # *** Decision Tree Classifier *** #
+    # ************ Decision Tree Classifier ************ #
     SYSOUT.write(HDR + ' Decision Tree model starting ......')              # print \tab * dt model starting......
     SYSOUT.flush()                                                          # since there's no newline push buffer to console
     dtAccuracy: typ.List[float] = __buildModel(entries, DecisionTreeClassifier(random_state=0), useNormalize)  # build the model
     SYSOUT.write(OVERWRITE +                                                # replace starting with complete
                  ' Decision Tree model built '.ljust(50, '-') + SUCCESS)
 
-    # BUG Naive Bayes is throwing a divide by zero error
-    # !    This seems to be because the standard deviation for 1 class/label is 0
-    # *** Gaussian Classifier (Naive Bayes) *** #
+    # ************ Gaussian Classifier (Naive Bayes) ************ #
     SYSOUT.write(HDR + ' Naive Bayes model starting ......')                # print \tab * nb model starting......
     SYSOUT.flush()                                                          # since there's no newline push buffer to console
     nbAccuracy: typ.List[float] = __buildModel(entries, GaussianNB(), useNormalize)       # build the model
@@ -419,9 +415,9 @@ def main() -> None:
     SYSOUT.write('\nGetting File...\n')
     try:
         inPath = Path(filedialog.askopenfilename())             # prompt user for file path
-        SYSOUT.write(f"{HDR} File {inPath.name} selected...")
+        SYSOUT.write(f"{HDR} File {inPath.name} selected......")
     except PermissionError:
-        sys.stderr.write(f"\n{HDR} Permission Denied, or No File was Selected\nExiting...")  # exit gracefully
+        sys.stderr.write(f"\n{HDR} Permission Denied, or No File was Selected\nExiting......")  # exit gracefully
         sys.exit("Could not access file/No file was selected")
 
     SYSOUT.write(f"{OVERWRITE} File {inPath.name} found ".ljust(57, '-') + SUCCESS)
