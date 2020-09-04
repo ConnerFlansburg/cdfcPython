@@ -1,10 +1,13 @@
 import copy
 import math
 import random
+import sys
 import numpy as np
 import typing as typ
 import collections as collect
 from scipy import stats
+from tqdm import tqdm
+from tqdm import trange
 
 # ! Next Steps
 # TODO fix bug in run tree
@@ -32,6 +35,11 @@ INSTANCES_NUMBER = 0             # INSTANCES_NUMBER is  the number of instances 
 LABEL_NUMBER = 0                 # LABEL_NUMBER is the number of classes/labels in the data
 M = 0                            # M is the number of constructed features
 POPULATION_SIZE = 0              # POPULATION_SIZE is the population size
+# console formatting strings
+HDR = '*' * 6
+SUCCESS = u' \u2713\n'
+OVERWRITE = '\r' + HDR
+SYSOUT = sys.stdout
 # ************************ End of Constants/Globals ************************ #
 
 # ********************** Namespaces/Structs & Objects *********************** #
@@ -72,8 +80,8 @@ class Tree:
         
     # running a tree should return a single value
     # featureValues -- the values of the relevant features keyed by their index in the original data
-    def runTree(self, featureValues: typ.Dict[int]) -> np.float_:
-        return np.float64(self.__runNode(featureValues))
+    def runTree(self, featureValues: typ.Dict[int]) -> float:
+        return self.__runNode(featureValues)
 
     def __runNode(self, featureValues: typ.Dict[int]) -> float:
         
@@ -191,12 +199,13 @@ class ConstructedFeature:
         __walk(self.tree)  # walk the tree starting with the CF's root node
         return values      # values should now hold the indexes of the tree's terminals
 
-    def transform(self, instance: row) -> np.float64:
+    def transform(self, instance: row) -> float:
         # Send the tree a list of all the attribute values in a single instance
         return self.tree.runTree(instance.attributes)
 
     def setSize(self):
-        return self.tree.getSize(0)  # call getSize on the root of the tree
+        self.size = self.tree.getSize(0)  # call getSize on the root of the tree
+        return
 
 
 class Hypothesis:
@@ -281,7 +290,7 @@ class Hypothesis:
             ft = collect.namedtuple('ft', ['id', 'value'])
             
             # key = CF(Values), Entry = instance in training data
-            partition: typ.Dict[np.float64, typ.List[row]] = {}
+            partition: typ.Dict[float, typ.List[row]] = {}
             
             s = 0                             # used to sum CF's conditional entropy
             used = feature.getUsedFeatures()  # get the indexes of the used features
@@ -342,18 +351,21 @@ class Hypothesis:
         
         return final
 
+    # ! this is the function used by cdfcProject
     def transform(self, data=None):
 
         instance = collect.namedtuple(
             'instance', ['className', 'values'])
-
+        
+        transformed = []  # this will hold the transformed values
+        
         # if data is None then we are transforming as part of evolution/training
         # so we should use rows (the provided training data)
         if data is None:
             
-            transformed = []  # this will hold the transformed values
+            rowBar = tqdm(rows, desc='Transforming as part of evolution')  # create progress bar
             
-            for r in rows:   # for each instance
+            for r in rowBar:    # for each instance
                 values = []  # this will hold the calculated values for all the constructed features
 
                 for f in self.features:            # transform the original input using each constructed feature
@@ -369,9 +381,9 @@ class Hypothesis:
         # (this will be testing data from cdfcProject.py)
         else:
             
-            transformed = []  # this will hold the transformed values
+            bar = tqdm(data, desc='Transforming as part of evolution')  # create progress bar
             
-            for d in data:   # for each instance
+            for d in bar:    # for each instance
                 values = []  # this will hold the calculated values for all the constructed features
                 
                 for f in self.features:            # transform the original input using each constructed feature
@@ -413,10 +425,7 @@ def terminals(classId: int) -> typ.List[int]:
     scores = []
 
     for i in range(1, FEATURE_NUMBER):
-        inClass, notIn = valuesInClass(classId, i)        # find the values of attribute i in/not in class classId
-        # ? This currently uses a two-tailed test. Because of this p-value can be below 0, and
-        # ?     this can cause divide by 0 errors during the else case of relevancy calculation.
-        # ?     Should it be a one-tailed test instead?
+        inClass, notIn = valuesInClass(classId, i)            # find the values of attribute i in/not in class classId
         tValue, pCompValue = stats.ttest_ind(inClass, notIn)  # get the t-test & p-value for the feature
         pValue = 1 - pCompValue
 
@@ -554,7 +563,8 @@ def createInitialPopulation() -> Population:
 
     hypothesis: typ.List[Hypothesis] = []
 
-    for nl in range(POPULATION_SIZE):
+    # creat a number hypotheses equal to pop size
+    for __ in trange(POPULATION_SIZE, desc="Creating Initial Hypotheses", unit="hyp"):
         hypothesis.append(createHypothesis())
 
     return Population(hypothesis, 0)
@@ -564,7 +574,6 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
 
     def __tournament(p: Population) -> Hypothesis:
         # used by evolve to selection the parents
-        
         # **************** Tournament Selection **************** #
         candidates: typ.List[Hypothesis] = copy.deepcopy(p.candidateHypotheses)  # copy to avoid overwriting
         first = None  # the tournament winner
@@ -732,7 +741,8 @@ def cdfc(train: np.ndarray) -> Hypothesis:
     ids = []           # this will be a list of all labels/ids with no repeats
 
     # set global variables using the now transformed data
-    for line in train:  # each line in train will be an instances
+    # each line in train will be an instances
+    for line in tqdm(train, desc="Setting Global Variables"):
         
         # parse the file
         rows.append(row(line[0], line[1:]))  # reader[0] = classId, reader[1:] = attribute values
@@ -771,12 +781,14 @@ def cdfc(train: np.ndarray) -> Hypothesis:
     # *********************** Run the Algorithm *********************** #
     currentPopulation = createInitialPopulation()     # create initial population
     elite = currentPopulation.candidateHypotheses[0]  # init elitism
-    
-    for i in range(GENERATIONS):  # loop, evolving each generation. This is where most of the work is done
+
+    # loop, evolving each generation. This is where most of the work is done
+    for __ in trange(GENERATIONS, desc="CDFC Generations", unit="gen"):
         newPopulation, elite = evolve(currentPopulation, elite)  # generate a new population by evolving the old one
         # update currentPopulation to hold the new population
         # this is done in two steps to avoid potential namespace issues
         currentPopulation = newPopulation
+    SYSOUT.write(HDR + ' Final Generation Reached '.ljust(50, '-') + SUCCESS)  # update user
     # ***************************************************************** #
 
     # ****************** Return the Best Hypothesis ******************* #
@@ -787,5 +799,7 @@ def cdfc(train: np.ndarray) -> Hypothesis:
             i.getFitness()
 
     # now that we know each hypothesis has a fitness score, get the one with the highest fitness
-    bestHypothesis = max(currentPopulation.candidateHypotheses, key=lambda x: x.fitness)
+    # ? check this works
+    fitBar = tqdm(currentPopulation.candidateHypotheses, desc='Finding most fit hypothesis', unit='hyp')
+    bestHypothesis = max(fitBar, key=lambda x: x.fitness)
     return bestHypothesis  # return the best hypothesis generated

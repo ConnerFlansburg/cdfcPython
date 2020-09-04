@@ -13,7 +13,7 @@ from pyfiglet import Figlet
 from sklearn.metrics import accuracy_score
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
-# from cdfc import cdfc
+from cdfc import cdfc
 from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeClassifier
 
@@ -39,7 +39,6 @@ instance n | class value | attribute value | attribute value | attribute value |
 
 
 # * Next Steps
-# TODO fix divide by zero bug in Naive Bayes
 # TODO get CDFC working & use it to reduce data
 # TODO add doc strings
 # TODO add more unit tests
@@ -174,6 +173,7 @@ def __dealToBuckets(classToInstances: typ.Dict[int, typ.List[typ.Union[int, typ.
     # *** Now create a random permutation of the instances in a class, & put them in buckets ***
     buckets = [[] for _ in range(K)]  # create a list of empty lists that we will "deal" our "deck" of instances to
     index = 0  # this will be the index of the bucket we are "dealing" to
+    seed = 498
     
     # classId is a int
     for classId in classToInstances.keys():
@@ -181,7 +181,7 @@ def __dealToBuckets(classToInstances: typ.Dict[int, typ.List[typ.Union[int, typ.
         # *** for each class use the class id to get it's instances ***
         # instances is of the form [instance1, instance2, ...]  (the counter has been removed)
         # where instanceN is a numpy array and where instanceN[0] is the classId & instanceN[1:] are the values
-        permutation = __getPermutation(classToInstances[classId][1:])
+        permutation = __getPermutation(classToInstances[classId][1:], seed)
 
         # *** assign instances to buckets *** #
         # loop over every instance in the class classId, in what is now a random order
@@ -265,12 +265,18 @@ def __buildModel(entries: np.ndarray, model: ModelTypes, useNormalize) -> typ.Li
             scalar = None
     
         # ********** 3B Train the CDFC Model & Transform the Training Data using It ********** #
-        # CDFC_Hypothesis = cdfc(train)  # now that we have our train & test data create our hypothesis
-        # train = CDFC_Hypothesis.transform(train)  # transform data using the CDFC model
+        SYSOUT.write(HDR + ' Training CDFC ......')                          # print \tab * Training CDFC ....
+        SYSOUT.flush()
+        CDFC_Hypothesis = cdfc(train)        # now that we have our train & test data create our hypothesis
+        SYSOUT.write(OVERWRITE + ' CDFC Trained '.ljust(50, '-') + SUCCESS)  # replace starting with complete
+        
+        SYSOUT.write(HDR + ' Transforming Training Data ......')                 # print
+        SYSOUT.flush()
+        train = CDFC_Hypothesis.transform(train)                                 # transform data using the CDFC model
+        SYSOUT.write(OVERWRITE + ' Data Transformed '.ljust(50, '-') + SUCCESS)  # replace starting with complete
 
         # ********** 3C Train the Learning Algorithm ********** #
         # format data for SciKit Learn
-        # TODO change the below to use transformedData instead of train
         ftrs, labels = __formatForSciKit(train)
         
         # now that the data is formatted, run the learning algorithm.
@@ -410,11 +416,13 @@ def main() -> None:
     SYSOUT.write(Figlet(font='larry3d').renderText('C D F C'))
     SYSOUT.write("Program Initialized Successfully\n")
     
-    tk.Tk().withdraw()                                          # prevent root window caused by Tkinter
+    parent = tk.Tk()                                          # prevent root window caused by Tkinter
+    parent.overrideredirect(1)                                # Avoid it appearing and then disappearing quickly
+    parent.withdraw()                                         # Hide the window
 
     SYSOUT.write('\nGetting File...\n')
     try:
-        inPath = Path(filedialog.askopenfilename())             # prompt user for file path
+        inPath = Path(filedialog.askopenfilename(parent=parent))             # prompt user for file path
         SYSOUT.write(f"{HDR} File {inPath.name} selected......")
     except PermissionError:
         sys.stderr.write(f"\n{HDR} Permission Denied, or No File was Selected\nExiting......")  # exit gracefully
@@ -422,7 +430,7 @@ def main() -> None:
 
     SYSOUT.write(f"{OVERWRITE} File {inPath.name} found ".ljust(57, '-') + SUCCESS)
 
-    useNormalize = messagebox.askyesno('CDFC - Transformations', 'Do you want to transform the data before using it?')  # Yes / No
+    useNormalize = messagebox.askyesno('CDFC - Transformations', 'Do you want to transform the data before using it?', parent=parent)  # Yes / No
     
     # *** Parse the file into a numpy 2d array *** #
     SYSOUT.write(HDR + ' Parsing .csv file...')  # update user
