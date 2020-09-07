@@ -250,14 +250,37 @@ class Hypothesis:
 
     def getFitness(self) -> float:
 
-        def __Czekanowski(Vi, Vj):
+        def __Czekanowski(Vi: typ.List[typ.Union[int, float]], Vj: typ.List[typ.Union[int, float]]):
             minSum = 0
             addSum = 0
 
             for d in range(1, len(self.features)):  # loop over the number of features
-                minSum += min(Vi[d], Vj[d])         # the top of the fraction
-                addSum += Vi[d] + Vj[d]             # the bottom of the fraction
-            return 1 - ((2*minSum) / addSum)        # calculate it & return
+                # BUG unsupported operand += for int & list
+                top = min(Vi[d], Vj[d])  # get the top of the fraction
+                bottom = Vi[d] + Vj[d]   # get the bottom of the fraction
+
+                # ************************** Error checking ************************** #
+                try:
+                    if type(Vi[d]) is list:
+                        log.error(f'In Czekanowski Vi[d] is a list. Vi[d] = {Vi[d]}')
+                        raise Exception(f'ERROR: In Czekanowski Vi[d] is a list. Vi[d] = {Vi[d]}')
+                    if type(Vj[d]) is list:
+                        log.error(f'In Czekanowski Vj[d] is a list. Vj[d] = {Vj[d]}')
+                        raise Exception(f'ERROR: In Czekanowski Vj[d] is a list. Vj[d] = {Vj[d]}')
+                    if type(top) is list:  # check if min is a list
+                        log.error(f'In Czekanowski min is a list {top}')
+                        raise Exception(f'ERROR: In Czekanowski min is a list {top}')
+                    if type(bottom) is list:  # check if min is a list
+                        log.error(f'In Czekanowski bottom of fraction is a list {bottom}')
+                        raise Exception(f'ERROR: In Czekanowski bottom of fraction is a list {bottom}')
+                except Exception as err:
+                    tqdm.write(str(err))
+                # ******************************************************************** #
+                
+                minSum += top     # the top of the fraction
+                addSum += bottom  # the bottom of the fraction
+                
+            return 1 - ((2*minSum) / addSum)  # calculate it & return
 
         def Distance(values):
 
