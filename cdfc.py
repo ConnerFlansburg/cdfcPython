@@ -2,6 +2,9 @@ import copy
 import math
 import random
 import sys
+import warnings
+from pathlib import Path
+import logging as log
 import numpy as np
 import typing as typ
 import collections as collect
@@ -46,6 +49,13 @@ SYSOUT = sys.stdout
 row = collect.namedtuple('row', ['className', 'attributes'])  # a single line in the csv, representing a record/instance
 rows: typ.List[row] = []  # this will store all of the records read in (the training dat) as a list of rows
 
+np.seterr(divide='ignore')  # suppress divide by zero warnings from numpy
+warnings.filterwarnings('ignore', message='invalid value encountered in true_divide')
+
+# create the file path for the log file & configure the logger
+logPath = str(Path.cwd() / 'log' / 'cdfc.log')
+log.basicConfig(level='debug', filename=logPath, format='%(levelname)s - %(lineno)d: %(message)s')
+
 
 class Tree:
     """Tree is a binary tree data structure that is used to represent a
@@ -68,7 +78,7 @@ class Tree:
     
     def __init__(self, data: typ.Union[str, int], left: typ.Union[None, "Tree"] = None,
                  right: typ.Union[None, "Tree"] = None) -> None:
-        self.data = data    # must either be a function or a terminal (if a terminal it should be it's index)
+        self.data: typ.Union[int, str] = data    # must either be a function or a terminal (if a terminal it should be it's index)
         self.left = left
         self.right = right
         
@@ -80,10 +90,10 @@ class Tree:
         
     # running a tree should return a single value
     # featureValues -- the values of the relevant features keyed by their index in the original data
-    def runTree(self, featureValues: typ.Dict[int]) -> float:
+    def runTree(self, featureValues):
         return self.__runNode(featureValues)
 
-    def __runNode(self, featureValues: typ.Dict[int]) -> float:
+    def __runNode(self, featureValues):
         
         # BUG somehow +,-,*, and min() are being called on None type objects.
         # !   This is because for some reason it keeps trying to access the children that don't exist, even though it
@@ -94,36 +104,50 @@ class Tree:
         # + Try creating a unit test for this, grow, & full
         # if the node is an operation both of it's branches should have operations or terminals
         # either way calling __runNode() won't return a None
-        if self.data in OPS:  # if this tree's node is a valid operation, then execute it
+        try:
+            if self.data in OPS:  # if this tree's node is a valid operation, then execute it
+                
+                # find out which operation it is & return it's value
+                if self.data == 'add':
+                    lft = self.left.__runNode(featureValues)
+                    rgt = self.right.__runNode(featureValues)
+                    vl = lft + rgt
+                    return vl
+        
+                elif self.data == 'subtract':
+                    lft = self.left.__runNode(featureValues)
+                    rgt = self.right.__runNode(featureValues)
+                    vl = lft - rgt
+                    return vl
+        
+                elif self.data == 'times':
+                    lft = self.left.__runNode(featureValues)
+                    rgt = self.right.__runNode(featureValues)
+                    vl = lft * rgt
+                    return vl
+                elif self.data == 'min':
+                    lft = self.left.__runNode(featureValues)
+                    rgt = self.right.__runNode(featureValues)
+                    vl = min(lft, rgt)
+                    return vl
             
-            # find out which operation it is & return it's value
-            if self.data == 'add':
-                lft = self.left.__runNode(featureValues)
-                rgt = self.right.__runNode(featureValues)
-                vl = lft + rgt
-                return vl
-    
-            elif self.data == 'subtract':
-                lft = self.left.__runNode(featureValues)
-                rgt = self.right.__runNode(featureValues)
-                vl = lft - rgt
-                return vl
-    
-            elif self.data == 'times':
-                lft = self.left.__runNode(featureValues)
-                rgt = self.right.__runNode(featureValues)
-                vl = lft * rgt
-                return vl
-            elif self.data == 'min':
-                lft = self.left.__runNode(featureValues)
-                rgt = self.right.__runNode(featureValues)
-                vl = min(lft, rgt)
-                return vl
+            # if the data stored is not in OPS and is not a number raise an exception
+            elif math.isnan(self.data):
+                log.error(f'NaN stored in tree. Expect OPS value or number, got {self.data}')
+                raise Exception(f'ERROR: NaN stored in tree. Expect OPS value or number, got {self.data}')
+            # if the data stored is null, raise exception
+            elif self.data is None:
+                log.error(f'None stored in tree. Expect OPS value or number, got {self.data}')
+                raise Exception(f'ERROR: None stored in tree. Expect OPS value or number, got {self.data}')
             
-        # if the node is not an operation than it should be a terminal index. So using it on featureValues
-        # should return a float or an int (the value of some feature in an instance) not a None
-        else:  # if the node is not an operation or None, then it is a terminal index so return the value
-            return featureValues[self.data]
+            # if the node is not an operation than it should be a terminal index. So using it on featureValues
+            # should return a float or an int (the value of some feature in an instance) not a None
+            else:  # if the node is not an operation and is a number, then it is a terminal index so return the value
+                log.debug(f'__runNode found the feature value {featureValues[self.data]} in a node')
+                return featureValues[self.data]
+
+        except Exception as err:
+            tqdm.write(str(err))
 
     def getSize(self, counter) -> int:
 
@@ -183,7 +207,8 @@ class ConstructedFeature:
     
         # will hold the indexes found at each terminal node
         values = []  # type: typ.List[int]
-    
+        # ? do I need to be passing values instead of just using them?
+        
         def __walk(node: Tree) -> None:
             # if this tree's node is a valid operation, keep walking done the tree
             if node.data in OPS:
@@ -197,6 +222,9 @@ class ConstructedFeature:
                 return
 
         __walk(self.tree)  # walk the tree starting with the CF's root node
+        
+        if not values:  # if values is empty
+            log.debug('The getUsedFeatures found no features (values list is empty)')
         return values      # values should now hold the indexes of the tree's terminals
 
     def transform(self, instance: row) -> float:
@@ -354,8 +382,7 @@ class Hypothesis:
     # ! this is the function used by cdfcProject
     def transform(self, data=None):
 
-        instance = collect.namedtuple(
-            'instance', ['className', 'values'])
+        instance = collect.namedtuple('instance', ['className', 'values'])
         
         transformed = []  # this will hold the transformed values
         
@@ -424,19 +451,86 @@ def terminals(classId: int) -> typ.List[int]:
     Score = collect.namedtuple('Score', ['Attribute', 'Relevancy'])
     scores = []
 
-    for i in range(1, FEATURE_NUMBER):
-        inClass, notIn = valuesInClass(classId, i)            # find the values of attribute i in/not in class classId
-        tValue, pCompValue = stats.ttest_ind(inClass, notIn)  # get the t-test & p-value for the feature
-        pValue = 1 - pCompValue
+    for i in range(FEATURE_NUMBER):
+        inClass, notIn = valuesInClass(classId, i)  # find the values of attribute i in/not in class classId
+        
+        # ! Testing data structs
+        inside_of_class = np.array(inClass)
+        not_inside_of_class = np.array(notIn)
 
+        # get the t-test & complement of the p-value for the feature
+        # tValue will be zero when it's on the mean
+        # pValue will only be zero when the instances are the same/equivalent
+        # BUG pCompValue is 1, causing pValue to be 0 -- this makes relevancy a NaN
+        # ? Do we actually want pCompValue or is it just pValue?
+        tValue, pCompValue = stats.ttest_ind(inClass, notIn)
+        
+        # ****************** Check that valuesInClass & t-test worked as expected ****************** #
+        try:
+            # *** Check that pCompValue won't be 0 *** #
+            if np.subtract(1, pCompValue) == 0:  # if pValue is zero then inClass & notIn are the same
+                log.error(f'pCompValue is 1 making p-Value 0, pCompValue={pCompValue}')
+                raise Exception(f'ERROR: p-Value is 0, pCompValue={pCompValue}')
+            
+            # *** Check that inClass is not empty *** #
+            if not inClass:
+                log.error(f'inClass was empty, ninClass={inClass}, notIn={notIn}, classId={classId}, attribute={i}')
+                raise Exception(f'ERROR: inClass was empty,'
+                                f'\ninClass={inClass}, notIn={notIn}, classId={classId}, attribute={i}')
+            # + if inClass is empty tValue is inaccurate, don't run other checks + #
+            
+            # *** Check that inClass & notIn aren't equal
+            elif np.array_equal(inside_of_class, not_inside_of_class):
+                log.error(f'inClass & notIn are equal, inClass{inside_of_class}, notIn{not_inside_of_class}')
+                raise Exception(f'inClass & notIn are equal, inClass{inside_of_class}, '
+                                f'notIn{not_inside_of_class}')
+            # *** Check that inClass & notIn aren't equivalent
+            elif np.array_equiv(inside_of_class, not_inside_of_class):
+                log.error(f'inClass & notIn are equivalent (but not equal, their shapes are different), '
+                          f'inClass{inside_of_class}, notIn{not_inside_of_class}')
+                raise Exception(f'inClass & notIn are equivalent, inClass{inside_of_class}, '
+                                f'notIn{not_inside_of_class}')
+            # *** Check that tValue was set & is a number  *** #
+            elif tValue is None or math.isnan(tValue):
+                log.error(f'tValue computation failed, expected a number got {tValue}')
+                raise Exception(f'ERROR: tValue computation failed, expected a number got {tValue}')
+            
+            # *** Check that tValue is finite *** #
+            elif math.isinf(tValue):
+                log.error(f'tValue computation failed. tValues is a number, but is not finite. tValue = {tValue}')
+                raise Exception(f'ERROR: tValue computation failed, expected a finite number got {tValue}')
+
+        except Exception as err:
+            tqdm.write(str(err))
+        # ******************************************************************************************* #
+
+        # BUG p-Value is being set to 0 because the complement is 1 -- this makes relevancy a NaN
+        pValue = np.subtract(1, pCompValue)
         # calculate relevancy for a single feature
         if pValue >= 0.05:  # if p-value is less than 0.05
             relevancy = 0   # set relevancy score to 0
             scores.append(Score(i, relevancy))  # add relevancy score to the list of scores
         # otherwise
         else:
-            relevancy = abs(tValue)/pValue      # set relevancy using t-value/p-value
-            scores.append(Score(i, relevancy))  # add relevancy score to the list of scores
+            
+            try:
+                relevancy = np.divide(np.absolute(tValue), pValue)  # set relevancy using t-value/p-value
+                
+                # *************************** Check that division worked *************************** #
+                if math.isinf(relevancy):  # send message if division failed
+                    log.error(f'Relevancy is infinite; some non-zero was divided by 0 -- tValue={tValue} pValue={pValue}')
+                    raise Exception(f'ERROR: relevancy is infinite, tValue={tValue} pValue={pValue}')
+                # BUG this gets thrown because pValue & tValue are 0
+                elif math.isnan(relevancy):  # send message if division failed
+                    log.error(f'Relevancy is infinite; 0/0 -- tValue={tValue} pValue={pValue}')
+                    raise Exception(f'ERROR: relevancy is NaN (0/0), tValue={tValue} pValue={pValue}')
+                # ********************************************************************************** #
+                
+                else:  # if division worked
+                    scores.append(Score(i, relevancy))  # add relevancy score to the list of scores
+            
+            except Exception as err:
+                tqdm.write(str(err))
 
     sortedScores = sorted(scores, key=lambda s: s.Relevancy)  # sort the features by relevancy scores
 
@@ -465,7 +559,7 @@ def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[np.float64
         inClass -- This holds the values in the class.
         notInClass -- This holds the values not in the class.
     """
-
+    
     inClass = []     # attribute values that appear in the class
     notInClass = []  # attribute values that do not appear in the class
 
@@ -476,13 +570,20 @@ def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[np.float64
             
         else:                                               # if the class is not the same as the class given, then
             notInClass.append(value.attributes[attribute])  # add the feature's value to not in
-
+            
+    if not inClass:  # if inClass is empty
+        log.debug('The valuesInClass method has found that inClass is empty')
+    if not notInClass:  # if notInClass is empty
+        log.debug('The valuesInClass method has found that notInClass is empty')
+    
     return inClass, notInClass  # return inClass & notInClass
 
 
 def __grow(relevantIndex: typ.List[np.float], depth: int = 0) -> typ.Tuple[Tree, int]:
     # This function uses the grow method to generate an initial population
     # the last thing returned should be a trees root node
+    if int == 0:  # only print to log on first call
+        log.debug('The __grow method has been chosen to build a tree')
 
     depth += 1  # increase the depth by one
 
@@ -511,6 +612,8 @@ def __grow(relevantIndex: typ.List[np.float], depth: int = 0) -> typ.Tuple[Tree,
 def __full(relevantValues: typ.List[np.float], depth: int = 0) -> typ.Tuple[Tree, int]:
     # This function uses the full method to generate an initial population
     # the last thing returned should be a trees root node
+    if int == 0:  # only print to log on first call
+        log.debug('The __full method has been chosen to build a tree')
 
     depth += 1  # increase the depth by one
 
@@ -537,7 +640,7 @@ def createInitialPopulation() -> Population:
         # NOTE this will make 1 tree for each feature, and 1 CF for each class
 
         # get a list of all classIds
-        classIds = list(range(1, LABEL_NUMBER+1))
+        classIds = list(range(LABEL_NUMBER))
         random.shuffle(classIds)
 
         ftrs: typ.List[ConstructedFeature] = []
@@ -550,11 +653,11 @@ def createInitialPopulation() -> Population:
             
             if random.choice([True, False]):
                 name = classIds.pop(0)        # get a random id
-                tree, size = __grow(terminals(name))     # create tree
+                tree, size = __grow(terminals(name))  # create tree
                 ftrs.append(ConstructedFeature(name, tree, size))
             else:
                 name = classIds.pop(0)        # get a random id
-                tree, size = __full(terminals(name))     # create tree
+                tree, size = __full(terminals(name))  # create tree
                 ftrs.append(ConstructedFeature(name, tree, size))
 
             size += size
@@ -567,6 +670,7 @@ def createInitialPopulation() -> Population:
     for __ in trange(POPULATION_SIZE, desc="Creating Initial Hypotheses", unit="hyp"):
         hypothesis.append(createHypothesis())
 
+    log.debug('The createInitialHypothesis() method has finished & is returning')
     return Population(hypothesis, 0)
 
 
@@ -783,16 +887,19 @@ def cdfc(train: np.ndarray) -> Hypothesis:
     elite = currentPopulation.candidateHypotheses[0]  # init elitism
 
     # loop, evolving each generation. This is where most of the work is done
+    log.debug('Starting generations stage...')
     for __ in trange(GENERATIONS, desc="CDFC Generations", unit="gen"):
         newPopulation, elite = evolve(currentPopulation, elite)  # generate a new population by evolving the old one
         # update currentPopulation to hold the new population
         # this is done in two steps to avoid potential namespace issues
         currentPopulation = newPopulation
+    log.debug('Finished evolution stage')
     SYSOUT.write(HDR + ' Final Generation Reached '.ljust(50, '-') + SUCCESS)  # update user
     # ***************************************************************** #
 
     # ****************** Return the Best Hypothesis ******************* #
     # check to see if the last generation has generated fitness scores
+    log.debug('Finding best hypothesis')
     if currentPopulation.candidateHypotheses[2].fitness is None:
         # if not then generate them
         for i in currentPopulation.candidateHypotheses:
@@ -802,4 +909,5 @@ def cdfc(train: np.ndarray) -> Hypothesis:
     # ? check this works
     fitBar = tqdm(currentPopulation.candidateHypotheses, desc='Finding most fit hypothesis', unit='hyp')
     bestHypothesis = max(fitBar, key=lambda x: x.fitness)
+    log.debug('Found best hypothesis, returning...')
     return bestHypothesis  # return the best hypothesis generated
