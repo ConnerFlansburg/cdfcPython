@@ -6,10 +6,10 @@ from pathlib import Path
 from tkinter import filedialog
 from tkinter import messagebox
 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from pyfiglet import Figlet
+# from pyfiglet import Figlet
 from sklearn.metrics import accuracy_score
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
@@ -56,26 +56,26 @@ OVERWRITE = '\r' + HDR
 SYSOUT = sys.stdout
 
 
-def __createPlot(df):
-    # *** Create the Plot *** #
-    outlierSymbol = dict(markerfacecolor='tab:red', marker='D')  # change the outliers to be red diamonds
-    medianSymbol = dict(linewidth=2.5, color='tab:green')        # change the medians to be green
-    meanSymbol = dict(linewidth=2.5, color='tab:blue')           # change the means to be blue
-    fig1 = df.boxplot(showmeans=True,                            # create boxplot, store it in fig1, & show the means
-                      meanline=True,                             # show mean as a mean line
-                      flierprops=outlierSymbol,                  # set the outlier properties
-                      medianprops=medianSymbol,                  # set the median properties
-                      meanprops=meanSymbol)                      # set the mean properties
-    fig1.set_title("Accuracy")                                   # set the title of the plot
-    fig1.set_xlabel("Accuracy Ratio")                            # set the label of the x-axis
-    fig1.set_ylabel("Model Type")                                # set the label of the y-axis
-    # *** Save the Plot as an Image *** #
-    # create a list of file formats that the plot may be saved as
-    images = [('Image Files', ['.jpeg', '.jpg', '.png', '.tiff', '.tif', '.bmp'])]
-    # ask the user where they want to save the plot
-    out = filedialog.asksaveasfilename(defaultextension='.png', filetypes=images)
-    # save the plot to the location provided by the user
-    plt.savefig(out)
+# def __createPlot(df):
+#     # *** Create the Plot *** #
+#     outlierSymbol = dict(markerfacecolor='tab:red', marker='D')  # change the outliers to be red diamonds
+#     medianSymbol = dict(linewidth=2.5, color='tab:green')        # change the medians to be green
+#     meanSymbol = dict(linewidth=2.5, color='tab:blue')           # change the means to be blue
+#     fig1 = df.boxplot(showmeans=True,                            # create boxplot, store it in fig1, & show the means
+#                       meanline=True,                             # show mean as a mean line
+#                       flierprops=outlierSymbol,                  # set the outlier properties
+#                       medianprops=medianSymbol,                  # set the median properties
+#                       meanprops=meanSymbol)                      # set the mean properties
+#     fig1.set_title("Accuracy")                                   # set the title of the plot
+#     fig1.set_xlabel("Accuracy Ratio")                            # set the label of the x-axis
+#     fig1.set_ylabel("Model Type")                                # set the label of the y-axis
+#     # *** Save the Plot as an Image *** #
+#     # create a list of file formats that the plot may be saved as
+#     images = [('Image Files', ['.jpeg', '.jpg', '.png', '.tiff', '.tif', '.bmp'])]
+#     # ask the user where they want to save the plot
+#     out = filedialog.asksaveasfilename(defaultextension='.png', filetypes=images)
+#     # save the plot to the location provided by the user
+#     plt.savefig(out)
 
 
 def __discretization(data: np.ndarray) -> np.ndarray:
@@ -413,7 +413,7 @@ def __accuracyFrameToLatex(modelsTuple: typ.Tuple[typ.List[float], typ.List[floa
 
 def main() -> None:
 
-    SYSOUT.write(Figlet(font='larry3d').renderText('C D F C'))
+    # SYSOUT.write(Figlet(font='larry3d').renderText('C D F C'))  # formatted start up message
     SYSOUT.write("Program Initialized Successfully\n")
     
     parent = tk.Tk()                                          # prevent root window caused by Tkinter
