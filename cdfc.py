@@ -907,6 +907,7 @@ def cdfc(train: np.ndarray) -> Hypothesis:
     for line in tqdm(train, desc="Setting Global Variables"):
         
         # parse the file
+        # ? I am correctly setting the classId/name so that it works with using FEATURE_NUMBER?
         rows.append(row(line[0], line[1:]))  # reader[0] = classId, reader[1:] = attribute values
         classes.append(line[0])
         classSet.add(line[0])
