@@ -13,6 +13,7 @@ from tqdm import tqdm
 from tqdm import trange
 
 # ! Next Steps
+# TODO fix bug in relevancy
 # TODO fix bug in run tree
 
 # TODO write code for the if function in OPS
@@ -53,8 +54,8 @@ np.seterr(divide='ignore')  # suppress divide by zero warnings from numpy
 warnings.filterwarnings('ignore', message='invalid value encountered in true_divide')
 
 # create the file path for the log file & configure the logger
-logPath = str(Path.cwd() / 'log' / 'cdfc.log')
-log.basicConfig(level='debug', filename=logPath, format='%(levelname)s - %(lineno)d: %(message)s')
+logPath = str(Path.cwd() / 'logs' / 'cdfc.log')
+log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
 
 
 class Tree:
@@ -101,12 +102,14 @@ class Tree:
         # ? Maybe  when we have a value and try to index it using featureValues[self.data], we are getting a None?
         # ?   (i.e. the issue is that the instance has a None value at that index)
         # ? Maybe it's because featureValues is a Dictionary not a list? -- check
+        # ? I think this error is a result of the error in the relevancy calculation that's preventing nodes from being set
         # + Try creating a unit test for this, grow, & full
         # if the node is an operation both of it's branches should have operations or terminals
         # either way calling __runNode() won't return a None
+        log.debug('Attempting to run __runNode method...')
         try:
             if self.data in OPS:  # if this tree's node is a valid operation, then execute it
-                
+                log.debug('self.data was found in OPS...')
                 # find out which operation it is & return it's value
                 if self.data == 'add':
                     lft = self.left.__runNode(featureValues)
@@ -462,35 +465,42 @@ def terminals(classId: int) -> typ.List[int]:
     """terminals creates the list of relevant terminals for a given class.
 
     Arguments:
-        classId {String} -- classId is the identifier for the class for
-                             which we want a terminal set
+        classId {int} -- classId is the identifier for the class for
+                         which we want a terminal set
 
     Returns:
-        list -- terminals returns the highest scoring features as a list.
-                The list will have a length of FEATURE_NUMBER/2, and will
-                hold the indexes of the features.
+        terminalSet {list[int]} -- terminals returns the highest scoring features as a list.
+                                        The list will have a length of FEATURE_NUMBER/2, and will
+                                        hold the indexes of the features.
     """
 
     Score = collect.namedtuple('Score', ['Attribute', 'Relevancy'])
-    scores = []
+    ScoreList = typ.List[typ.Union[typ.List, Score]]
+    scores: ScoreList = []
 
-    for i in range(FEATURE_NUMBER):
+    # FEATURE_NUMBER is the number of features in the data. This means that it can also be a list of
+    # the indexes of the features (the feature IDs). Subtract it by 1 to make 0 a valid feature ID
+    for i in range(FEATURE_NUMBER-1):
         inClass, notIn = valuesInClass(classId, i)  # find the values of attribute i in/not in class classId
-        
-        # ! Testing data structs
-        inside_of_class = np.array(inClass)
-        not_inside_of_class = np.array(notIn)
 
         # get the t-test & complement of the p-value for the feature
         # tValue will be zero when it's on the mean
         # pValue will only be zero when the instances are the same/equivalent
         # BUG pCompValue is 1, causing pValue to be 0 -- this makes relevancy a NaN
         # ? Do we actually want pCompValue or is it just pValue?
+        # ! If stats.ttest_ind() is running correctly then the issue must be inClass & notIn,
+        # !     and that would mean the error is in valuesInClass
+        # the data has been standardized, so the variances are equal? (equal_var = True, which is the default)
         tValue, pCompValue = stats.ttest_ind(inClass, notIn)
         
         # ****************** Check that valuesInClass & t-test worked as expected ****************** #
         try:
+            # transform into numpy arrays which are easier to test
+            inside_of_class = np.array(inClass)
+            not_inside_of_class = np.array(notIn)
+            
             # *** Check that pCompValue won't be 0 *** #
+            # ! currently this is triggered because pCompValue is 1
             if np.subtract(1, pCompValue) == 0:  # if pValue is zero then inClass & notIn are the same
                 log.error(f'pCompValue is 1 making p-Value 0, pCompValue={pCompValue}')
                 raise Exception(f'ERROR: p-Value is 0, pCompValue={pCompValue}')
@@ -502,17 +512,19 @@ def terminals(classId: int) -> typ.List[int]:
                                 f'\ninClass={inClass}, notIn={notIn}, classId={classId}, attribute={i}')
             # + if inClass is empty tValue is inaccurate, don't run other checks + #
             
-            # *** Check that inClass & notIn aren't equal
+            # *** Check that inClass & notIn aren't equal *** #
             elif np.array_equal(inside_of_class, not_inside_of_class):
                 log.error(f'inClass & notIn are equal, inClass{inside_of_class}, notIn{not_inside_of_class}')
                 raise Exception(f'inClass & notIn are equal, inClass{inside_of_class}, '
                                 f'notIn{not_inside_of_class}')
-            # *** Check that inClass & notIn aren't equivalent
+            
+            # *** Check that inClass & notIn aren't equivalent *** #
             elif np.array_equiv(inside_of_class, not_inside_of_class):
                 log.error(f'inClass & notIn are equivalent (but not equal, their shapes are different), '
                           f'inClass{inside_of_class}, notIn{not_inside_of_class}')
                 raise Exception(f'inClass & notIn are equivalent, inClass{inside_of_class}, '
                                 f'notIn{not_inside_of_class}')
+            
             # *** Check that tValue was set & is a number  *** #
             elif tValue is None or math.isnan(tValue):
                 log.error(f'tValue computation failed, expected a number got {tValue}')
@@ -527,24 +539,27 @@ def terminals(classId: int) -> typ.List[int]:
             tqdm.write(str(err))
         # ******************************************************************************************* #
 
-        # BUG p-Value is being set to 0 because the complement is 1 -- this makes relevancy a NaN
-        pValue = np.subtract(1, pCompValue)
+        # ! p-Value is being set to 0 because the complement is 1 -- this makes relevancy a NaN
+        pValue: float = np.subtract(1, pCompValue)  # get the actual p-values (since pCompValue is the complement, subtract 1)
+        
         # calculate relevancy for a single feature
-        if pValue >= 0.05:  # if p-value is less than 0.05
-            relevancy = 0   # set relevancy score to 0
+        if pValue >= 0.05:                      # if p-value is greater than 0.05 then the feature is not relevant
+            relevancy: float = 0.0              # because it's not relevant, set relevancy score to 0
             scores.append(Score(i, relevancy))  # add relevancy score to the list of scores
+            
         # otherwise
         else:
             
             try:
-                relevancy = np.divide(np.absolute(tValue), pValue)  # set relevancy using t-value/p-value
+                relevancy: float = np.divide(np.absolute(tValue), pValue)  # set relevancy using t-value/p-value
                 
                 # *************************** Check that division worked *************************** #
-                if math.isinf(relevancy):  # send message if division failed
+                if math.isinf(relevancy):  # check for n/0
                     log.error(f'Relevancy is infinite; some non-zero was divided by 0 -- tValue={tValue} pValue={pValue}')
                     raise Exception(f'ERROR: relevancy is infinite, tValue={tValue} pValue={pValue}')
-                # BUG this gets thrown because pValue & tValue are 0
-                elif math.isnan(relevancy):  # send message if division failed
+                
+                # ! this gets thrown because pValue & tValue are 0
+                elif math.isnan(relevancy):  # check for 0/0
                     log.error(f'Relevancy is infinite; 0/0 -- tValue={tValue} pValue={pValue}')
                     raise Exception(f'ERROR: relevancy is NaN (0/0), tValue={tValue} pValue={pValue}')
                 # ********************************************************************************** #
@@ -555,14 +570,24 @@ def terminals(classId: int) -> typ.List[int]:
             except Exception as err:
                 tqdm.write(str(err))
 
-    sortedScores = sorted(scores, key=lambda s: s.Relevancy)  # sort the features by relevancy scores
+    ordered: ScoreList = sorted(scores, key=lambda s: s.Relevancy)  # sort the features by relevancy scores
 
-    terminalSet = []                     # this will hold relevant terminals
-    top = len(sortedScores)//2            # find the halfway point
-    relevantScores = sortedScores[:top]  # slice top half
+    terminalSet: typ.Union[int, typ.List] = []  # this will hold relevant terminals
+    top: int = len(ordered)//2                  # find the halfway point
+    relevantScores: ScoreList = ordered[:top]   # slice top half
     
     for i in relevantScores:             # loop over relevant scores
+        # ? this is where the terminal index is added. Is the index correct?
         terminalSet.append(i.Attribute)  # add the attribute number to the terminal set
+    
+    # ************************* Test if terminalSet is empty ************************* #
+    try:
+        if not terminalSet:  # if terminalSet is empty
+            log.error('Terminals calculation failed: terminalSet is empty')
+            raise Exception('ERROR: Terminals calculation failed: terminalSet is empty')
+    except Exception as err:
+        tqdm.write(str(err))
+    # ********************************************************************************* #
 
     return terminalSet
 
@@ -582,9 +607,9 @@ def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[np.float64
         inClass -- This holds the values in the class.
         notInClass -- This holds the values not in the class.
     """
-    
-    inClass = []     # attribute values that appear in the class
-    notInClass = []  # attribute values that do not appear in the class
+    # TODO add type hinting
+    inClass: typ.Union[int, float, typ.List] = []     # attribute values that appear in the class
+    notInClass: typ.Union[int, float, typ.List] = []  # attribute values that do not appear in the class
 
     for value in rows:  # loop over all the rows, where value is the row at the current index
         
