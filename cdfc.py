@@ -492,6 +492,9 @@ def terminals(classId: int) -> typ.List[int]:
         # !     and that would mean the error is in valuesInClass
         # the data has been standardized, so the variances are equal? (equal_var = True, which is the default)
         tValue, pCompValue = stats.ttest_ind(inClass, notIn)
+
+        # ! p-Value is being set to 0 because the complement is 1 -- this makes relevancy a NaN
+        pValue: float = np.subtract(1, pCompValue)  # get the actual p-values (since pCompValue is the complement, subtract 1)
         
         # ****************** Check that valuesInClass & t-test worked as expected ****************** #
         try:
@@ -535,12 +538,19 @@ def terminals(classId: int) -> typ.List[int]:
                 log.error(f'tValue computation failed. tValues is a number, but is not finite. tValue = {tValue}')
                 raise Exception(f'ERROR: tValue computation failed, expected a finite number got {tValue}')
 
+            # *** Check that pValue was set & is a number  *** #
+            elif tValue is None or math.isnan(pValue):
+                log.error(f'pValue computation failed, expected a number got {pValue}')
+                raise Exception(f'ERROR: pValue computation failed, expected a number got {pValue}')
+
+            # *** Check that pValue is finite *** #
+            elif math.isinf(pValue):
+                log.error(f'pValue computation failed. pValues is a number, but is not finite. tValue = {pValue}')
+                raise Exception(f'ERROR: tValue computation failed, expected a finite number got {pValue}')
+
         except Exception as err:
             tqdm.write(str(err))
         # ******************************************************************************************* #
-
-        # ! p-Value is being set to 0 because the complement is 1 -- this makes relevancy a NaN
-        pValue: float = np.subtract(1, pCompValue)  # get the actual p-values (since pCompValue is the complement, subtract 1)
         
         # calculate relevancy for a single feature
         if pValue >= 0.05:                      # if p-value is greater than 0.05 then the feature is not relevant
