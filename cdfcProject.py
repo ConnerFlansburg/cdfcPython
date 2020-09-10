@@ -9,7 +9,7 @@ from tkinter import messagebox
 # import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-# from pyfiglet import Figlet
+from pyfiglet import Figlet
 from sklearn.metrics import accuracy_score
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
@@ -412,17 +412,16 @@ def __accuracyFrameToLatex(modelsTuple: typ.Tuple[typ.List[float], typ.List[floa
 
 
 def main() -> None:
-
-    # SYSOUT.write(Figlet(font='larry3d').renderText('C D F C'))  # formatted start up message
+    SYSOUT.write(Figlet(font='larry3d').renderText('C D F C'))  # formatted start up message
     SYSOUT.write("Program Initialized Successfully\n")
     
-    parent = tk.Tk()                                          # prevent root window caused by Tkinter
-    parent.overrideredirect(1)                                # Avoid it appearing and then disappearing quickly
-    parent.withdraw()                                         # Hide the window
+    parent = tk.Tk()            # prevent root window caused by Tkinter
+    parent.overrideredirect(1)  # Avoid it appearing and then disappearing quickly
+    parent.withdraw()           # Hide the window
 
     SYSOUT.write('\nGetting File...\n')
     try:
-        inPath = Path(filedialog.askopenfilename(parent=parent))             # prompt user for file path
+        inPath = Path(filedialog.askopenfilename(parent=parent))  # prompt user for file path
         SYSOUT.write(f"{HDR} File {inPath.name} selected......")
     except PermissionError:
         sys.stderr.write(f"\n{HDR} Permission Denied, or No File was Selected\nExiting......")  # exit gracefully
