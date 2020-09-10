@@ -15,6 +15,7 @@ from tqdm import trange
 # ! Next Steps
 # TODO fix bug in relevancy
 # TODO fix bug in run tree
+# TODO fix bug with Leukemia's NaN errors
 
 # TODO write code for the if function in OPS
 # TODO add docstrings
@@ -35,6 +36,7 @@ R: typ.Final = 2                 # R is the ratio of number of CFs to the number
 TOURNEY: typ.Final = 7           # TOURNEY is the tournament size
 ENTROPY_OF_S = 0                 # ENTROPY_OF_S is used for entropy calculation
 FEATURE_NUMBER = 0               # FEATURE_NUMBER is the number of features in the data set
+CLASS_IDS = []                   # CLASS_IDS is a list of all the unique class ids
 INSTANCES_NUMBER = 0             # INSTANCES_NUMBER is  the number of instances in the training data
 LABEL_NUMBER = 0                 # LABEL_NUMBER is the number of classes/labels in the data
 M = 0                            # M is the number of constructed features
@@ -133,8 +135,16 @@ class Tree:
                     rgt = self.right.__runNode(featureValues)
                     vl = min(lft, rgt)
                     return vl
+
+            # if the node is not an operation than it should be a terminal index. So using it on featureValues
+            # should return a float or an int (the value of some feature in an instance) not a None
+            # if the node is not an operation and is a number, then it should be a terminal index
+            # so check if it's a valid value. If so return the value
+            elif self.data in range(FEATURE_NUMBER):
+                log.debug(f'__runNode found the feature value {featureValues[self.data]} in a node')
+                return featureValues[self.data]
             
-            # if the data stored is not in OPS and is not a number raise an exception
+            # if the data stored is not in OPS, not in feature range, and is not a number raise an exception
             elif math.isnan(self.data):
                 log.error(f'NaN stored in tree. Expect OPS value or number, got {self.data}')
                 raise Exception(f'ERROR: NaN stored in tree. Expect OPS value or number, got {self.data}')
@@ -142,13 +152,13 @@ class Tree:
             elif self.data is None:
                 log.error(f'None stored in tree. Expect OPS value or number, got {self.data}')
                 raise Exception(f'ERROR: None stored in tree. Expect OPS value or number, got {self.data}')
+            else:  # if the values is not in OPS, not in feature range, is a number, and is not none throw exception
+                log.error(f'Value stored in tree is a number outside of feature range. value{self.data}')
+                raise Exception(f'ERROR: Value stored in tree is a number outside of feature range. value{self.data}')
             
-            # if the node is not an operation than it should be a terminal index. So using it on featureValues
-            # should return a float or an int (the value of some feature in an instance) not a None
-            else:  # if the node is not an operation and is a number, then it is a terminal index so return the value
-                log.debug(f'__runNode found the feature value {featureValues[self.data]} in a node')
-                return featureValues[self.data]
-
+        except IndexError:
+            log.error(f'Index stored in tree was in range but did not exist. Value stored was:{self.data}')
+            tqdm.write(f'ERROR: Index stored in tree was in range but did not exist. Value stored was:{self.data}')
         except Exception as err:
             tqdm.write(str(err))
 
@@ -226,9 +236,13 @@ class ConstructedFeature:
 
         __walk(self.tree)  # walk the tree starting with the CF's root node
         
-        if not values:  # if values is empty
-            log.debug('The getUsedFeatures found no features (values list is empty)')
-        return values      # values should now hold the indexes of the tree's terminals
+        try:
+            if not values:  # if values is empty
+                log.debug('The getUsedFeatures found no features (values list is empty)')
+                raise Exception('ERROR: The getUsedFeatures found no features (values list is empty)')
+            return values      # values should now hold the indexes of the tree's terminals
+        except Exception as err:
+            tqdm.write(str(err))
 
     def transform(self, instance: row) -> float:
         # Send the tree a list of all the attribute values in a single instance
@@ -241,15 +255,15 @@ class ConstructedFeature:
 
 class Hypothesis:
     # a single hypothesis(a GP individual)
-    fitness = None          # the fitness score
-    distance = 0            # the distance function score
-    averageInfoGain = -1    # the average info gain of the hypothesis
-    maxInfoGain = -1        # the max info gain in the hypothesis
+    fitness: typ.Union[None, int, float] = None  # the fitness score
+    distance: typ.Union[float, int] = 0          # the distance function score
+    averageInfoGain: typ.Union[float, int] = -1  # the average info gain of the hypothesis
+    maxInfoGain: typ.Union[float, int] = -1      # the max info gain in the hypothesis
     # + averageInfoGain & maxInfoGain must be low enough that they will always be overwritten + #
     
     def __init__(self, features, size) -> None:
-        self.features = features  # a list of all the constructed features
-        self.size = size          # the number of nodes in all the cfs
+        self.features: typ.List[ConstructedFeature] = features  # a list of all the constructed features
+        self.size: int = size          # the number of nodes in all the cfs
 
     def getFitness(self) -> float:
 
@@ -257,8 +271,10 @@ class Hypothesis:
             minSum = 0
             addSum = 0
 
-            for d in range(1, len(self.features)):  # loop over the number of features
+            # ! Should this be looping of the range of self.features or just self.features?
+            for d in range(self.features):  # loop over the number of features stored in the hypothesis
                 # BUG unsupported operand += for int & list
+                # ? is what Vi & Vj want the index of the feature?
                 top = min(Vi[d], Vj[d])  # get the top of the fraction
                 bottom = Vi[d] + Vj[d]   # get the bottom of the fraction
 
@@ -470,8 +486,8 @@ def terminals(classId: int) -> typ.List[int]:
 
     Returns:
         terminalSet {list[int]} -- terminals returns the highest scoring features as a list.
-                                        The list will have a length of FEATURE_NUMBER/2, and will
-                                        hold the indexes of the features.
+                                   The list will have a length of FEATURE_NUMBER/2, and will
+                                   hold the indexes of the features.
     """
 
     Score = collect.namedtuple('Score', ['Attribute', 'Relevancy'])
@@ -480,7 +496,7 @@ def terminals(classId: int) -> typ.List[int]:
 
     # FEATURE_NUMBER is the number of features in the data. This means that it can also be a list of
     # the indexes of the features (the feature IDs). Subtract it by 1 to make 0 a valid feature ID
-    for i in range(FEATURE_NUMBER-1):
+    for i in range(FEATURE_NUMBER):
         inClass, notIn = valuesInClass(classId, i)  # find the values of attribute i in/not in class classId
 
         # get the t-test & complement of the p-value for the feature
@@ -617,7 +633,7 @@ def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[np.float64
         inClass -- This holds the values in the class.
         notInClass -- This holds the values not in the class.
     """
-    # TODO add type hinting
+
     inClass: typ.Union[int, float, typ.List] = []     # attribute values that appear in the class
     notInClass: typ.Union[int, float, typ.List] = []  # attribute values that do not appear in the class
 
@@ -697,8 +713,8 @@ def createInitialPopulation() -> Population:
         # given a list of trees, create a hypothesis
         # NOTE this will make 1 tree for each feature, and 1 CF for each class
 
-        # get a list of all classIds
-        classIds = list(range(LABEL_NUMBER))
+        # get a copy of the list of all the unique classIds
+        classIds = copy.deepcopy(CLASS_IDS)
         random.shuffle(classIds)
 
         ftrs: typ.List[ConstructedFeature] = []
@@ -709,14 +725,38 @@ def createInitialPopulation() -> Population:
             # Also randomly assign the class ID then remove that ID
             # so each ID may only be used once
             
+            try:
+                name = classIds.pop(0)  # get a random id
+                
+                if name in range(LABEL_NUMBER):  # check if name is between 0 and (the number of classes)-1
+                    # ! this line is being reached. Is name getting set incorrectly?
+                    log.error('Name is outside of the range of LABEL_NUMBER')
+                    raise Exception('ERROR: Name is outside of the range of LABEL_NUMBER')
+            
+            except IndexError:
+                log.error('Index error encountered in createInitialPopulation (popped from an empty list)')
+                tqdm.write('ERROR: Index error encountered in createInitialPopulation (popped from an empty list)')
+                sys.exit(-1)  # exit on error; recovery not possible
+            except Exception as err:
+                tqdm.write(str(err))
+                sys.exit(-1)  # exit on error; recovery not possible
+
+            # if no error occurred log the value found
+            log.debug(f'createHypothesis found a valid classId: {name}')
+
+            # BUG call that causes pValue to equal 0 starts here
             if random.choice([True, False]):
-                name = classIds.pop(0)        # get a random id
+                log.debug(f'createHypothesis chose grow with the classId {name}')
                 tree, size = __grow(terminals(name))  # create tree
+                log.debug(f'createHypothesis created tree (grow) successfully using classId {name}')
                 ftrs.append(ConstructedFeature(name, tree, size))
+                log.debug(f'createHypothesis created constructedFeature (grow) successfully using classId {name}')
             else:
-                name = classIds.pop(0)        # get a random id
+                log.debug(f'createHypothesis chose full with the classId {name}')
                 tree, size = __full(terminals(name))  # create tree
+                log.debug(f'createHypothesis created tree (full) successfully using classId {name}')
                 ftrs.append(ConstructedFeature(name, tree, size))
+                log.debug(f'createHypothesis created constructedFeature (full) successfully using classId {name}')
 
             size += size
         # create a hypothesis & return it
@@ -740,7 +780,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         candidates: typ.List[Hypothesis] = copy.deepcopy(p.candidateHypotheses)  # copy to avoid overwriting
         first = None  # the tournament winner
         score = 0     # the winning score
-        for i in range(0, TOURNEY):  # compare TOURNEY number of random hypothesis
+        for i in range(TOURNEY):  # compare TOURNEY number of random hypothesis
             randomIndex = random.randint(0, (len(candidates)-1))  # get a random index value
             candidate: Hypothesis = candidates.pop(randomIndex)   # get the hypothesis at the random index
             # we pop here to avoid getting duplicates. The index uses candidates current size so it will be in range
@@ -752,6 +792,14 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             elif score < fitness:  # if first is set, but knight is more fit,
                 first = candidate  # then update it
                 score = fitness    # then update the score to higher fitness
+                
+        try:
+            if first is None:
+                log.error(f'Tournament could not set first correctly, first = {first}')
+                raise Exception(f'ERROR: Tournament could not set first correctly, first = {first}')
+        except Exception as err:
+            tqdm.write(str(err))
+        
         return first
         # ************ End of Tournament Selection ************* #
 
@@ -801,7 +849,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
                 
             cl = parent.features[featureIndex].className                     # get the className of the feature
             parent.features[featureIndex] = ConstructedFeature(cl, t, size)  # replace the parent with the mutated child
-            newPopulation.candidateHypotheses.append(parent)                # add the parent to the new pop
+            newPopulation.candidateHypotheses.append(parent)                 # add the parent to the new pop
             # appending is needed because parent is a copy made by tournament NOT a reference from the original pop
         # ************* End of Mutation ************* #
 
@@ -889,6 +937,7 @@ def cdfc(train: np.ndarray) -> Hypothesis:
 
     # makes sure we're using global variables
     global FEATURE_NUMBER
+    global CLASS_IDS
     global POPULATION_SIZE
     global INSTANCES_NUMBER
     global LABEL_NUMBER
@@ -907,32 +956,50 @@ def cdfc(train: np.ndarray) -> Hypothesis:
     for line in tqdm(train, desc="Setting Global Variables"):
         
         # parse the file
+        name = line[0]
         # ? I am correctly setting the classId/name so that it works with using FEATURE_NUMBER?
-        rows.append(row(line[0], line[1:]))  # reader[0] = classId, reader[1:] = attribute values
-        classes.append(line[0])
-        classSet.add(line[0])
+        # ? Who do I get the Attribute ids? The must be the index of the attribute
+        # ****************** Check that the ClassID/ClassName is an integer ****************** #
+        try:
+            if np.isnan(name):                                      # if it isn't a number
+                raise Exception(f'ERROR: Parser expected an integer, got a NaN of value:{line[0]}')
+            elif not (type(name) is int):                           # if it is a number, but not an integer
+                log.info(f'Parser expected an integer class ID, got a float: {line[0]}')
+                name = np.int(name)                                 # caste to int
+        except ValueError:                                          # if casting failed
+            log.error(f'Parse could not cast {name} to integer')
+            tqdm.write(f'ERROR: parser could not cast {name} to integer')
+        except Exception as err:                                    # catch NaN exception
+            log.error(f'Parser expected an integer classId, got a NaN: {name}')
+            tqdm.write(str(err))
+        # ************************************************************************************ #
+        # now that we know the classId/className (they're the same thing) is an integer, continue parsing
+        rows.append(row(name, line[1:]))  # reader[0] = classId, reader[1:] = attribute values
+        classes.append(name)
+        classSet.add(name)
         INSTANCES_NUMBER += 1
 
-        # track how many different IDs there are
-        if line[0] in ids:
+        # track how many unique/different class IDs there are
+        if name in ids:
             continue
         else:
-            ids.append(line[0])
+            ids.append(name)
 
         # ********* The Code Below is Used to Calculated Entropy  ********* #
         # this will count the number of times a class occurs in the provided data
         # dictionary[classId] = counter of times that class is found
         
-        if classToOccur.get(line[0]):   # if we have encountered the class before
+        if classToOccur.get(name):   # if we have encountered the class before
             classToOccur[line[0]] += 1  # increment
         else:  # if this is the first time we've encountered the class
             classToOccur[line[0]] = 1   # set to 1
         # ****************************************************************** #
 
+    CLASS_IDS = ids                           # this will collect all the feature names
     FEATURE_NUMBER = len(rows[0].attributes)  # get the number of features in the data set
-    POPULATION_SIZE = FEATURE_NUMBER * BETA  # set the pop size
-    LABEL_NUMBER = len(ids)                  # get the number of classes in the data set
-    M = R * LABEL_NUMBER                     # get the number of constructed features
+    POPULATION_SIZE = FEATURE_NUMBER * BETA   # set the pop size
+    LABEL_NUMBER = len(ids)                   # get the number of classes in the data set
+    M = R * LABEL_NUMBER                      # get the number of constructed features
 
     # ********* The Code Below is Used to Calculated Entropy  ********* #
     # loop over all classes
