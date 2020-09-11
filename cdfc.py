@@ -8,15 +8,15 @@ import logging as log
 import numpy as np
 import typing as typ
 import collections as collect
+from collections import defaultdict
 from scipy import stats
 from tqdm import tqdm
 from tqdm import trange
 
 # ! Next Steps
+# TODO change relevancy to use dictionaries
 # TODO fix bug with Leukemia's NaN errors
-# TODO find out why relevancy calculation is taking so long
 # TODO fix bug in run tree
-# TODO set size of tqdm loading bars (they're too short)
 
 # TODO write code for the if function in OPS
 # TODO add docstrings
@@ -25,6 +25,8 @@ from tqdm import trange
 # **************************** Constants/Globals **************************** #
 ALPHA: typ.Final = 0.8           # ALPHA is the fitness weight alpha
 BETA: typ.Final = 2              # BETA is a constant used to calculate the pop size
+BARCOLS = 25                     # BARCOLS is the number of columns for the progress bar to print
+CLASS_DICT = []                  # CLASS_DICT is a list of dicts (indexed by classId) mapping attribute values to classes
 CROSSOVER_RATE: typ.Final = 0.8  # CROSSOVER_RATE is the chance that a candidate will reproduce
 ELITISM_RATE: typ.Final = 1      # ELITISM_RATE is the elitism rate
 GENERATIONS: typ.Final = 50      # GENERATIONS is the number of generations the GP should run for
@@ -466,7 +468,7 @@ class Hypothesis:
         # so we should use rows (the provided training data)
         if data is None:
             
-            rowBar = tqdm(rows, desc='Transforming as part of the distance calculation')  # create progress bar
+            rowBar = tqdm(rows, desc='Transforming as part of the distance calculation', ncols=BARCOLS)  # create progress bar
             
             for r in rowBar:  # for each instance
                 values = []   # this will hold the calculated values for all the constructed features
@@ -486,7 +488,7 @@ class Hypothesis:
         # (this will be testing data from cdfcProject.py)
         else:
             
-            bar = tqdm(data, desc='Transforming as part of evolution')  # create progress bar
+            bar = tqdm(data, desc='Transforming as part of evolution', ncols=BARCOLS)  # create progress bar
             
             for d in bar:    # for each instance
                 values = []  # this will hold the calculated values for all the constructed features
@@ -644,7 +646,7 @@ def terminals(classId: int) -> typ.List[int]:
     return terminalSet
 
 
-def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[np.float64], typ.List[np.float64]]:
+def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[float], typ.List[float]]:
     """valuesInClass determines what values of an attribute occur in a class
         and what values do not
 
@@ -659,21 +661,65 @@ def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[np.float64
         inClass -- This holds the values in the class.
         notInClass -- This holds the values not in the class.
     """
+    inDict = CLASS_DICT[classId]                  # get the dictionary of attribute values for this class
+    inClass: typ.List[float] = inDict[attribute]  # now get feature/attribute values that appear in the class
+    
+    # ******************** get all the values from all the other dictionaries for this feature ******************** #
+    classes = CLASS_IDS.copy()          # make a copy of the list of unique classIDs
+    classes.remove(classId)             # remove the class we're looking at from the list
+    out: typ.List[float] = []           # this is a temporary variable that will hold the out list while it's constructed
+    try:
+        if LABEL_NUMBER == 2:               # * get the other score
+            index = classes.pop(0)          # pop the first classId in the list (should be the only item in the list)
+            spam = CLASS_DICT[index]        # get the dictionary for the other class
+            out = spam[attribute]           # get the feature/attribute values for the other class
+            if not classes:                 # if classes is not empty now, an error has occurred
+                raise AssertionError
 
-    inClass: typ.Union[int, float, typ.List] = []     # attribute values that appear in the class
-    notInClass: typ.Union[int, float, typ.List] = []  # attribute values that do not appear in the class
-
-    # ! this loop seems to be the primary factor on the speed of the relevancy calculation
-    for value in rows:  # loop over all the rows, where value is the row at the current index
-        
-        if value.className == classId:                   # if the class is the same as the class given, then
-            inClass.append(value.attributes[attribute])  # add the feature's value to in
+        elif LABEL_NUMBER == 3:             # * get the other 2 scores
+            index = classes.pop(0)          # pop the first classId in the list (should only be 2 items in the list)
+            spam = CLASS_DICT[index]        # get the dictionary for the class
+            out = spam[attribute]           # get the feature/attribute values for the class
             
-        else:                                               # if the class is not the same as the class given, then
-            notInClass.append(value.attributes[attribute])  # add the feature's value to not in
+            index = classes.pop(0)          # pop the 2nd classId in the list (should be the only item in the list)
+            spam = CLASS_DICT[index]        # get the dictionary for the class
+            out += spam[attribute]          # get the feature/attribute values for the class
+            if not classes:                 # if classes is not empty now, an error has occurred
+                raise AssertionError
+    
+        elif LABEL_NUMBER == 4:             # * get the other 3 scores
+            index = classes.pop(0)          # pop the first classId in the list (should only be 3 items in the list)
+            spam = CLASS_DICT[index]        # get the dictionary for the class
+            out = spam[attribute]           # get the feature/attribute values for the class
+        
+            index = classes.pop(0)          # pop the 2nd classId in the list (should only be 2 items in the list)
+            spam = CLASS_DICT[index]        # get the dictionary for the class
+            out += spam[attribute]          # get the feature/attribute values for the class
+    
+            index = classes.pop(0)          # pop the 3rd classId in the list (should only be 1 items in the list)
+            spam = CLASS_DICT[index]        # get the dictionary for the class
+            out += spam[attribute]          # get the feature/attribute values for the class
+            if not classes:                 # if classes is not empty now, an error has occurred
+                raise AssertionError
+
+        else:                               # * if there's more than 4 classes
+            for i in CLASS_DICT:            # loop over all the list of dicts
+                if i == classId:            # when we hit the dict that's in the class, skip
+                    continue
+                else:
+                    spam = CLASS_DICT[i]    # get the dictionary for the class
+                    out += spam[attribute]  # get the feature/attribute values for the class
+
+        notInClass: typ.List[float] = out   # set the attribute values that do not appear in the class using out
+
+    except AssertionError:                  # catches error thrown by the elif statements
+        log.error(f'ValuesInClass found more classIds than expected. Unexpected class(es) found: {classes}')
+        tqdm.write(f'ValuesInClass found more classIds than expected. Unexpected class(es) found: {classes}')
+        sys.exit(-1)
+    # ************************************************************************************************************* #
     
     try:
-        if not inClass:  # if inClass is empty
+        if not inClass:     # if inClass is empty
             log.debug('The valuesInClass method has found that inClass is empty')
             raise Exception('valuesInClass() found inClass[] to be empty')
         if not notInClass:  # if notInClass is empty
@@ -681,7 +727,7 @@ def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[np.float64
             raise Exception('valuesInClass() found notInClass[] to be empty')
     except Exception as err:
         tqdm.write(str(err))
-        sys.exit(-1)  # exit on error; recovery not possible
+        sys.exit(-1)        # exit on error; recovery not possible
     
     return inClass, notInClass  # return inClass & notInClass
 
@@ -970,6 +1016,7 @@ def cdfc(train: np.ndarray) -> Hypothesis:
     global rows
     global row
     global ENTROPY_OF_S  # * used in entropy calculation * #
+    global CLASS_DICT
 
     classes = []       # this will hold classIds and how often they occur
     classSet = set()   # this will hold how many classes there are
@@ -978,7 +1025,7 @@ def cdfc(train: np.ndarray) -> Hypothesis:
 
     # set global variables using the now transformed data
     # each line in train will be an instances
-    for line in tqdm(train, desc="Setting Global Variables"):
+    for line in tqdm(train, desc="Setting Global Variables", ncols=BARCOLS):
         
         # parse the file
         name = line[0]
@@ -1004,11 +1051,28 @@ def cdfc(train: np.ndarray) -> Hypothesis:
         classSet.add(name)
         INSTANCES_NUMBER += 1
 
-        # track how many unique/different class IDs there are
-        if name in ids:
-            continue
-        else:
-            ids.append(name)
+        # *** Create a Dictionary of Attribute Values Keyed by the Attribute's Index *** #
+        attributeNames = range(len(line[1:]))  # create names for the attributes number from 0 to len()
+        attributeValues = line[1:]             # grab all the attribute values in this instance
+        # create a new dictionary using (attributeName. attributeValue) pairs (in a tuple)
+        dictEntry: typ.Dict[int, typ.List[float]] = dict(zip(attributeNames, attributeValues))
+
+        # *** Merge the Old Dictionary with the New One *** #
+        # track how many unique/different class IDs there are & create dictionaries for
+        # ? update() replaces old values so we have to loop over, can this be done faster?
+        if name in ids:                            # if we've found an instance in this class before
+            merged = defaultdict(list)             # create a defaultDict that will store our combined dict
+            
+            # BUG IndexError: list index out of range
+            dicts = [CLASS_DICT[name], dictEntry]  # put the dict for this class & the new dict in a list
+            for d in dicts:                        # do loop for 1 dict and then the other
+                for key, value in d.items():       # loop over (for old d& new dict) their items/keys
+                    merged[key].append(value)      # add the value at the key to the list of values
+                
+        # *** Insert the Dictionary into CLASS_DICT *** #
+        else:                                         # if this is the first instance in the class
+            CLASS_DICT.insert(name, dict(dictEntry))  # insert the new dictionary at the index classID
+            ids.append(name)                          # add classId to ids -- a list of unique classIDs
 
         # ********* The Code Below is Used to Calculated Entropy  ********* #
         # this will count the number of times a class occurs in the provided data
@@ -1058,7 +1122,7 @@ def cdfc(train: np.ndarray) -> Hypothesis:
 
     # now that we know each hypothesis has a fitness score, get the one with the highest fitness
     # ? check this works
-    fitBar = tqdm(currentPopulation.candidateHypotheses, desc='Finding most fit hypothesis', unit='hyp')
+    fitBar = tqdm(currentPopulation.candidateHypotheses, desc='Finding most fit hypothesis', unit='hyp', ncols=BARCOLS)
     bestHypothesis = max(fitBar, key=lambda x: x.fitness)
     log.debug('Found best hypothesis, returning...')
     return bestHypothesis  # return the best hypothesis generated
