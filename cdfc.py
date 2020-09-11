@@ -13,9 +13,9 @@ from tqdm import tqdm
 from tqdm import trange
 
 # ! Next Steps
-# TODO fix bug in relevancy
-# TODO fix bug in run tree
 # TODO fix bug with Leukemia's NaN errors
+# TODO find out why relevancy calculation is taking so long
+# TODO fix bug in run tree
 
 # TODO write code for the if function in OPS
 # TODO add docstrings
@@ -41,11 +41,12 @@ INSTANCES_NUMBER = 0             # INSTANCES_NUMBER is  the number of instances 
 LABEL_NUMBER = 0                 # LABEL_NUMBER is the number of classes/labels in the data
 M = 0                            # M is the number of constructed features
 POPULATION_SIZE = 0              # POPULATION_SIZE is the population size
-# console formatting strings
+# ++++++++ console formatting strings ++++++++ #
 HDR = '*' * 6
 SUCCESS = u' \u2713\n'
 OVERWRITE = '\r' + HDR
 SYSOUT = sys.stdout
+# ++++++++++++++++++++++++++++++++++++++++++++ #
 # ************************ End of Constants/Globals ************************ #
 
 # ********************** Namespaces/Structs & Objects *********************** #
@@ -57,7 +58,7 @@ warnings.filterwarnings('ignore', message='invalid value encountered in true_div
 
 # create the file path for the log file & configure the logger
 logPath = str(Path.cwd() / 'logs' / 'cdfc.log')
-log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
+log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s   Time:  %H:%M:%S:%f')
 
 
 class Tree:
@@ -159,8 +160,10 @@ class Tree:
         except IndexError:
             log.error(f'Index stored in tree was in range but did not exist. Value stored was:{self.data}')
             tqdm.write(f'ERROR: Index stored in tree was in range but did not exist. Value stored was:{self.data}')
+            sys.exit(-1)  # exit on error; recovery not possible
         except Exception as err:
             tqdm.write(str(err))
+            sys.exit(-1)  # exit on error; recovery not possible
 
     def getSize(self, counter) -> int:
 
@@ -243,6 +246,7 @@ class ConstructedFeature:
             return values      # values should now hold the indexes of the tree's terminals
         except Exception as err:
             tqdm.write(str(err))
+            sys.exit(-1)  # exit on error; recovery not possible
 
     def transform(self, instance: row) -> float:
         # Send the tree a list of all the attribute values in a single instance
@@ -266,15 +270,25 @@ class Hypothesis:
         self.size: int = size          # the number of nodes in all the cfs
 
     def getFitness(self) -> float:
-
+    
+        log.debug('Starting getFitness() method')
+        
         def __Czekanowski(Vi: typ.List[typ.Union[int, float]], Vj: typ.List[typ.Union[int, float]]):
+            log.debug('Starting Czekanowski() method')
+            
             minSum = 0
             addSum = 0
 
             # ! Should this be looping of the range of self.features or just self.features?
-            for d in range(self.features):  # loop over the number of features stored in the hypothesis
+            # + range(len(self.features)) loops over the number of features the hypothesis has.
+            # + Vi & Vj are lists of the instances from the original data, that have been transformed
+            # + by the hypothesis.
+            # ? Therefore their length should be equal to the len of self.features
+            for d in range(len(self.features)):  # loop over the number of features stored in the hypothesis
                 # BUG unsupported operand += for int & list
                 # ? is what Vi & Vj want the index of the feature?
+                # + Vi & Vj are instance structs with 2 fields className (int) values (list)
+                # ? we want to access the index of an instance in values
                 top = min(Vi[d], Vj[d])  # get the top of the fraction
                 bottom = Vi[d] + Vj[d]   # get the bottom of the fraction
 
@@ -298,10 +312,14 @@ class Hypothesis:
                 
                 minSum += top     # the top of the fraction
                 addSum += bottom  # the bottom of the fraction
-                
+
+            log.debug('Finished Czekanowski() method')
+            
             return 1 - ((2*minSum) / addSum)  # calculate it & return
 
         def Distance(values):
+    
+            log.debug('Starting Distance() method')
 
             # ********** Compute Vi & Vj ********** #
             Db = 0  # the sum of mins
@@ -319,8 +337,8 @@ class Hypothesis:
 
                     dist = __Czekanowski(vi, vj)  # compute the distance
 
-                    if vi.inClass == vj.inClass:  # if vi & vj are in the same class (Dw), then
-                        if dist > maxSum:         # replace the max if the current value is higher
+                    if vi.className == vj.className:  # if vi & vj are in the same class (Dw), then
+                        if dist > maxSum:             # replace the max if the current value is higher
                             maxSum = dist
                     else:                  # if vi & vj are not in the same class (Db), then
                         if dist < minSum:  # replace the min if the current value is smaller
@@ -332,10 +350,14 @@ class Hypothesis:
             # perform the final distance calculations
             t1 = Db / len(values)
             t2 = Dw / len(values)
+
+            log.debug('Finished Distance() method')
             
             return 1 / (1 + math.pow(math.e, -5*(t1 - t2)))
 
         def __entropy(partition: typ.List[row]) -> float:
+    
+            log.debug('Starting entropy() method')
             
             p: typ.Dict[int, int] = {}   # p[classId] = number of instances in the class in the partition sv
             for i in partition:          # for instance i in a partition sv
@@ -351,9 +373,13 @@ class Hypothesis:
                 pi = p[c] / len(partition)
                 calc -= pi * math.log(pi, 2)
 
+            log.debug('Finished entropy() method')
+
             return calc
 
         def __conditionalEntropy(feature: ConstructedFeature) -> float:
+    
+            log.debug('Starting conditionalEntropy() method')
 
             # this is a feature struct that will be used to store feature values
             # with their indexes/IDs in CFs
@@ -383,6 +409,8 @@ class Hypothesis:
 
             for e in partition.keys():
                 s += (len(partition[e])/INSTANCES_NUMBER) * __entropy(partition[e])
+
+            log.debug('Finished conditionalEntropy() method')
 
             return s  # s holds the conditional entropy value
 
@@ -418,24 +446,28 @@ class Hypothesis:
         term3 = (math.pow(10, -7)*self.size)
         final = term1 + term2 - term3
         # ********* Finish Calculation ********* #
+
+        log.debug('Finished getFitness() method')
         
         return final
 
     # ! this is the function used by cdfcProject
     def transform(self, data=None):
-
+    
+        log.debug('Starting transform() method')
+    
         instance = collect.namedtuple('instance', ['className', 'values'])
         
         transformed = []  # this will hold the transformed values
         
-        # if data is None then we are transforming as part of evolution/training
+        # if data is None then we are transforming as part of the distance calculation
         # so we should use rows (the provided training data)
         if data is None:
             
-            rowBar = tqdm(rows, desc='Transforming as part of evolution')  # create progress bar
+            rowBar = tqdm(rows, desc='Transforming as part of the distance calculation')  # create progress bar
             
-            for r in rowBar:    # for each instance
-                values = []  # this will hold the calculated values for all the constructed features
+            for r in rowBar:  # for each instance
+                values = []   # this will hold the calculated values for all the constructed features
 
                 for f in self.features:            # transform the original input using each constructed feature
                     values.append(f.transform(r))  # append the transformed values for a single CF to values
@@ -443,6 +475,8 @@ class Hypothesis:
                 # each instance will hold the new values for an instance & className, and
                 # transformed will hold all the instances for a hypothesis
                 transformed.append(instance(r.className, values))
+
+            log.debug('Finished transform() method')
 
             return transformed  # return the list of all instances
 
@@ -461,6 +495,8 @@ class Hypothesis:
                 # each instance will hold the new values for an instance & className, and
                 # transformed will hold all the instances for a hypothesis
                 transformed.append(instance(d.className, values))
+
+            log.debug('Finished transform() method')
 
             return transformed  # return the list of all instances
 
@@ -489,6 +525,7 @@ def terminals(classId: int) -> typ.List[int]:
                                    The list will have a length of FEATURE_NUMBER/2, and will
                                    hold the indexes of the features.
     """
+    log.debug('Starting terminals() method')
 
     Score = collect.namedtuple('Score', ['Attribute', 'Relevancy'])
     ScoreList = typ.List[typ.Union[typ.List, Score]]
@@ -500,17 +537,9 @@ def terminals(classId: int) -> typ.List[int]:
         inClass, notIn = valuesInClass(classId, i)  # find the values of attribute i in/not in class classId
 
         # get the t-test & complement of the p-value for the feature
-        # tValue will be zero when it's on the mean
-        # pValue will only be zero when the instances are the same/equivalent
-        # BUG pCompValue is 1, causing pValue to be 0 -- this makes relevancy a NaN
-        # ? Do we actually want pCompValue or is it just pValue?
-        # ! If stats.ttest_ind() is running correctly then the issue must be inClass & notIn,
-        # !     and that would mean the error is in valuesInClass
-        # the data has been standardized, so the variances are equal? (equal_var = True, which is the default)
-        tValue, pCompValue = stats.ttest_ind(inClass, notIn)
-
-        # ! p-Value is being set to 0 because the complement is 1 -- this makes relevancy a NaN
-        pValue: float = np.subtract(1, pCompValue)  # get the actual p-values (since pCompValue is the complement, subtract 1)
+        # tValue will be zero when the lists have the same mean
+        # pValue will only be 1 when tValue is 0
+        tValue, pValue = stats.ttest_ind(inClass, notIn, equal_var=False)
         
         # ****************** Check that valuesInClass & t-test worked as expected ****************** #
         try:
@@ -518,11 +547,9 @@ def terminals(classId: int) -> typ.List[int]:
             inside_of_class = np.array(inClass)
             not_inside_of_class = np.array(notIn)
             
-            # *** Check that pCompValue won't be 0 *** #
-            # ! currently this is triggered because pCompValue is 1
-            if np.subtract(1, pCompValue) == 0:  # if pValue is zero then inClass & notIn are the same
-                log.error(f'pCompValue is 1 making p-Value 0, pCompValue={pCompValue}')
-                raise Exception(f'ERROR: p-Value is 0, pCompValue={pCompValue}')
+            # *** Check if pValue is 1 *** #
+            if pValue == 1:  # if pValue is 1 then inClass & notIn are the same. Relevancy should be zero
+                log.debug(f'pValue is 1 (inClass & notIn share the same mean), feature {i} should be ignored')
             
             # *** Check that inClass is not empty *** #
             if not inClass:
@@ -544,32 +571,23 @@ def terminals(classId: int) -> typ.List[int]:
                 raise Exception(f'inClass & notIn are equivalent, inClass{inside_of_class}, '
                                 f'notIn{not_inside_of_class}')
             
-            # *** Check that tValue was set & is a number  *** #
-            elif tValue is None or math.isnan(tValue):
-                log.error(f'tValue computation failed, expected a number got {tValue}')
-                raise Exception(f'ERROR: tValue computation failed, expected a number got {tValue}')
-            
-            # *** Check that tValue is finite *** #
-            elif math.isinf(tValue):
-                log.error(f'tValue computation failed. tValues is a number, but is not finite. tValue = {tValue}')
+            # *** Check that tValue was set & is a finite number  *** #
+            elif tValue is None or math.isnan(tValue) or math.isinf(tValue):
+                log.error(f'tValue computation failed, expected a finite number got {tValue}')
                 raise Exception(f'ERROR: tValue computation failed, expected a finite number got {tValue}')
 
             # *** Check that pValue was set & is a number  *** #
-            elif tValue is None or math.isnan(pValue):
-                log.error(f'pValue computation failed, expected a number got {pValue}')
-                raise Exception(f'ERROR: pValue computation failed, expected a number got {pValue}')
-
-            # *** Check that pValue is finite *** #
-            elif math.isinf(pValue):
-                log.error(f'pValue computation failed. pValues is a number, but is not finite. tValue = {pValue}')
-                raise Exception(f'ERROR: tValue computation failed, expected a finite number got {pValue}')
+            elif pValue is None or math.isnan(pValue) or math.isinf(pValue):
+                log.error(f'pValue computation failed, expected a finite number got {pValue}')
+                raise Exception(f'ERROR: pValue computation failed, expected a finite number got {pValue}')
 
         except Exception as err:
             tqdm.write(str(err))
+            sys.exit(-1)  # exit on error; recovery not possible
         # ******************************************************************************************* #
         
-        # calculate relevancy for a single feature
-        if pValue >= 0.05:                      # if p-value is greater than 0.05 then the feature is not relevant
+        # calculate relevancy for a single feature (if the mean is the same for inClass & notIn, pValue=1)
+        if pValue >= 0.05:                      # if pValue is greater than 0.05 then the feature is not relevant
             relevancy: float = 0.0              # because it's not relevant, set relevancy score to 0
             scores.append(Score(i, relevancy))  # add relevancy score to the list of scores
             
@@ -584,10 +602,12 @@ def terminals(classId: int) -> typ.List[int]:
                     log.error(f'Relevancy is infinite; some non-zero was divided by 0 -- tValue={tValue} pValue={pValue}')
                     raise Exception(f'ERROR: relevancy is infinite, tValue={tValue} pValue={pValue}')
                 
-                # ! this gets thrown because pValue & tValue are 0
                 elif math.isnan(relevancy):  # check for 0/0
                     log.error(f'Relevancy is infinite; 0/0 -- tValue={tValue} pValue={pValue}')
                     raise Exception(f'ERROR: relevancy is NaN (0/0), tValue={tValue} pValue={pValue}')
+                if pValue == 1:
+                    log.error('pValue is 1, but was not caught by if pValue >= 0.05')
+                    raise Exception('ERROR: pValue is 1, but was not caught by if pValue >= 0.05')
                 # ********************************************************************************** #
                 
                 else:  # if division worked
@@ -595,6 +615,7 @@ def terminals(classId: int) -> typ.List[int]:
             
             except Exception as err:
                 tqdm.write(str(err))
+                sys.exit(-1)  # exit on error; recovery not possible
 
     ordered: ScoreList = sorted(scores, key=lambda s: s.Relevancy)  # sort the features by relevancy scores
 
@@ -613,7 +634,10 @@ def terminals(classId: int) -> typ.List[int]:
             raise Exception('ERROR: Terminals calculation failed: terminalSet is empty')
     except Exception as err:
         tqdm.write(str(err))
+        sys.exit(-1)  # exit on error; recovery not possible
     # ********************************************************************************* #
+
+    log.debug('Finished terminals() method')
 
     return terminalSet
 
@@ -644,11 +668,17 @@ def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[np.float64
             
         else:                                               # if the class is not the same as the class given, then
             notInClass.append(value.attributes[attribute])  # add the feature's value to not in
-            
-    if not inClass:  # if inClass is empty
-        log.debug('The valuesInClass method has found that inClass is empty')
-    if not notInClass:  # if notInClass is empty
-        log.debug('The valuesInClass method has found that notInClass is empty')
+    
+    try:
+        if not inClass:  # if inClass is empty
+            log.debug('The valuesInClass method has found that inClass is empty')
+            raise Exception('valuesInClass() found inClass[] to be empty')
+        if not notInClass:  # if notInClass is empty
+            log.debug('The valuesInClass method has found that notInClass is empty')
+            raise Exception('valuesInClass() found notInClass[] to be empty')
+    except Exception as err:
+        tqdm.write(str(err))
+        sys.exit(-1)  # exit on error; recovery not possible
     
     return inClass, notInClass  # return inClass & notInClass
 
@@ -727,24 +757,15 @@ def createInitialPopulation() -> Population:
             
             try:
                 name = classIds.pop(0)  # get a random id
-                
-                if name in range(LABEL_NUMBER):  # check if name is between 0 and (the number of classes)-1
-                    # ! this line is being reached. Is name getting set incorrectly?
-                    log.error('Name is outside of the range of LABEL_NUMBER')
-                    raise Exception('ERROR: Name is outside of the range of LABEL_NUMBER')
             
-            except IndexError:
+            except IndexError:  # if classIds.pop() tried to pop an empty list, log error & exit
                 log.error('Index error encountered in createInitialPopulation (popped from an empty list)')
                 tqdm.write('ERROR: Index error encountered in createInitialPopulation (popped from an empty list)')
-                sys.exit(-1)  # exit on error; recovery not possible
-            except Exception as err:
-                tqdm.write(str(err))
                 sys.exit(-1)  # exit on error; recovery not possible
 
             # if no error occurred log the value found
             log.debug(f'createHypothesis found a valid classId: {name}')
 
-            # BUG call that causes pValue to equal 0 starts here
             if random.choice([True, False]):
                 log.debug(f'createHypothesis chose grow with the classId {name}')
                 tree, size = __grow(terminals(name))  # create tree
@@ -799,6 +820,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
                 raise Exception(f'ERROR: Tournament could not set first correctly, first = {first}')
         except Exception as err:
             tqdm.write(str(err))
+            sys.exit(-1)  # exit on error; recovery not possible
         
         return first
         # ************ End of Tournament Selection ************* #
