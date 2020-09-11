@@ -16,6 +16,7 @@ from tqdm import trange
 # TODO fix bug with Leukemia's NaN errors
 # TODO find out why relevancy calculation is taking so long
 # TODO fix bug in run tree
+# TODO set size of tqdm loading bars (they're too short)
 
 # TODO write code for the if function in OPS
 # TODO add docstrings
@@ -58,7 +59,8 @@ warnings.filterwarnings('ignore', message='invalid value encountered in true_div
 
 # create the file path for the log file & configure the logger
 logPath = str(Path.cwd() / 'logs' / 'cdfc.log')
-log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s   Time:  %H:%M:%S:%f')
+log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w',
+                format='%(levelname)s - %(lineno)d: %(message)s')
 
 
 class Tree:
@@ -661,6 +663,7 @@ def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[np.float64
     inClass: typ.Union[int, float, typ.List] = []     # attribute values that appear in the class
     notInClass: typ.Union[int, float, typ.List] = []  # attribute values that do not appear in the class
 
+    # ! this loop seems to be the primary factor on the speed of the relevancy calculation
     for value in rows:  # loop over all the rows, where value is the row at the current index
         
         if value.className == classId:                   # if the class is the same as the class given, then
@@ -986,7 +989,7 @@ def cdfc(train: np.ndarray) -> Hypothesis:
             if np.isnan(name):                                      # if it isn't a number
                 raise Exception(f'ERROR: Parser expected an integer, got a NaN of value:{line[0]}')
             elif not (type(name) is int):                           # if it is a number, but not an integer
-                log.info(f'Parser expected an integer class ID, got a float: {line[0]}')
+                log.debug(f'Parser expected an integer class ID, got a float: {line[0]}')
                 name = np.int(name)                                 # caste to int
         except ValueError:                                          # if casting failed
             log.error(f'Parse could not cast {name} to integer')
