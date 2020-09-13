@@ -14,7 +14,8 @@ from tqdm import tqdm
 from tqdm import trange
 
 # ! Next Steps
-# TODO change relevancy to use dictionaries
+# TODO fix index error in parse
+# TODO review relevancy calculation, check for possible enhancements
 # TODO fix bug with Leukemia's NaN errors
 # TODO fix bug in run tree
 
@@ -26,7 +27,7 @@ from tqdm import trange
 ALPHA: typ.Final = 0.8           # ALPHA is the fitness weight alpha
 BETA: typ.Final = 2              # BETA is a constant used to calculate the pop size
 BARCOLS = 25                     # BARCOLS is the number of columns for the progress bar to print
-CLASS_DICT = []                  # CLASS_DICT is a list of dicts (indexed by classId) mapping attribute values to classes
+CLASS_DICTS = {}                 # CLASS_DICTS is a list of dicts (indexed by classId) mapping attribute values to classes
 CROSSOVER_RATE: typ.Final = 0.8  # CROSSOVER_RATE is the chance that a candidate will reproduce
 ELITISM_RATE: typ.Final = 1      # ELITISM_RATE is the elitism rate
 GENERATIONS: typ.Final = 50      # GENERATIONS is the number of generations the GP should run for
@@ -661,7 +662,7 @@ def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[float], ty
         inClass -- This holds the values in the class.
         notInClass -- This holds the values not in the class.
     """
-    inDict = CLASS_DICT[classId]                  # get the dictionary of attribute values for this class
+    inDict = CLASS_DICTS[classId]                  # get the dictionary of attribute values for this class
     inClass: typ.List[float] = inDict[attribute]  # now get feature/attribute values that appear in the class
     
     # ******************** get all the values from all the other dictionaries for this feature ******************** #
@@ -671,50 +672,50 @@ def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[float], ty
     try:
         if LABEL_NUMBER == 2:               # * get the other score
             index = classes.pop(0)          # pop the first classId in the list (should be the only item in the list)
-            spam = CLASS_DICT[index]        # get the dictionary for the other class
+            spam = CLASS_DICTS[index]       # get the dictionary for the other class
             out = spam[attribute]           # get the feature/attribute values for the other class
-            if not classes:                 # if classes is not empty now, an error has occurred
-                raise AssertionError
+            assert len(classes) == 0        # if classes is not empty now, an error has occurred
 
         elif LABEL_NUMBER == 3:             # * get the other 2 scores
             index = classes.pop(0)          # pop the first classId in the list (should only be 2 items in the list)
-            spam = CLASS_DICT[index]        # get the dictionary for the class
+            spam = CLASS_DICTS[index]       # get the dictionary for the class
             out = spam[attribute]           # get the feature/attribute values for the class
             
             index = classes.pop(0)          # pop the 2nd classId in the list (should be the only item in the list)
-            spam = CLASS_DICT[index]        # get the dictionary for the class
+            spam = CLASS_DICTS[index]       # get the dictionary for the class
             out += spam[attribute]          # get the feature/attribute values for the class
-            if not classes:                 # if classes is not empty now, an error has occurred
-                raise AssertionError
+            assert len(classes) == 0        # if classes is not empty now, an error has occurred
     
         elif LABEL_NUMBER == 4:             # * get the other 3 scores
             index = classes.pop(0)          # pop the first classId in the list (should only be 3 items in the list)
-            spam = CLASS_DICT[index]        # get the dictionary for the class
+            spam = CLASS_DICTS[index]       # get the dictionary for the class
             out = spam[attribute]           # get the feature/attribute values for the class
         
             index = classes.pop(0)          # pop the 2nd classId in the list (should only be 2 items in the list)
-            spam = CLASS_DICT[index]        # get the dictionary for the class
+            spam = CLASS_DICTS[index]       # get the dictionary for the class
             out += spam[attribute]          # get the feature/attribute values for the class
     
             index = classes.pop(0)          # pop the 3rd classId in the list (should only be 1 items in the list)
-            spam = CLASS_DICT[index]        # get the dictionary for the class
+            spam = CLASS_DICTS[index]       # get the dictionary for the class
             out += spam[attribute]          # get the feature/attribute values for the class
-            if not classes:                 # if classes is not empty now, an error has occurred
-                raise AssertionError
+            assert len(classes) == 0        # if classes is not empty now, an error has occurred
 
         else:                               # * if there's more than 4 classes
-            for i in CLASS_DICT:            # loop over all the list of dicts
+            for i in CLASS_DICTS:           # loop over all the list of dicts
                 if i == classId:            # when we hit the dict that's in the class, skip
                     continue
                 else:
-                    spam = CLASS_DICT[i]    # get the dictionary for the class
+                    spam = CLASS_DICTS[i]    # get the dictionary for the class
                     out += spam[attribute]  # get the feature/attribute values for the class
 
         notInClass: typ.List[float] = out   # set the attribute values that do not appear in the class using out
 
-    except AssertionError:                  # catches error thrown by the elif statements
-        log.error(f'ValuesInClass found more classIds than expected. Unexpected class(es) found: {classes}')
+    except AssertionError as err:                  # catches error thrown by the elif statements
+        # BUG this is being hit. There are two classes 1 & 0
+        log.error(f'ValuesInClass found more classIds than expected. Unexpected class(es) found: {classes}\n'
+                  + f'Label Number = {LABEL_NUMBER}, Classes = {classes}, Class Id = {classId}')
         tqdm.write(f'ValuesInClass found more classIds than expected. Unexpected class(es) found: {classes}')
+        tqdm.write(str(err))
         sys.exit(-1)
     # ************************************************************************************************************* #
     
@@ -1016,7 +1017,7 @@ def cdfc(train: np.ndarray) -> Hypothesis:
     global rows
     global row
     global ENTROPY_OF_S  # * used in entropy calculation * #
-    global CLASS_DICT
+    global CLASS_DICTS
 
     classes = []       # this will hold classIds and how often they occur
     classSet = set()   # this will hold how many classes there are
@@ -1037,7 +1038,7 @@ def cdfc(train: np.ndarray) -> Hypothesis:
                 raise Exception(f'ERROR: Parser expected an integer, got a NaN of value:{line[0]}')
             elif not (type(name) is int):                           # if it is a number, but not an integer
                 log.debug(f'Parser expected an integer class ID, got a float: {line[0]}')
-                name = np.int(name)                                 # caste to int
+                name = int(name)                                    # caste to int
         except ValueError:                                          # if casting failed
             log.error(f'Parse could not cast {name} to integer')
             tqdm.write(f'ERROR: parser could not cast {name} to integer')
@@ -1054,25 +1055,47 @@ def cdfc(train: np.ndarray) -> Hypothesis:
         # *** Create a Dictionary of Attribute Values Keyed by the Attribute's Index *** #
         attributeNames = range(len(line[1:]))  # create names for the attributes number from 0 to len()
         attributeValues = line[1:]             # grab all the attribute values in this instance
-        # create a new dictionary using (attributeName. attributeValue) pairs (in a tuple)
-        dictEntry: typ.Dict[int, typ.List[float]] = dict(zip(attributeNames, attributeValues))
+        
+        try:  # ++++ Do dictionary Creation & Modification Inside Try/Catch ++++
+            if len(attributeValues) == len(attributeNames):  # check that the lengths of both names & values are equal
+                # if they are equal, create a new dictionary using (attributeName. attributeValue) pairs (in a tuple)
+                dictEntry: typ.Dict[int, typ.List[float]] = dict(zip(attributeNames, attributeValues))
+            else:  # if they are not equal, log it, throw an exception, and exit
+                msg = f'Parser found more attribute names ({len(attributeNames)}) than values ({attributeValues})'
+                log.error(msg)
+                raise AssertionError(f'ERROR: {msg}')
 
-        # *** Merge the Old Dictionary with the New One *** #
-        # track how many unique/different class IDs there are & create dictionaries for
-        # ? update() replaces old values so we have to loop over, can this be done faster?
-        if name in ids:                            # if we've found an instance in this class before
-            merged = defaultdict(list)             # create a defaultDict that will store our combined dict
-            
-            # BUG IndexError: list index out of range
-            dicts = [CLASS_DICT[name], dictEntry]  # put the dict for this class & the new dict in a list
-            for d in dicts:                        # do loop for 1 dict and then the other
-                for key, value in d.items():       # loop over (for old d& new dict) their items/keys
-                    merged[key].append(value)      # add the value at the key to the list of values
+            # *** Merge the Old Dictionary with the New One *** #
+            # track how many unique/different class IDs there are & create dictionaries for
+            # ? update() replaces old values so we have to loop over, can this be done faster?
+            if name in ids:                          # if we've found an instance in this class before
+                merged = defaultdict(list)           # create a defaultDict that will store our combined dict
+                currentDict = CLASS_DICTS[name]      # get the dict who's key name (name = classId of instance)
+                dicts = [currentDict, dictEntry]     # put the dict for this class & the new dict in a list
+                for d in dicts:                      # do loop for 1 dict and then the other
+                    for key, value in d.items():     # loop over (for old d& new dict) their items/keys
+                        merged[key].append(value)    # add the value at the key to the list of values
+                CLASS_DICTS[name] = merged           # replace the old dicts with the new merged version
                 
-        # *** Insert the Dictionary into CLASS_DICT *** #
-        else:                                         # if this is the first instance in the class
-            CLASS_DICT.insert(name, dict(dictEntry))  # insert the new dictionary at the index classID
-            ids.append(name)                          # add classId to ids -- a list of unique classIDs
+            # *** Insert the Dictionary into CLASS_DICTS *** #
+            else:                                    # if this is the first instance in the class
+                CLASS_DICTS[name] = dict(dictEntry)  # insert the new dictionary using the key classID
+                ids.append(name)                     # add classId to ids -- a list of unique classIDs
+                
+                log.debug(f'Parser created dictionary for classId {name}')   # ! for debugging
+                # tqdm.write(f'Parser created dictionary for classId {name}')  # ! for debugging
+        
+        except IndexError:                           # catch error thrown by dictionary indexing
+            lineNm = sys.exc_info()[-1].tb_lineno    # print line number error occurred on
+            log.error(f'Parser encountered an Index Error on line {lineNm}. name={name}, line[0]={line[0]}')
+            tqdm.write(f'ERROR: Parser encountered an Index Error on line {lineNm}. name={name}, line[0]={line[0]}')
+            sys.exit(-1)                             # recovery impossible, exit
+        except AssertionError as err:                # catch the error thrown by names/value length check
+            tqdm.write(str(err))
+            sys.exit(-1)                             # recovery impossible, exit
+        except Exception as err:                     # catch any other error that might be thrown
+            tqdm.write(str(err))
+            sys.exit(-1)                             # recovery impossible, exit
 
         # ********* The Code Below is Used to Calculated Entropy  ********* #
         # this will count the number of times a class occurs in the provided data
