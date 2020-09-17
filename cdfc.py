@@ -8,7 +8,6 @@ import logging as log
 import numpy as np
 import typing as typ
 import collections as collect
-from collections import defaultdict
 from scipy import stats
 from tqdm import tqdm
 from tqdm import trange
@@ -27,7 +26,6 @@ from tqdm import trange
 ALPHA: typ.Final = 0.8           # ALPHA is the fitness weight alpha
 BETA: typ.Final = 2              # BETA is a constant used to calculate the pop size
 BARCOLS = 25                     # BARCOLS is the number of columns for the progress bar to print
-CLASS_DICTS = {}                 # CLASS_DICTS is a list of dicts (indexed by classId) mapping attribute values to classes
 CROSSOVER_RATE: typ.Final = 0.8  # CROSSOVER_RATE is the chance that a candidate will reproduce
 ELITISM_RATE: typ.Final = 1      # ELITISM_RATE is the elitism rate
 GENERATIONS: typ.Final = 50      # GENERATIONS is the number of generations the GP should run for
@@ -45,6 +43,8 @@ INSTANCES_NUMBER = 0             # INSTANCES_NUMBER is  the number of instances 
 LABEL_NUMBER = 0                 # LABEL_NUMBER is the number of classes/labels in the data
 M = 0                            # M is the number of constructed features
 POPULATION_SIZE = 0              # POPULATION_SIZE is the population size
+CL_DICTION = typ.Dict[int, typ.Dict[int, typ.List[float]]]
+CLASS_DICTS: CL_DICTION = {}     # CLASS_DICTS is a list of dicts (indexed by classId) mapping attribute values to classes
 # ++++++++ console formatting strings ++++++++ #
 HDR = '*' * 6
 SUCCESS = u' \u2713\n'
@@ -53,7 +53,8 @@ SYSOUT = sys.stdout
 # ++++++++++++++++++++++++++++++++++++++++++++ #
 # ************************ End of Constants/Globals ************************ #
 
-# ********************** Namespaces/Structs & Objects *********************** #
+# ********************** Namespaces/Structs & Objects ***********************
+
 row = collect.namedtuple('row', ['className', 'attributes'])  # a single line in the csv, representing a record/instance
 rows: typ.List[row] = []  # this will store all of the records read in (the training dat) as a list of rows
 
@@ -711,7 +712,6 @@ def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[float], ty
         notInClass: typ.List[float] = out   # set the attribute values that do not appear in the class using out
 
     except AssertionError as err:                  # catches error thrown by the elif statements
-        # BUG this is being hit. There are two classes 1 & 0
         log.error(f'ValuesInClass found more classIds than expected. Unexpected class(es) found: {classes}\n'
                   + f'Label Number = {LABEL_NUMBER}, Classes = {classes}, Class Id = {classId}')
         tqdm.write(f'ValuesInClass found more classIds than expected. Unexpected class(es) found: {classes}')
@@ -720,10 +720,14 @@ def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[float], ty
     # ************************************************************************************************************* #
     
     try:
-        if not inClass:     # if inClass is empty
+        if not inClass and not notInClass:
+            log.debug('The valuesInClass method has found that both inClass & notInClass are empty')
+            raise Exception('valuesInClass() found notInClass[] & inClass[] to be empty')
+        elif not inClass:     # if inClass is empty
+            # BUG now this is being triggered
             log.debug('The valuesInClass method has found that inClass is empty')
             raise Exception('valuesInClass() found inClass[] to be empty')
-        if not notInClass:  # if notInClass is empty
+        elif not notInClass:  # if notInClass is empty
             log.debug('The valuesInClass method has found that notInClass is empty')
             raise Exception('valuesInClass() found notInClass[] to be empty')
     except Exception as err:
@@ -1053,13 +1057,17 @@ def cdfc(train: np.ndarray) -> Hypothesis:
         INSTANCES_NUMBER += 1
 
         # *** Create a Dictionary of Attribute Values Keyed by the Attribute's Index *** #
+        # ! check that this is working correctly
         attributeNames = range(len(line[1:]))  # create names for the attributes number from 0 to len()
         attributeValues = line[1:]             # grab all the attribute values in this instance
         
         try:  # ++++ Do dictionary Creation & Modification Inside Try/Catch ++++
             if len(attributeValues) == len(attributeNames):  # check that the lengths of both names & values are equal
-                # if they are equal, create a new dictionary using (attributeName. attributeValue) pairs (in a tuple)
-                dictEntry: typ.Dict[int, typ.List[float]] = dict(zip(attributeNames, attributeValues))
+                # if they are equal, turn attribute values into a list of lists: [[value1],[value2],[value3],...]
+                # this is so we can append values to that list without overwriting everytime
+                attributeValues = [[val] for val in attributeValues]
+                # create a new dictionary using (attributeName, attributeValue) pairs (in a tuple)
+                newDict: typ.Dict[int, typ.List[float]] = dict(zip(attributeNames, attributeValues))
             else:  # if they are not equal, log it, throw an exception, and exit
                 msg = f'Parser found more attribute names ({len(attributeNames)}) than values ({attributeValues})'
                 log.error(msg)
@@ -1069,17 +1077,13 @@ def cdfc(train: np.ndarray) -> Hypothesis:
             # track how many unique/different class IDs there are & create dictionaries for
             # ? update() replaces old values so we have to loop over, can this be done faster?
             if name in ids:                          # if we've found an instance in this class before
-                merged = defaultdict(list)           # create a defaultDict that will store our combined dict
-                currentDict = CLASS_DICTS[name]      # get the dict who's key name (name = classId of instance)
-                dicts = [currentDict, dictEntry]     # put the dict for this class & the new dict in a list
-                for d in dicts:                      # do loop for 1 dict and then the other
-                    for key, value in d.items():     # loop over (for old d& new dict) their items/keys
-                        merged[key].append(value)    # add the value at the key to the list of values
-                CLASS_DICTS[name] = merged           # replace the old dicts with the new merged version
-                
+                oldDict = CLASS_DICTS[name]          # get the old dictionary for the class
+                for att in oldDict.keys():           # we need to update every attribute value list so loop
+                    oldDict[att] += newDict[att]     # for each value list, concatenate the old & new lists
+
             # *** Insert the Dictionary into CLASS_DICTS *** #
             else:                                    # if this is the first instance in the class
-                CLASS_DICTS[name] = dict(dictEntry)  # insert the new dictionary using the key classID
+                CLASS_DICTS[name] = dict(newDict)    # insert the new dictionary using the key classID
                 ids.append(name)                     # add classId to ids -- a list of unique classIDs
                 
                 log.debug(f'Parser created dictionary for classId {name}')   # ! for debugging
