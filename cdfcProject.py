@@ -1,14 +1,17 @@
 import copy
 import sys
+import logging as log
+import collections as collect
+import cProfile
+import math
+from scipy import stats
+from cdfcFmt import *
 import tkinter as tk
 import typing as typ
 from pathlib import Path
 from tkinter import filedialog
 from tkinter import messagebox
-
-# import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 from pyfiglet import Figlet
 from sklearn.metrics import accuracy_score
 from sklearn.naive_bayes import GaussianNB
@@ -16,6 +19,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from cdfc import cdfc
 from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeClassifier
+from cdfcFmt import __buildAccuracyFrame, __accuracyFrameToLatex, __formatForSciKit, __flattenTrainingData
 
 '''
                                        CSVs should be of the form
@@ -55,27 +59,13 @@ SUCCESS = u' \u2713\n'
 OVERWRITE = '\r' + HDR
 SYSOUT = sys.stdout
 
+profiler = cProfile.Profile()                       # create a profiler to profile cdfc during testing
+statsPath = str(Path.cwd() / 'logs' / 'stats.log')  # set the file path that the profiled info will be stored at
 
-# def __createPlot(df):
-#     # *** Create the Plot *** #
-#     outlierSymbol = dict(markerfacecolor='tab:red', marker='D')  # change the outliers to be red diamonds
-#     medianSymbol = dict(linewidth=2.5, color='tab:green')        # change the medians to be green
-#     meanSymbol = dict(linewidth=2.5, color='tab:blue')           # change the means to be blue
-#     fig1 = df.boxplot(showmeans=True,                            # create boxplot, store it in fig1, & show the means
-#                       meanline=True,                             # show mean as a mean line
-#                       flierprops=outlierSymbol,                  # set the outlier properties
-#                       medianprops=medianSymbol,                  # set the median properties
-#                       meanprops=meanSymbol)                      # set the mean properties
-#     fig1.set_title("Accuracy")                                   # set the title of the plot
-#     fig1.set_xlabel("Accuracy Ratio")                            # set the label of the x-axis
-#     fig1.set_ylabel("Model Type")                                # set the label of the y-axis
-#     # *** Save the Plot as an Image *** #
-#     # create a list of file formats that the plot may be saved as
-#     images = [('Image Files', ['.jpeg', '.jpg', '.png', '.tiff', '.tif', '.bmp'])]
-#     # ask the user where they want to save the plot
-#     out = filedialog.asksaveasfilename(defaultextension='.png', filetypes=images)
-#     # save the plot to the location provided by the user
-#     plt.savefig(out)
+# create the file path for the log file & configure the logger
+logPath = str(Path.cwd() / 'logs' / 'cdfc.log')
+log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w',
+                format='%(levelname)s - %(lineno)d: %(message)s')
 
 
 def __discretization(data: np.ndarray) -> np.ndarray:
@@ -132,6 +122,137 @@ def __transform(entries: np.ndarray, scalarPassed: ScalarsIn) -> ScalarsOut:
 
     # stdScalar - Standard Scalar, will used to on test & training data
     return entries, scalar
+
+
+# TODO change so terminals is done before calling cdfc & the result gets passed (as a dict?)
+def terminals(classId: int) -> typ.List[int]:
+    """terminals creates the list of relevant terminals for a given class.
+
+    Arguments:
+        classId {int} -- classId is the identifier for the class for
+                         which we want a terminal set
+
+    Returns:
+        terminalSet {list[int]} -- terminals returns the highest scoring features as a list.
+                                   The list will have a length of FEATURE_NUMBER/2, and will
+                                   hold the indexes of the features.
+    """
+    log.debug('Starting terminals() method')
+    
+    Score = collect.namedtuple('Score', ['Attribute', 'Relevancy'])
+    ScoreList = typ.List[typ.Union[typ.List, Score]]
+    scores: ScoreList = []
+    
+    # FEATURE_NUMBER is the number of features in the data. This means that it can also be a list of
+    # the indexes of the features (the feature IDs). Subtract it by 1 to make 0 a valid feature ID
+    for i in range(FEATURE_NUMBER):
+        inClass, notIn = valuesInClass(classId, i)  # find the values of attribute i in/not in class classId
+        
+        # get the t-test & complement of the p-value for the feature
+        # tValue will be zero when the lists have the same mean
+        # pValue will only be 1 when tValue is 0
+        tValue, pValue = stats.ttest_ind(inClass, notIn, equal_var=False)
+        
+        # ****************** Check that valuesInClass & t-test worked as expected ****************** #
+        try:
+            # transform into numpy arrays which are easier to test
+            inside_of_class = np.array(inClass)
+            not_inside_of_class = np.array(notIn)
+            
+            # *** Check if pValue is 1 *** #
+            if pValue == 1:  # if pValue is 1 then inClass & notIn are the same. Relevancy should be zero
+                log.debug(f'pValue is 1 (inClass & notIn share the same mean), feature {i} should be ignored')
+            
+            # *** Check that inClass is not empty *** #
+            if not inClass:
+                log.error(f'inClass was empty, ninClass={inClass}, notIn={notIn}, classId={classId}, attribute={i}')
+                raise Exception(f'ERROR: inClass was empty,'
+                                f'\ninClass={inClass}, notIn={notIn}, classId={classId}, attribute={i}')
+            # + if inClass is empty tValue is inaccurate, don't run other checks + #
+            
+            # *** Check that inClass & notIn aren't equal *** #
+            elif np.array_equal(inside_of_class, not_inside_of_class):
+                log.error(f'inClass & notIn are equal, inClass{inside_of_class}, notIn{not_inside_of_class}')
+                raise Exception(f'inClass & notIn are equal, inClass{inside_of_class}, '
+                                f'notIn{not_inside_of_class}')
+            
+            # *** Check that inClass & notIn aren't equivalent *** #
+            elif np.array_equiv(inside_of_class, not_inside_of_class):
+                log.error(f'inClass & notIn are equivalent (but not equal, their shapes are different), '
+                          f'inClass{inside_of_class}, notIn{not_inside_of_class}')
+                raise Exception(f'inClass & notIn are equivalent, inClass{inside_of_class}, '
+                                f'notIn{not_inside_of_class}')
+            
+            # *** Check that tValue was set & is a finite number  *** #
+            elif tValue is None or math.isnan(tValue) or math.isinf(tValue):
+                log.error(f'tValue computation failed, expected a finite number got {tValue}')
+                raise Exception(f'ERROR: tValue computation failed, expected a finite number got {tValue}')
+            
+            # *** Check that pValue was set & is a number  *** #
+            elif pValue is None or math.isnan(pValue) or math.isinf(pValue):
+                log.error(f'pValue computation failed, expected a finite number got {pValue}')
+                raise Exception(f'ERROR: pValue computation failed, expected a finite number got {pValue}')
+        
+        except Exception as err:
+            tqdm.write(str(err))
+            sys.exit(-1)  # exit on error; recovery not possible
+        # ******************************************************************************************* #
+        
+        # calculate relevancy for a single feature (if the mean is the same for inClass & notIn, pValue=1)
+        if pValue >= 0.05:  # if pValue is greater than 0.05 then the feature is not relevant
+            relevancy: float = 0.0  # because it's not relevant, set relevancy score to 0
+            scores.append(Score(i, relevancy))  # add relevancy score to the list of scores
+        
+        # otherwise
+        else:
+            
+            try:
+                relevancy: float = np.divide(np.absolute(tValue), pValue)  # set relevancy using t-value/p-value
+                
+                # *************************** Check that division worked *************************** #
+                if math.isinf(relevancy):  # check for n/0
+                    log.error(
+                        f'Relevancy is infinite; some non-zero was divided by 0 -- tValue={tValue} pValue={pValue}')
+                    raise Exception(f'ERROR: relevancy is infinite, tValue={tValue} pValue={pValue}')
+                
+                elif math.isnan(relevancy):  # check for 0/0
+                    log.error(f'Relevancy is infinite; 0/0 -- tValue={tValue} pValue={pValue}')
+                    raise Exception(f'ERROR: relevancy is NaN (0/0), tValue={tValue} pValue={pValue}')
+                if pValue == 1:
+                    log.error('pValue is 1, but was not caught by if pValue >= 0.05')
+                    raise Exception('ERROR: pValue is 1, but was not caught by if pValue >= 0.05')
+                # ********************************************************************************** #
+                
+                else:  # if division worked
+                    scores.append(Score(i, relevancy))  # add relevancy score to the list of scores
+            
+            except Exception as err:
+                tqdm.write(str(err))
+                sys.exit(-1)  # exit on error; recovery not possible
+    
+    ordered: ScoreList = sorted(scores, key=lambda s: s.Relevancy)  # sort the features by relevancy scores
+    
+    terminalSet: typ.Union[int, typ.List] = []  # this will hold relevant terminals
+    top: int = len(ordered) // 2  # find the halfway point
+    relevantScores: ScoreList = ordered[:top]  # slice top half
+    
+    for i in relevantScores:  # loop over relevant scores
+        # ? this is where the terminal index is added. Is the index correct?
+        terminalSet.append(i.Attribute)  # add the attribute number to the terminal set
+    
+    # ************************* Test if terminalSet is empty ************************* #
+    try:
+        if not terminalSet:  # if terminalSet is empty
+            log.error('Terminals calculation failed: terminalSet is empty')
+            raise Exception('ERROR: Terminals calculation failed: terminalSet is empty')
+    except Exception as err:
+        tqdm.write(str(err))
+        sys.exit(-1)  # exit on error; recovery not possible
+    # ********************************************************************************* #
+    
+    log.debug('Finished terminals() method')
+    
+    return terminalSet
 
 
 def __mapInstanceToClass(entries: np.ndarray) -> typ.Dict[int, typ.List[typ.Union[int, typ.List[float]]]]:
@@ -202,29 +323,6 @@ def __fillBuckets(entries: np.ndarray) -> typ.List[typ.List[np.ndarray]]:
     return buckets
 
 
-def __flattenTrainingData(trainList: typ.List[typ.List[np.ndarray]]) -> np.ndarray:
-    train = []             # currently training is a list of lists of lists because of the buckets.
-    for lst in trainList:  # we can now remove the buckets by concatenating the lists of instance
-        train += lst       # into one list of instances, flattening our data, & making it easier to work with
-    
-    # transform the training & testing data into numpy arrays & free the List vars to be reused
-    train = np.array(train)  # turn training data into a numpy array
-
-    return train
-
-
-def __formatForSciKit(data: np.ndarray) -> (np.ndarray, np.ndarray):
-    # create the label array Y (the target of our training)
-    # from all rows, pick the 0th column
-    flat = np.ravel(data[:, :1])  # get a list of all the labels as a list of lists & then flatten it
-    labels = np.array(flat)       # convert the label list to a numpy array
-    
-    # create the feature matrix X ()
-    ftrs = np.array(data[:, 1:])  # get everything BUT the labels/ids
-
-    return ftrs, labels
-
-
 def __buildModel(entries: np.ndarray, model: ModelTypes, useNormalize) -> typ.List[float]:
     
     # *** create a set of K buckets filled with our instances *** #
@@ -265,10 +363,10 @@ def __buildModel(entries: np.ndarray, model: ModelTypes, useNormalize) -> typ.Li
             scalar = None
     
         # ********** 3B Train the CDFC Model & Transform the Training Data using It ********** #
-        SYSOUT.write(HDR + ' Training CDFC ......')                          # print \tab * Training CDFC ....
+        SYSOUT.write(HDR + ' Training CDFC ......')  # print \tab * Training CDFC ....
         SYSOUT.flush()
-        CDFC_Hypothesis = cdfc(train)        # now that we have our train & test data create our hypothesis
-        SYSOUT.write(OVERWRITE + ' CDFC Trained '.ljust(50, '-') + SUCCESS)  # replace starting with complete
+        CDFC_Hypothesis = cdfc(train)  # now that we have our train & test data create our hypothesis
+        SYSOUT.write(OVERWRITE + ' CDFC Trained '.ljust(50, '-') + SUCCESS)      # replace starting with complete
         
         SYSOUT.write(HDR + ' Transforming Training Data ......')                 # print
         SYSOUT.flush()
@@ -336,81 +434,6 @@ def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> ModelList:
     return knnAccuracy, dtAccuracy, nbAccuracy
 
 
-def __buildAccuracyFrame(modelsTuple: ModelList) -> pd.DataFrame:
-
-    SYSOUT.write("Creating accuracy dataframe...\n")  # update user
-    
-    # get the models from the tuple
-    knnAccuracy = modelsTuple[0]
-    dtAccuracy = modelsTuple[1]
-    nbAccuracy = modelsTuple[2]
-
-    SYSOUT.write(HDR + ' Creating dictionary ......')
-    # use accuracy data to create a dictionary. This will become the frame
-    accuracyList = {'KNN': knnAccuracy, 'Decision Tree': dtAccuracy, 'Naive Bayes': nbAccuracy}
-    SYSOUT.write(OVERWRITE + ' Dictionary created '.ljust(50, '-') + SUCCESS)
-    
-    SYSOUT.write(HDR + ' Creating labels ......')
-    # this will create labels for each instance ("fold") of the model, of the form "Fold i"
-    rowList = [["Fold {}".format(i) for i in range(1, K + 1)]]
-    SYSOUT.write(OVERWRITE + ' Labels created successfully '.ljust(50, '-') + SUCCESS)
-    
-    SYSOUT.write(HDR + ' Creating dataframe ......')
-    # create the dataframe. It will be used both by the latex & the plot exporter
-    df = pd.DataFrame(accuracyList, columns=['KNN', 'Decision Tree', 'Naive Bayes'], index=rowList)
-    SYSOUT.write(OVERWRITE + ' Dataframe created successfully '.ljust(50, '-') + SUCCESS)
-
-    SYSOUT.write('Accuracy Dataframe created without error\n')  # update user
-    
-    return df
-
-
-def __accuracyFrameToLatex(modelsTuple: typ.Tuple[typ.List[float], typ.List[float], typ.List[float]], df: pd.DataFrame) -> pd.DataFrame:
-    
-    SYSOUT.write("\nConverting frame to LaTeX...\n")  # update user
-    SYSOUT.write(HDR + ' Transposing dataframe')      # update user
-    SYSOUT.flush()  # no newline, so buffer must be flushed to console
-    
-    # transposing passes a copy, so as to avoid issues with plot (should we want it)
-    frame = df.transpose()  # update user
-    
-    SYSOUT.write(OVERWRITE + ' Dataframe transposed '.ljust(50, '-') + SUCCESS)
-    
-    # get the models from the tuple
-    knnAccuracy = modelsTuple[0]
-    dtAccuracy = modelsTuple[1]
-    nbAccuracy = modelsTuple[2]
-    
-    SYSOUT.write(HDR + ' Calculating statistics...')  # update user
-    SYSOUT.flush()  # no newline, so buffer must be flushed to console
-    
-    mn = [min(knnAccuracy), min(dtAccuracy), min(nbAccuracy)]                        # create the new min,
-    median = [np.median(knnAccuracy), np.median(dtAccuracy), np.median(nbAccuracy)]  # median,
-    mean = [np.mean(knnAccuracy), np.mean(dtAccuracy), np.mean(nbAccuracy)]          # mean,
-    mx = [max(knnAccuracy), max(dtAccuracy), max(nbAccuracy)]                        # & max columns
-    
-    SYSOUT.write(OVERWRITE + ' Statistics calculated '.ljust(50, '-') + SUCCESS)     # update user
-    
-    SYSOUT.write(HDR + ' Adding statistics to dataframe...')  # update user
-    SYSOUT.flush()  # no newline, so buffer must be flushed to console
-    
-    frame['min'] = mn         # add the min,
-    frame['median'] = median  # median,
-    frame['mean'] = mean      # mean,
-    frame['max'] = mx         # & max columns to the dataframe
-    
-    SYSOUT.write(OVERWRITE + ' Statistics added to dataframe '.ljust(50, '-') + SUCCESS)  # update user
-    SYSOUT.write(HDR + ' Converting dataframe to percentages...')                         # update user
-    SYSOUT.flush()  # no newline, so buffer must be flushed to console
-    
-    frame *= 100  # turn the decimal into a percent
-    frame = frame.round(1)  # round to 1 decimal place
-    
-    SYSOUT.write(OVERWRITE + ' Converted dataframe values to percentages '.ljust(50, '-') + SUCCESS)  # update user
-    
-    return frame
-
-
 def main() -> None:
     SYSOUT.write(Figlet(font='larry3d').renderText('C D F C'))  # formatted start up message
     SYSOUT.write("Program Initialized Successfully\n")
@@ -434,6 +457,7 @@ def main() -> None:
     # *** Parse the file into a numpy 2d array *** #
     SYSOUT.write(HDR + ' Parsing .csv file...')  # update user
     entries = np.genfromtxt(inPath, delimiter=',', skip_header=1)  # + this line is used to read .csv files
+    # TODO expand parsing so terminal calculation can be done
     SYSOUT.write(OVERWRITE + ' .csv file parsed successfully '.ljust(50, '-') + SUCCESS)  # update user
     SYSOUT.write('\rFile Found & Loaded Successfully\n')  # update user
     
@@ -441,7 +465,7 @@ def main() -> None:
     modelsTuple = __runSciKitModels(entries, useNormalize)  # knnAccuracy, dtAccuracy, nbAccuracy
 
     # *** Create a Dataframe that Combines the Accuracy of all the Models *** #
-    accuracyFrame = __buildAccuracyFrame(modelsTuple)
+    accuracyFrame = __buildAccuracyFrame(modelsTuple, K)
 
     # *** Modify the Dataframe to Match our LaTeX File *** #
     latexFrame = __accuracyFrameToLatex(modelsTuple, accuracyFrame)

@@ -3,12 +3,13 @@ import math
 import random
 import sys
 import warnings
+import cProfile
+import pstats
 from pathlib import Path
 import logging as log
 import numpy as np
 import typing as typ
 import collections as collect
-from scipy import stats
 from tqdm import tqdm
 from tqdm import trange
 
@@ -38,9 +39,9 @@ R: typ.Final = 2                 # R is the ratio of number of CFs to the number
 TOURNEY: typ.Final = 7           # TOURNEY is the tournament size
 ENTROPY_OF_S = 0                 # ENTROPY_OF_S is used for entropy calculation
 FEATURE_NUMBER = 0               # FEATURE_NUMBER is the number of features in the data set
+LABEL_NUMBER = 0                 # LABEL_NUMBER is the number of classes/labels in the data
 CLASS_IDS = []                   # CLASS_IDS is a list of all the unique class ids
 INSTANCES_NUMBER = 0             # INSTANCES_NUMBER is  the number of instances in the training data
-LABEL_NUMBER = 0                 # LABEL_NUMBER is the number of classes/labels in the data
 M = 0                            # M is the number of constructed features
 POPULATION_SIZE = 0              # POPULATION_SIZE is the population size
 CL_DICTION = typ.Dict[int, typ.Dict[int, typ.List[float]]]
@@ -65,6 +66,9 @@ warnings.filterwarnings('ignore', message='invalid value encountered in true_div
 logPath = str(Path.cwd() / 'logs' / 'cdfc.log')
 log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w',
                 format='%(levelname)s - %(lineno)d: %(message)s')
+
+profiler = cProfile.Profile()                       # create a profiler to profile cdfc during testing
+statsPath = str(Path.cwd() / 'logs' / 'stats.log')  # set the file path that the profiled info will be stored at
 
 
 class Tree:
@@ -221,9 +225,8 @@ class ConstructedFeature:
         self.className = className  # the name of the class this tree is meant to distinguish
         self.tree = tree            # the root node of the constructed feature
         self.size = size            # the individual size
-        
-        # call terminals to create the terminal set
-        self.relevantFeatures = terminals(className)  # holds the indexes of the relevant features
+        # TODO change so relevant features is passed or not needed
+        self.relevantFeatures = None  # holds the indexes of the relevant features
 
     def getUsedFeatures(self) -> typ.List[int]:
     
@@ -519,135 +522,6 @@ class Population:
 # ***************** End of Namespaces/Structs & Objects ******************* #
 
 
-def terminals(classId: int) -> typ.List[int]:
-    """terminals creates the list of relevant terminals for a given class.
-
-    Arguments:
-        classId {int} -- classId is the identifier for the class for
-                         which we want a terminal set
-
-    Returns:
-        terminalSet {list[int]} -- terminals returns the highest scoring features as a list.
-                                   The list will have a length of FEATURE_NUMBER/2, and will
-                                   hold the indexes of the features.
-    """
-    log.debug('Starting terminals() method')
-
-    Score = collect.namedtuple('Score', ['Attribute', 'Relevancy'])
-    ScoreList = typ.List[typ.Union[typ.List, Score]]
-    scores: ScoreList = []
-
-    # FEATURE_NUMBER is the number of features in the data. This means that it can also be a list of
-    # the indexes of the features (the feature IDs). Subtract it by 1 to make 0 a valid feature ID
-    for i in range(FEATURE_NUMBER):
-        inClass, notIn = valuesInClass(classId, i)  # find the values of attribute i in/not in class classId
-
-        # get the t-test & complement of the p-value for the feature
-        # tValue will be zero when the lists have the same mean
-        # pValue will only be 1 when tValue is 0
-        tValue, pValue = stats.ttest_ind(inClass, notIn, equal_var=False)
-        
-        # ****************** Check that valuesInClass & t-test worked as expected ****************** #
-        try:
-            # transform into numpy arrays which are easier to test
-            inside_of_class = np.array(inClass)
-            not_inside_of_class = np.array(notIn)
-            
-            # *** Check if pValue is 1 *** #
-            if pValue == 1:  # if pValue is 1 then inClass & notIn are the same. Relevancy should be zero
-                log.debug(f'pValue is 1 (inClass & notIn share the same mean), feature {i} should be ignored')
-            
-            # *** Check that inClass is not empty *** #
-            if not inClass:
-                log.error(f'inClass was empty, ninClass={inClass}, notIn={notIn}, classId={classId}, attribute={i}')
-                raise Exception(f'ERROR: inClass was empty,'
-                                f'\ninClass={inClass}, notIn={notIn}, classId={classId}, attribute={i}')
-            # + if inClass is empty tValue is inaccurate, don't run other checks + #
-            
-            # *** Check that inClass & notIn aren't equal *** #
-            elif np.array_equal(inside_of_class, not_inside_of_class):
-                log.error(f'inClass & notIn are equal, inClass{inside_of_class}, notIn{not_inside_of_class}')
-                raise Exception(f'inClass & notIn are equal, inClass{inside_of_class}, '
-                                f'notIn{not_inside_of_class}')
-            
-            # *** Check that inClass & notIn aren't equivalent *** #
-            elif np.array_equiv(inside_of_class, not_inside_of_class):
-                log.error(f'inClass & notIn are equivalent (but not equal, their shapes are different), '
-                          f'inClass{inside_of_class}, notIn{not_inside_of_class}')
-                raise Exception(f'inClass & notIn are equivalent, inClass{inside_of_class}, '
-                                f'notIn{not_inside_of_class}')
-            
-            # *** Check that tValue was set & is a finite number  *** #
-            elif tValue is None or math.isnan(tValue) or math.isinf(tValue):
-                log.error(f'tValue computation failed, expected a finite number got {tValue}')
-                raise Exception(f'ERROR: tValue computation failed, expected a finite number got {tValue}')
-
-            # *** Check that pValue was set & is a number  *** #
-            elif pValue is None or math.isnan(pValue) or math.isinf(pValue):
-                log.error(f'pValue computation failed, expected a finite number got {pValue}')
-                raise Exception(f'ERROR: pValue computation failed, expected a finite number got {pValue}')
-
-        except Exception as err:
-            tqdm.write(str(err))
-            sys.exit(-1)  # exit on error; recovery not possible
-        # ******************************************************************************************* #
-        
-        # calculate relevancy for a single feature (if the mean is the same for inClass & notIn, pValue=1)
-        if pValue >= 0.05:                      # if pValue is greater than 0.05 then the feature is not relevant
-            relevancy: float = 0.0              # because it's not relevant, set relevancy score to 0
-            scores.append(Score(i, relevancy))  # add relevancy score to the list of scores
-            
-        # otherwise
-        else:
-            
-            try:
-                relevancy: float = np.divide(np.absolute(tValue), pValue)  # set relevancy using t-value/p-value
-                
-                # *************************** Check that division worked *************************** #
-                if math.isinf(relevancy):  # check for n/0
-                    log.error(f'Relevancy is infinite; some non-zero was divided by 0 -- tValue={tValue} pValue={pValue}')
-                    raise Exception(f'ERROR: relevancy is infinite, tValue={tValue} pValue={pValue}')
-                
-                elif math.isnan(relevancy):  # check for 0/0
-                    log.error(f'Relevancy is infinite; 0/0 -- tValue={tValue} pValue={pValue}')
-                    raise Exception(f'ERROR: relevancy is NaN (0/0), tValue={tValue} pValue={pValue}')
-                if pValue == 1:
-                    log.error('pValue is 1, but was not caught by if pValue >= 0.05')
-                    raise Exception('ERROR: pValue is 1, but was not caught by if pValue >= 0.05')
-                # ********************************************************************************** #
-                
-                else:  # if division worked
-                    scores.append(Score(i, relevancy))  # add relevancy score to the list of scores
-            
-            except Exception as err:
-                tqdm.write(str(err))
-                sys.exit(-1)  # exit on error; recovery not possible
-
-    ordered: ScoreList = sorted(scores, key=lambda s: s.Relevancy)  # sort the features by relevancy scores
-
-    terminalSet: typ.Union[int, typ.List] = []  # this will hold relevant terminals
-    top: int = len(ordered)//2                  # find the halfway point
-    relevantScores: ScoreList = ordered[:top]   # slice top half
-    
-    for i in relevantScores:             # loop over relevant scores
-        # ? this is where the terminal index is added. Is the index correct?
-        terminalSet.append(i.Attribute)  # add the attribute number to the terminal set
-    
-    # ************************* Test if terminalSet is empty ************************* #
-    try:
-        if not terminalSet:  # if terminalSet is empty
-            log.error('Terminals calculation failed: terminalSet is empty')
-            raise Exception('ERROR: Terminals calculation failed: terminalSet is empty')
-    except Exception as err:
-        tqdm.write(str(err))
-        sys.exit(-1)  # exit on error; recovery not possible
-    # ********************************************************************************* #
-
-    log.debug('Finished terminals() method')
-
-    return terminalSet
-
-
 def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[float], typ.List[float]]:
     """valuesInClass determines what values of an attribute occur in a class
         and what values do not
@@ -798,7 +672,7 @@ def createInitialPopulation() -> Population:
         # NOTE this will make 1 tree for each feature, and 1 CF for each class
 
         # get a copy of the list of all the unique classIds
-        classIds = copy.deepcopy(CLASS_IDS)
+        classIds = copy.deepcopy(CLASS_IDS)  # ? does this need to be a deep copy?
         random.shuffle(classIds)
 
         ftrs: typ.List[ConstructedFeature] = []
@@ -1125,7 +999,13 @@ def cdfc(train: np.ndarray) -> Hypothesis:
     # ***************************************************************** #
 
     # *********************** Run the Algorithm *********************** #
-    currentPopulation = createInitialPopulation()     # create initial population
+
+    # !!!!!!!!!!!!!! Profile CDFC (Remove When Not Testing) !!!!!!!!!!!!!! #
+    currentPopulation = profiler.runcall(createInitialPopulation())  # run initialPop & profile it using cProfile
+    lg = pstats.Stats(profiler)                                      # use pStats to parse the profiled info
+    lg.dump_stats(statsPath)                                         # send the info to the file logs/stats.log
+    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
+    # currentPopulation = createInitialPopulation()     # create initial population
     elite = currentPopulation.candidateHypotheses[0]  # init elitism
 
     # loop, evolving each generation. This is where most of the work is done
