@@ -11,7 +11,7 @@ SUCCESS = u' \u2713\n'
 OVERWRITE = '\r' + HDR
 SYSOUT = sys.stdout
 
-ModelList = typ.Tuple[typ.List[float], typ.List[float], typ.List[float]]          # type hinting alias
+ModelList = typ.Tuple[typ.List[float], typ.List[float], typ.List[float]]  # type hinting alias
 
 
 def __createPlot(df):
