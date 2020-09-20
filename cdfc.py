@@ -25,7 +25,7 @@ from tqdm import trange
 
 # **************************** Constants/Globals **************************** #
 ALPHA: typ.Final = 0.8           # ALPHA is the fitness weight alpha
-BETA: typ.Final = 2              # BETA is a constant used to calculate the pop size
+
 BARCOLS = 25                     # BARCOLS is the number of columns for the progress bar to print
 CROSSOVER_RATE: typ.Final = 0.8  # CROSSOVER_RATE is the chance that a candidate will reproduce
 ELITISM_RATE: typ.Final = 1      # ELITISM_RATE is the elitism rate
@@ -35,7 +35,7 @@ MUTATION_RATE: typ.Final = 0.2   # MUTATION_RATE is the chance that a candidate 
 # ! changes here must also be made in the runLeft & runRight functions in the tree object ! #
 OPS: typ.Final = ['add', 'subtract', 'times', 'max', ]  # OPS is the list of valid operations on the tree
 # ! set the value of R for every new dataset, it is NOT set automatically ! #
-R: typ.Final = 2                 # R is the ratio of number of CFs to the number of classes (features/classes)
+
 TOURNEY: typ.Final = 7           # TOURNEY is the tournament size
 ENTROPY_OF_S = 0                 # ENTROPY_OF_S is used for entropy calculation
 FEATURE_NUMBER = 0               # FEATURE_NUMBER is the number of features in the data set
@@ -168,11 +168,13 @@ class Tree:
                 raise Exception(f'ERROR: Value stored in tree is a number outside of feature range. value{self.data}')
             
         except IndexError:
-            log.error(f'Index stored in tree was in range but did not exist. Value stored was:{self.data}')
-            tqdm.write(f'ERROR: Index stored in tree was in range but did not exist. Value stored was:{self.data}')
+            lineNm = sys.exc_info()[-1].tb_lineno    # print line number error occurred on
+            log.error(f'Index stored in tree was in range but did not exist. Value stored was:{self.data}, line = {lineNm}')
+            tqdm.write(f'ERROR: Index stored in tree was in range but did not exist. Value stored was:{self.data}, line = {lineNm}')
             sys.exit(-1)  # exit on error; recovery not possible
         except Exception as err:
-            tqdm.write(str(err))
+            lineNm = sys.exc_info()[-1].tb_lineno    # print line number error occurred on
+            tqdm.write(str(err) + f', line = {lineNm}')
             sys.exit(-1)  # exit on error; recovery not possible
 
     def getSize(self, counter) -> int:
@@ -254,7 +256,8 @@ class ConstructedFeature:
                 raise Exception('ERROR: The getUsedFeatures found no features (values list is empty)')
             return values      # values should now hold the indexes of the tree's terminals
         except Exception as err:
-            tqdm.write(str(err))
+            lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+            tqdm.write(str(err) + f', line = {lineNm}')
             sys.exit(-1)  # exit on error; recovery not possible
 
     def transform(self, instance: row) -> float:
@@ -316,7 +319,8 @@ class Hypothesis:
                         log.error(f'In Czekanowski bottom of fraction is a list {bottom}')
                         raise Exception(f'ERROR: In Czekanowski bottom of fraction is a list {bottom}')
                 except Exception as err:
-                    tqdm.write(str(err))
+                    lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+                    tqdm.write(str(err) + f', line = {lineNm}')
                 # ******************************************************************** #
                 
                 minSum += top     # the top of the fraction
@@ -586,10 +590,11 @@ def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[float], ty
         notInClass: typ.List[float] = out   # set the attribute values that do not appear in the class using out
 
     except AssertionError as err:                  # catches error thrown by the elif statements
+        lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
         log.error(f'ValuesInClass found more classIds than expected. Unexpected class(es) found: {classes}\n'
-                  + f'Label Number = {LABEL_NUMBER}, Classes = {classes}, Class Id = {classId}')
+                  + f'Label Number = {LABEL_NUMBER}, Classes = {classes}, Class Id = {classId}, line = {lineNm}')
         tqdm.write(f'ValuesInClass found more classIds than expected. Unexpected class(es) found: {classes}')
-        tqdm.write(str(err))
+        tqdm.write(str(err) + f'line{lineNm}')
         sys.exit(-1)
     # ************************************************************************************************************* #
     
@@ -605,7 +610,8 @@ def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[float], ty
             log.debug('The valuesInClass method has found that notInClass is empty')
             raise Exception('valuesInClass() found notInClass[] to be empty')
     except Exception as err:
-        tqdm.write(str(err))
+        lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+        tqdm.write(str(err) + f', line = {lineNm}')
         sys.exit(-1)        # exit on error; recovery not possible
     
     return inClass, notInClass  # return inClass & notInClass
@@ -687,8 +693,9 @@ def createInitialPopulation() -> Population:
                 name = classIds.pop(0)  # get a random id
             
             except IndexError:  # if classIds.pop() tried to pop an empty list, log error & exit
-                log.error('Index error encountered in createInitialPopulation (popped from an empty list)')
-                tqdm.write('ERROR: Index error encountered in createInitialPopulation (popped from an empty list)')
+                lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+                log.error(f'Index error encountered in createInitialPopulation (popped from an empty list), line {lineNm}')
+                tqdm.write(f'ERROR: Index error encountered in createInitialPopulation (popped from an empty list), line {lineNm}')
                 sys.exit(-1)  # exit on error; recovery not possible
 
             # if no error occurred log the value found
@@ -747,7 +754,8 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
                 log.error(f'Tournament could not set first correctly, first = {first}')
                 raise Exception(f'ERROR: Tournament could not set first correctly, first = {first}')
         except Exception as err:
-            tqdm.write(str(err))
+            lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+            tqdm.write(str(err) + f', line = {lineNm}')
             sys.exit(-1)  # exit on error; recovery not possible
         
         return first
@@ -882,7 +890,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
     return newPopulation, elite
 
 
-def cdfc(train: np.ndarray) -> Hypothesis:
+def cdfc(values) -> Hypothesis:
     # Class Dependent Feature Construction
 
     # makes sure we're using global variables
@@ -896,108 +904,18 @@ def cdfc(train: np.ndarray) -> Hypothesis:
     global row
     global ENTROPY_OF_S  # * used in entropy calculation * #
     global CLASS_DICTS
-
-    classes = []       # this will hold classIds and how often they occur
-    classSet = set()   # this will hold how many classes there are
-    classToOccur = {}  # maps a classId to the number of times it occurs
-    ids = []           # this will be a list of all labels/ids with no repeats
-
-    # set global variables using the now transformed data
-    # each line in train will be an instances
-    for line in tqdm(train, desc="Setting Global Variables", ncols=BARCOLS):
-        
-        # parse the file
-        name = line[0]
-        # ? I am correctly setting the classId/name so that it works with using FEATURE_NUMBER?
-        # ? Who do I get the Attribute ids? The must be the index of the attribute
-        # ****************** Check that the ClassID/ClassName is an integer ****************** #
-        try:
-            if np.isnan(name):                                      # if it isn't a number
-                raise Exception(f'ERROR: Parser expected an integer, got a NaN of value:{line[0]}')
-            elif not (type(name) is int):                           # if it is a number, but not an integer
-                log.debug(f'Parser expected an integer class ID, got a float: {line[0]}')
-                name = int(name)                                    # caste to int
-        except ValueError:                                          # if casting failed
-            log.error(f'Parse could not cast {name} to integer')
-            tqdm.write(f'ERROR: parser could not cast {name} to integer')
-        except Exception as err:                                    # catch NaN exception
-            log.error(f'Parser expected an integer classId, got a NaN: {name}')
-            tqdm.write(str(err))
-        # ************************************************************************************ #
-        # now that we know the classId/className (they're the same thing) is an integer, continue parsing
-        rows.append(row(name, line[1:]))  # reader[0] = classId, reader[1:] = attribute values
-        classes.append(name)
-        classSet.add(name)
-        INSTANCES_NUMBER += 1
-
-        # *** Create a Dictionary of Attribute Values Keyed by the Attribute's Index *** #
-        # ! check that this is working correctly
-        attributeNames = range(len(line[1:]))  # create names for the attributes number from 0 to len()
-        attributeValues = line[1:]             # grab all the attribute values in this instance
-        
-        try:  # ++++ Do dictionary Creation & Modification Inside Try/Catch ++++
-            if len(attributeValues) == len(attributeNames):  # check that the lengths of both names & values are equal
-                # if they are equal, turn attribute values into a list of lists: [[value1],[value2],[value3],...]
-                # this is so we can append values to that list without overwriting everytime
-                attributeValues = [[val] for val in attributeValues]
-                # create a new dictionary using (attributeName, attributeValue) pairs (in a tuple)
-                newDict: typ.Dict[int, typ.List[float]] = dict(zip(attributeNames, attributeValues))
-            else:  # if they are not equal, log it, throw an exception, and exit
-                msg = f'Parser found more attribute names ({len(attributeNames)}) than values ({attributeValues})'
-                log.error(msg)
-                raise AssertionError(f'ERROR: {msg}')
-
-            # *** Merge the Old Dictionary with the New One *** #
-            # track how many unique/different class IDs there are & create dictionaries for
-            # ? update() replaces old values so we have to loop over, can this be done faster?
-            if name in ids:                          # if we've found an instance in this class before
-                oldDict = CLASS_DICTS[name]          # get the old dictionary for the class
-                for att in oldDict.keys():           # we need to update every attribute value list so loop
-                    oldDict[att] += newDict[att]     # for each value list, concatenate the old & new lists
-
-            # *** Insert the Dictionary into CLASS_DICTS *** #
-            else:                                    # if this is the first instance in the class
-                CLASS_DICTS[name] = dict(newDict)    # insert the new dictionary using the key classID
-                ids.append(name)                     # add classId to ids -- a list of unique classIDs
-                
-                log.debug(f'Parser created dictionary for classId {name}')   # ! for debugging
-                # tqdm.write(f'Parser created dictionary for classId {name}')  # ! for debugging
-        
-        except IndexError:                           # catch error thrown by dictionary indexing
-            lineNm = sys.exc_info()[-1].tb_lineno    # print line number error occurred on
-            log.error(f'Parser encountered an Index Error on line {lineNm}. name={name}, line[0]={line[0]}')
-            tqdm.write(f'ERROR: Parser encountered an Index Error on line {lineNm}. name={name}, line[0]={line[0]}')
-            sys.exit(-1)                             # recovery impossible, exit
-        except AssertionError as err:                # catch the error thrown by names/value length check
-            tqdm.write(str(err))
-            sys.exit(-1)                             # recovery impossible, exit
-        except Exception as err:                     # catch any other error that might be thrown
-            tqdm.write(str(err))
-            sys.exit(-1)                             # recovery impossible, exit
-
-        # ********* The Code Below is Used to Calculated Entropy  ********* #
-        # this will count the number of times a class occurs in the provided data
-        # dictionary[classId] = counter of times that class is found
-        
-        if classToOccur.get(name):   # if we have encountered the class before
-            classToOccur[line[0]] += 1  # increment
-        else:  # if this is the first time we've encountered the class
-            classToOccur[line[0]] = 1   # set to 1
-        # ****************************************************************** #
-
-    CLASS_IDS = ids                           # this will collect all the feature names
-    FEATURE_NUMBER = len(rows[0].attributes)  # get the number of features in the data set
-    POPULATION_SIZE = FEATURE_NUMBER * BETA   # set the pop size
-    LABEL_NUMBER = len(ids)                   # get the number of classes in the data set
-    M = R * LABEL_NUMBER                      # get the number of constructed features
-
-    # ********* The Code Below is Used to Calculated Entropy  ********* #
-    # loop over all classes
-    for i in classToOccur.keys():
-        pi = classToOccur[i] / INSTANCES_NUMBER  # compute p_i
-        ENTROPY_OF_S -= pi * math.log(pi, 2)     # calculation entropy summation
-    # ***************************************************************** #
-
+    
+    # Read the values in the dictionary into the constants
+    FEATURE_NUMBER = values['FEATURE_NUMBER']
+    CLASS_IDS = values['CLASS_IDS']
+    POPULATION_SIZE = values['POPULATION_SIZE']
+    INSTANCES_NUMBER = values['INSTANCE_NUMBER']
+    LABEL_NUMBER = values['LABEL_NUMBER']
+    M = values['M']
+    rows = values['rows']
+    ENTROPY_OF_S = values['ENTROPY_OF_S']
+    CLASS_DICTS = values['CLASS_DICTS']
+    
     # *********************** Run the Algorithm *********************** #
 
     # !!!!!!!!!!!!!! Profile CDFC (Remove When Not Testing) !!!!!!!!!!!!!! #

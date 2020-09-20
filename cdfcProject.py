@@ -4,6 +4,8 @@ import logging as log
 import collections as collect
 import cProfile
 import math
+from tqdm import tqdm
+from tqdm import trange
 from scipy import stats
 from cdfcFmt import *
 import tkinter as tk
@@ -40,33 +42,165 @@ instance n | class value | attribute value | attribute value | attribute value |
 --------------------------------------------------------------------------------------------------------------------------
 
 '''
-
+# ********************************************* Constants used by Parser ********************************************* #
+row = collect.namedtuple('row', ['className', 'attributes'])  # a single line in the csv, representing a record/instance
+BETA: typ.Final = 2              # BETA is a constant used to calculate the pop size
+R: typ.Final = 2                 # R is the ratio of number of CFs to the number of classes (features/classes)
+# ******************************************** Constants used by Profiler ******************************************** #
+profiler = cProfile.Profile()                       # create a profiler to profile cdfc during testing
+statsPath = str(Path.cwd() / 'logs' / 'stats.log')  # set the file path that the profiled info will be stored at
+# ********************************************* Constants used by Logger ********************************************* #
+# create the file path for the log file & configure the logger
+logPath = str(Path.cwd() / 'logs' / 'cdfc.log')
+log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
+# ******************************************** Constants used for Writing ******************************************** #
+HDR = '*' * 6
+SUCCESS = u' \u2713\n'
+OVERWRITE = '\r' + HDR
+SYSOUT = sys.stdout
+# ****************************************** Constants used by Type Hinting ****************************************** #
+K: typ.Final[int] = 10  # set the K for k fold cross validation
+ModelList = typ.Tuple[typ.List[float], typ.List[float], typ.List[float]]          # type hinting alias
+ModelTypes = typ.Union[KNeighborsClassifier, GaussianNB, DecisionTreeClassifier]  # type hinting alias
+ScalarsOut = typ.Tuple[np.ndarray, StandardScaler]
+ScalarsIn = typ.Union[None, StandardScaler]
+# ******************************************************************************************************************** #
 
 # * Next Steps
 # TODO get CDFC working & use it to reduce data
 # TODO add doc strings
 # TODO add more unit tests
 
-K: typ.Final[int] = 10  # set the K for k fold cross validation
-ModelList = typ.Tuple[typ.List[float], typ.List[float], typ.List[float]]          # type hinting alias
-ModelTypes = typ.Union[KNeighborsClassifier, GaussianNB, DecisionTreeClassifier]  # type hinting alias
-ScalarsOut = typ.Tuple[np.ndarray, StandardScaler]
-ScalarsIn = typ.Union[None, StandardScaler]
 
-# console formatting strings
-HDR = '*' * 6
-SUCCESS = u' \u2713\n'
-OVERWRITE = '\r' + HDR
-SYSOUT = sys.stdout
+def parseFile(train: np.ndarray):
+    # TODO: review for bugs. Remember this parses bucket(s) now, not files
+    # *** the constants to be set * #
+    INSTANCES_NUMBER = 0
+    rows: typ.List[row] = []
+    ENTROPY_OF_S = 0  # * used in entropy calculation * #
+    CLASS_DICTS = {}
+    # *** (the rest are set after the loop) *** #
+    
+    classes = []  # this will hold classIds and how often they occur
+    classSet = set()  # this will hold how many classes there are
+    classToOccur = {}  # maps a classId to the number of times it occurs
+    ids = []  # this will be a list of all labels/ids with no repeats
+    
+    # set global variables using the now transformed data
+    # each line in train will be an instances
+    for line in tqdm(train, desc="Setting Global Variables", ncols=25):
+        
+        # parse the file
+        name = line[0]
+        # ? I am correctly setting the classId/name so that it works with using FEATURE_NUMBER?
+        # ? Who do I get the Attribute ids? The must be the index of the attribute
+        # ****************** Check that the ClassID/ClassName is an integer ****************** #
+        try:
+            if np.isnan(name):  # if it isn't a number
+                raise Exception(f'ERROR: Parser expected an integer, got a NaN of value:{line[0]}')
+            elif not (type(name) is int):  # if it is a number, but not an integer
+                log.debug(f'Parser expected an integer class ID, got a float: {line[0]}')
+                name = int(name)  # caste to int
+        except ValueError:  # if casting failed
+            lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+            log.error(f'Parse could not cast {name} to integer, line = {lineNm}')
+            tqdm.write(f'ERROR: parser could not cast {name} to integer, line = {lineNm}')
+        except Exception as err:  # catch NaN exception
+            lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+            log.error(f'Parser expected an integer classId, got a NaN: {name}, line = {lineNm}')
+            tqdm.write(str(err))
+        # ************************************************************************************ #
+        # now that we know the classId/className (they're the same thing) is an integer, continue parsing
+        rows.append(row(name, line[1:]))  # reader[0] = classId, reader[1:] = attribute values
+        classes.append(name)
+        classSet.add(name)
+        INSTANCES_NUMBER += 1
+        
+        # *** Create a Dictionary of Attribute Values Keyed by the Attribute's Index *** #
+        # ! check that this is working correctly
+        attributeNames = range(len(line[1:]))  # create names for the attributes number from 0 to len()
+        attributeValues = line[1:]  # grab all the attribute values in this instance
+        
+        try:  # ++++ Do dictionary Creation & Modification Inside Try/Catch ++++
+            if len(attributeValues) == len(attributeNames):  # check that the lengths of both names & values are equal
+                # if they are equal, turn attribute values into a list of lists: [[value1],[value2],[value3],...]
+                # this is so we can append values to that list without overwriting everytime
+                attributeValues = [[val] for val in attributeValues]
+                # create a new dictionary using (attributeName, attributeValue) pairs (in a tuple)
+                newDict: typ.Dict[int, typ.List[float]] = dict(zip(attributeNames, attributeValues))
+            else:  # if they are not equal, log it, throw an exception, and exit
+                msg = f'Parser found more attribute names ({len(attributeNames)}) than values ({attributeValues})'
+                log.error(msg)
+                raise AssertionError(f'ERROR: {msg}')
+            
+            # *** Merge the Old Dictionary with the New One *** #
+            # track how many unique/different class IDs there are & create dictionaries for
+            # ? update() replaces old values so we have to loop over, can this be done faster?
+            if name in ids:  # if we've found an instance in this class before
+                oldDict = CLASS_DICTS[name]  # get the old dictionary for the class
+                for att in oldDict.keys():  # we need to update every attribute value list so loop
+                    oldDict[att] += newDict[att]  # for each value list, concatenate the old & new lists
+            
+            # *** Insert the Dictionary into CLASS_DICTS *** #
+            else:  # if this is the first instance in the class
+                CLASS_DICTS[name] = dict(newDict)  # insert the new dictionary using the key classID
+                ids.append(name)  # add classId to ids -- a list of unique classIDs
+                
+                log.debug(f'Parser created dictionary for classId {name}')  # ! for debugging
+                # tqdm.write(f'Parser created dictionary for classId {name}')  # ! for debugging
+        
+        except IndexError:  # catch error thrown by dictionary indexing
+            lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+            log.error(f'Parser encountered an Index Error on line {lineNm}. name={name}, line[0]={line[0]}')
+            tqdm.write(f'ERROR: Parser encountered an Index Error on line {lineNm}. name={name}, line[0]={line[0]}')
+            sys.exit(-1)  # recovery impossible, exit
+        except AssertionError as err:  # catch the error thrown by names/value length check
+            lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+            tqdm.write(str(err) + f', line = {lineNm}')
+            sys.exit(-1)  # recovery impossible, exit
+        except Exception as err:  # catch any other error that might be thrown
+            lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+            tqdm.write(str(err) + f', line = {lineNm}')
+            sys.exit(-1)  # recovery impossible, exit
+        
+        # ********* The Code Below is Used to Calculated Entropy  ********* #
+        # this will count the number of times a class occurs in the provided data
+        # dictionary[classId] = counter of times that class is found
+        
+        if classToOccur.get(name):  # if we have encountered the class before
+            classToOccur[line[0]] += 1  # increment
+        else:  # if this is the first time we've encountered the class
+            classToOccur[line[0]] = 1  # set to 1
+        # ****************************************************************** #
+    
+    CLASS_IDS = ids  # this will collect all the feature names
+    FEATURE_NUMBER = len(rows[0].attributes)  # get the number of features in the data set
+    POPULATION_SIZE = FEATURE_NUMBER * BETA  # set the pop size
+    LABEL_NUMBER = len(ids)  # get the number of classes in the data set
+    M = R * LABEL_NUMBER  # get the number of constructed features
+    
+    # ********* The Code Below is Used to Calculated Entropy  ********* #
+    # loop over all classes
+    for i in classToOccur.keys():
+        pi = classToOccur[i] / INSTANCES_NUMBER  # compute p_i
+        ENTROPY_OF_S -= pi * math.log(pi, 2)  # calculation entropy summation
+    # ***************************************************************** #
 
-profiler = cProfile.Profile()                       # create a profiler to profile cdfc during testing
-statsPath = str(Path.cwd() / 'logs' / 'stats.log')  # set the file path that the profiled info will be stored at
-
-# create the file path for the log file & configure the logger
-logPath = str(Path.cwd() / 'logs' / 'cdfc.log')
-log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w',
-                format='%(levelname)s - %(lineno)d: %(message)s')
-
+    # this dictionary will hold the parsed constants that will be sent to cdfc
+    constants = {
+        'FEATURE_NUMBER': FEATURE_NUMBER,
+        'CLASS_IDS': CLASS_IDS,
+        'POPULATION_SIZE': POPULATION_SIZE,
+        'INSTANCES_NUMBER': INSTANCES_NUMBER,
+        'LABEL_NUMBER': LABEL_NUMBER,
+        'M': M,
+        'rows': rows,
+        'ENTROPY_OF_S': ENTROPY_OF_S,
+        'CLASS_DICTS': CLASS_DICTS,
+    }
+    
+    return constants
+    
 
 def __discretization(data: np.ndarray) -> np.ndarray:
     
@@ -323,14 +457,16 @@ def __fillBuckets(entries: np.ndarray) -> typ.List[typ.List[np.ndarray]]:
     return buckets
 
 
-def __buildModel(entries: np.ndarray, model: ModelTypes, useNormalize) -> typ.List[float]:
-    
-    # *** create a set of K buckets filled with our instances *** #
-    buckets = __fillBuckets(entries)  # using the parsed data, fill the k buckets
+def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
+    # TODO: change to use new flow
+    # TODO: call parser to parse bucket, then pass returned dictionary (& the logger) to CDFC
+    # ? should the parser be called on the entries or the buckets? i.e. should the transformation be aware
+    # ?   of the whole data set when trained?
 
     # *** Loop over our buckets K times, each time running creating a new hypothesis *** #
     oldR = 0                            # used to remember previous r in loop
     testingList = None                  # used to keep value for testing after a loop
+    # TODO: try ot find a way to avoid a deepcopy of buckets
     trainList = copy.deepcopy(buckets)  # make a copy of buckets so we don't override it
     accuracy = []                       # this will store the details about the accuracy of our hypotheses
 
@@ -406,26 +542,31 @@ def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> ModelList:
     # NOTE adding more models requires updating the Models type at top of file
     # hdr, overWrite, & success are just used to format string for the console
     # accuracy is a float list, each value is the accuracy for a single run
+    
+    # ***** create a set of K buckets filled with our instances ***** #
+    SYSOUT.write("\nBuilding buckets...\n")  # update user
+    buckets = __fillBuckets(entries)  # using the parsed data, fill the k buckets (once for all models)
+    SYSOUT.write("Buckets built\n\n")  # update user
 
     SYSOUT.write("\nBuilding models...\n")  # update user
     
     # ************ Kth Nearest Neighbor Classifier ************ #
     SYSOUT.write(HDR + ' KNN model starting ......')                        # print \tab * KNN model starting......
     SYSOUT.flush()                                                          # since there's no newline push buffer to console
-    knnAccuracy: typ.List[float] = __buildModel(entries, KNeighborsClassifier(n_neighbors=3), useNormalize)  # build the model
+    knnAccuracy: typ.List[float] = __buildModel(buckets, KNeighborsClassifier(n_neighbors=3), useNormalize)  # build the model
     SYSOUT.write(OVERWRITE+' KNN model completed '.ljust(50, '-')+SUCCESS)  # replace starting with complete
 
     # ************ Decision Tree Classifier ************ #
     SYSOUT.write(HDR + ' Decision Tree model starting ......')              # print \tab * dt model starting......
     SYSOUT.flush()                                                          # since there's no newline push buffer to console
-    dtAccuracy: typ.List[float] = __buildModel(entries, DecisionTreeClassifier(random_state=0), useNormalize)  # build the model
+    dtAccuracy: typ.List[float] = __buildModel(buckets, DecisionTreeClassifier(random_state=0), useNormalize)  # build the model
     SYSOUT.write(OVERWRITE +                                                # replace starting with complete
                  ' Decision Tree model built '.ljust(50, '-') + SUCCESS)
 
     # ************ Gaussian Classifier (Naive Bayes) ************ #
     SYSOUT.write(HDR + ' Naive Bayes model starting ......')                # print \tab * nb model starting......
     SYSOUT.flush()                                                          # since there's no newline push buffer to console
-    nbAccuracy: typ.List[float] = __buildModel(entries, GaussianNB(), useNormalize)       # build the model
+    nbAccuracy: typ.List[float] = __buildModel(buckets, GaussianNB(), useNormalize)       # build the model
     SYSOUT.write(OVERWRITE +                                                # replace starting with complete
                  ' Naive Bayes model built '.ljust(50, '-') + SUCCESS)
     
@@ -454,16 +595,16 @@ def main() -> None:
 
     useNormalize = messagebox.askyesno('CDFC - Transformations', 'Do you want to transform the data before using it?', parent=parent)  # Yes / No
     
-    # *** Parse the file into a numpy 2d array *** #
-    SYSOUT.write(HDR + ' Parsing .csv file...')  # update user
+    # *** Read the file into a numpy 2d array *** #
+    SYSOUT.write(HDR + ' Reading in .csv file...')  # update user
     entries = np.genfromtxt(inPath, delimiter=',', skip_header=1)  # + this line is used to read .csv files
-    # TODO expand parsing so terminal calculation can be done
-    SYSOUT.write(OVERWRITE + ' .csv file parsed successfully '.ljust(50, '-') + SUCCESS)  # update user
+    SYSOUT.write(OVERWRITE + ' .csv file read in successfully '.ljust(50, '-') + SUCCESS)  # update user
     SYSOUT.write('\rFile Found & Loaded Successfully\n')  # update user
     
     # *** Build the Models *** #
     modelsTuple = __runSciKitModels(entries, useNormalize)  # knnAccuracy, dtAccuracy, nbAccuracy
 
+    # NOTE: everything below just formats & outputs the results
     # *** Create a Dataframe that Combines the Accuracy of all the Models *** #
     accuracyFrame = __buildAccuracyFrame(modelsTuple, K)
 
