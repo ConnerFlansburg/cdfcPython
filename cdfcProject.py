@@ -1,11 +1,10 @@
 import copy
-import sys
 import logging as log
 import collections as collect
 import cProfile
 import math
+import pickle
 from tqdm import tqdm
-from tqdm import trange
 from scipy import stats
 from cdfcFmt import *
 import tkinter as tk
@@ -200,7 +199,101 @@ def parseFile(train: np.ndarray):
     }
     
     return constants
+
+
+def valuesInClass(classId: int, attribute: int, constants) -> typ.Tuple[typ.List[float], typ.List[float]]:
+    """valuesInClass determines what values of an attribute occur in a class
+        and what values do not
+
+    Arguments:
+        classId {String or int} -- This is the identifier for the class that
+                                    should be examined
+        attribute {int} -- this is the attribute to be investigated. It should
+                            be the index of the attribute in the row
+                            namedtuple in the rows list
+
+    Returns:
+        inClass -- This holds the values in the class.
+        notInClass -- This holds the values not in the class.
+    """
+    CLASS_DICTS = constants['CLASS_DICTS']
+    LABEL_NUMBER = constants['LABEL_NUMBER']
+    CLASS_IDS = constants['CLASS_IDS']
     
+    inDict = CLASS_DICTS[classId]  # get the dictionary of attribute values for this class
+    inClass: typ.List[float] = inDict[attribute]  # now get feature/attribute values that appear in the class
+    
+    # ******************** get all the values from all the other dictionaries for this feature ******************** #
+    classes = CLASS_IDS.copy()  # make a copy of the list of unique classIDs
+    classes.remove(classId)  # remove the class we're looking at from the list
+    out: typ.List[float] = []  # this is a temporary variable that will hold the out list while it's constructed
+    try:
+        if LABEL_NUMBER == 2:  # * get the other score
+            index = classes.pop(0)  # pop the first classId in the list (should be the only item in the list)
+            spam = CLASS_DICTS[index]  # get the dictionary for the other class
+            out = spam[attribute]  # get the feature/attribute values for the other class
+            assert len(classes) == 0  # if classes is not empty now, an error has occurred
+        
+        elif LABEL_NUMBER == 3:  # * get the other 2 scores
+            index = classes.pop(0)  # pop the first classId in the list (should only be 2 items in the list)
+            spam = CLASS_DICTS[index]  # get the dictionary for the class
+            out = spam[attribute]  # get the feature/attribute values for the class
+            
+            index = classes.pop(0)  # pop the 2nd classId in the list (should be the only item in the list)
+            spam = CLASS_DICTS[index]  # get the dictionary for the class
+            out += spam[attribute]  # get the feature/attribute values for the class
+            assert len(classes) == 0  # if classes is not empty now, an error has occurred
+        
+        elif LABEL_NUMBER == 4:  # * get the other 3 scores
+            index = classes.pop(0)  # pop the first classId in the list (should only be 3 items in the list)
+            spam = CLASS_DICTS[index]  # get the dictionary for the class
+            out = spam[attribute]  # get the feature/attribute values for the class
+            
+            index = classes.pop(0)  # pop the 2nd classId in the list (should only be 2 items in the list)
+            spam = CLASS_DICTS[index]  # get the dictionary for the class
+            out += spam[attribute]  # get the feature/attribute values for the class
+            
+            index = classes.pop(0)  # pop the 3rd classId in the list (should only be 1 items in the list)
+            spam = CLASS_DICTS[index]  # get the dictionary for the class
+            out += spam[attribute]  # get the feature/attribute values for the class
+            assert len(classes) == 0  # if classes is not empty now, an error has occurred
+        
+        else:  # * if there's more than 4 classes
+            for i in CLASS_DICTS:  # loop over all the list of dicts
+                if i == classId:  # when we hit the dict that's in the class, skip
+                    continue
+                else:
+                    spam = CLASS_DICTS[i]  # get the dictionary for the class
+                    out += spam[attribute]  # get the feature/attribute values for the class
+        
+        notInClass: typ.List[float] = out  # set the attribute values that do not appear in the class using out
+    
+    except AssertionError as err:  # catches error thrown by the elif statements
+        lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+        log.error(f'ValuesInClass found more classIds than expected. Unexpected class(es) found: {classes}\n'
+                  + f'Label Number = {LABEL_NUMBER}, Classes = {classes}, Class Id = {classId}, line = {lineNm}')
+        tqdm.write(f'ValuesInClass found more classIds than expected. Unexpected class(es) found: {classes}')
+        tqdm.write(str(err) + f'line{lineNm}')
+        sys.exit(-1)
+    # ************************************************************************************************************* #
+    
+    try:
+        if not inClass and not notInClass:
+            log.debug('The valuesInClass method has found that both inClass & notInClass are empty')
+            raise Exception('valuesInClass() found notInClass[] & inClass[] to be empty')
+        elif not inClass:     # if inClass is empty
+            log.debug('The valuesInClass method has found that inClass is empty')
+            raise Exception('valuesInClass() found inClass[] to be empty')
+        elif not notInClass:  # if notInClass is empty
+            log.debug('The valuesInClass method has found that notInClass is empty')
+            raise Exception('valuesInClass() found notInClass[] to be empty')
+    except Exception as err:
+        lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+        tqdm.write(str(err) + f', line = {lineNm}')
+        sys.exit(-1)  # exit on error; recovery not possible
+    
+    return inClass, notInClass  # return inClass & notInClass
+
 
 def __discretization(data: np.ndarray) -> np.ndarray:
     
@@ -259,7 +352,7 @@ def __transform(entries: np.ndarray, scalarPassed: ScalarsIn) -> ScalarsOut:
 
 
 # TODO change so terminals is done before calling cdfc & the result gets passed (as a dict?)
-def terminals(classId: int) -> typ.List[int]:
+def terminals(classId: int, constants) -> typ.List[int]:
     """terminals creates the list of relevant terminals for a given class.
 
     Arguments:
@@ -273,6 +366,8 @@ def terminals(classId: int) -> typ.List[int]:
     """
     log.debug('Starting terminals() method')
     
+    FEATURE_NUMBER = constants['FEATURE_NUMBER']
+    
     Score = collect.namedtuple('Score', ['Attribute', 'Relevancy'])
     ScoreList = typ.List[typ.Union[typ.List, Score]]
     scores: ScoreList = []
@@ -280,7 +375,7 @@ def terminals(classId: int) -> typ.List[int]:
     # FEATURE_NUMBER is the number of features in the data. This means that it can also be a list of
     # the indexes of the features (the feature IDs). Subtract it by 1 to make 0 a valid feature ID
     for i in range(FEATURE_NUMBER):
-        inClass, notIn = valuesInClass(classId, i)  # find the values of attribute i in/not in class classId
+        inClass, notIn = valuesInClass(classId, i, constants)  # find the values of attribute i in/not in class classId
         
         # get the t-test & complement of the p-value for the feature
         # tValue will be zero when the lists have the same mean
@@ -458,10 +553,6 @@ def __fillBuckets(entries: np.ndarray) -> typ.List[typ.List[np.ndarray]]:
 
 
 def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
-    # TODO: change to use new flow
-    # TODO: call parser to parse bucket, then pass returned dictionary (& the logger) to CDFC
-    # ? should the parser be called on the entries or the buckets? i.e. should the transformation be aware
-    # ?   of the whole data set when trained?
 
     # *** Loop over our buckets K times, each time running creating a new hypothesis *** #
     oldR = 0                            # used to remember previous r in loop
@@ -471,6 +562,15 @@ def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
     accuracy = []                       # this will store the details about the accuracy of our hypotheses
 
     # *** Divide them into training & test data K times ***
+    pth = Path.cwd() / 'jar' / 'features'  # create the file path
+    try:
+        fl = open(str(pth), 'rb')
+        pickles = pickle.load(fl)
+        fl.close()
+        wasPickle = True
+    except:
+        pickles = {}
+        wasPickle = False
     # loop over all the random index values
     for r in range(0, K):  # len(r) = K so this will be done K times
     
@@ -499,9 +599,19 @@ def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
             scalar = None
     
         # ********** 3B Train the CDFC Model & Transform the Training Data using It ********** #
-        SYSOUT.write(HDR + ' Training CDFC ......')  # print \tab * Training CDFC ....
+        SYSOUT.write(HDR + ' Training CDFC ......')                                  # print \tab * Training CDFC ....
         SYSOUT.flush()
-        CDFC_Hypothesis = cdfc(train)  # now that we have our train & test data create our hypothesis
+        if wasPickle:                                                                # if there was a saved data object
+            data = pickles[r]                                                        # read in from it
+        else:                                                                        # if there wasn't a saved data object,
+            constants = parseFile(train)                                             # parse the file to get the constants
+            relevant = {}                                                            # this will hold the relevant features found by terminals
+            for classId in constants['CLASS_IDS']:                                   # loop over all class ids
+                relevant[classId] = terminals(classId, constants['FEATURE_NUMBER'])  # store the relevant features for a class using the classId as a key
+            data = (constants, relevant)
+            pickles[r] = data
+            
+        CDFC_Hypothesis = cdfc(data)                              # now that we have our train & test data create our hypothesis
         SYSOUT.write(OVERWRITE + ' CDFC Trained '.ljust(50, '-') + SUCCESS)      # replace starting with complete
         
         SYSOUT.write(HDR + ' Transforming Training Data ......')                 # print
@@ -533,6 +643,12 @@ def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
         labelPrediction = model.predict(ftrs)  # use model to predict labels
         # compute the accuracy score by comparing the actual labels with those predicted
         accuracy.append(accuracy_score(trueLabels, labelPrediction))
+    
+    if not wasPickle:  # if there wasn't a saved object, save
+        # *** Save the Features/Terminals using Pickle *** #
+        fl = open(str(pth), 'wb')              # open the file
+        pickle.dump(pickles, fl)               # pickle the dict, storing it in a file
+        fl.close()                             # close the file
     
     # *** Return Accuracy *** #
     return accuracy

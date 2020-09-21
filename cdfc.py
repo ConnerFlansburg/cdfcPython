@@ -35,7 +35,7 @@ MUTATION_RATE: typ.Final = 0.2   # MUTATION_RATE is the chance that a candidate 
 # ! changes here must also be made in the runLeft & runRight functions in the tree object ! #
 OPS: typ.Final = ['add', 'subtract', 'times', 'max', ]  # OPS is the list of valid operations on the tree
 # ! set the value of R for every new dataset, it is NOT set automatically ! #
-
+TERMINALS = {}                   # TERMINALS is a dictionary that maps class ids to their relevant features
 TOURNEY: typ.Final = 7           # TOURNEY is the tournament size
 ENTROPY_OF_S = 0                 # ENTROPY_OF_S is used for entropy calculation
 FEATURE_NUMBER = 0               # FEATURE_NUMBER is the number of features in the data set
@@ -526,97 +526,6 @@ class Population:
 # ***************** End of Namespaces/Structs & Objects ******************* #
 
 
-def valuesInClass(classId: int, attribute: int) -> typ.Tuple[typ.List[float], typ.List[float]]:
-    """valuesInClass determines what values of an attribute occur in a class
-        and what values do not
-
-    Arguments:
-        classId {String or int} -- This is the identifier for the class that
-                                    should be examined
-        attribute {int} -- this is the attribute to be investigated. It should
-                            be the index of the attribute in the row
-                            namedtuple in the rows list
-
-    Returns:
-        inClass -- This holds the values in the class.
-        notInClass -- This holds the values not in the class.
-    """
-    inDict = CLASS_DICTS[classId]                  # get the dictionary of attribute values for this class
-    inClass: typ.List[float] = inDict[attribute]  # now get feature/attribute values that appear in the class
-    
-    # ******************** get all the values from all the other dictionaries for this feature ******************** #
-    classes = CLASS_IDS.copy()          # make a copy of the list of unique classIDs
-    classes.remove(classId)             # remove the class we're looking at from the list
-    out: typ.List[float] = []           # this is a temporary variable that will hold the out list while it's constructed
-    try:
-        if LABEL_NUMBER == 2:               # * get the other score
-            index = classes.pop(0)          # pop the first classId in the list (should be the only item in the list)
-            spam = CLASS_DICTS[index]       # get the dictionary for the other class
-            out = spam[attribute]           # get the feature/attribute values for the other class
-            assert len(classes) == 0        # if classes is not empty now, an error has occurred
-
-        elif LABEL_NUMBER == 3:             # * get the other 2 scores
-            index = classes.pop(0)          # pop the first classId in the list (should only be 2 items in the list)
-            spam = CLASS_DICTS[index]       # get the dictionary for the class
-            out = spam[attribute]           # get the feature/attribute values for the class
-            
-            index = classes.pop(0)          # pop the 2nd classId in the list (should be the only item in the list)
-            spam = CLASS_DICTS[index]       # get the dictionary for the class
-            out += spam[attribute]          # get the feature/attribute values for the class
-            assert len(classes) == 0        # if classes is not empty now, an error has occurred
-    
-        elif LABEL_NUMBER == 4:             # * get the other 3 scores
-            index = classes.pop(0)          # pop the first classId in the list (should only be 3 items in the list)
-            spam = CLASS_DICTS[index]       # get the dictionary for the class
-            out = spam[attribute]           # get the feature/attribute values for the class
-        
-            index = classes.pop(0)          # pop the 2nd classId in the list (should only be 2 items in the list)
-            spam = CLASS_DICTS[index]       # get the dictionary for the class
-            out += spam[attribute]          # get the feature/attribute values for the class
-    
-            index = classes.pop(0)          # pop the 3rd classId in the list (should only be 1 items in the list)
-            spam = CLASS_DICTS[index]       # get the dictionary for the class
-            out += spam[attribute]          # get the feature/attribute values for the class
-            assert len(classes) == 0        # if classes is not empty now, an error has occurred
-
-        else:                               # * if there's more than 4 classes
-            for i in CLASS_DICTS:           # loop over all the list of dicts
-                if i == classId:            # when we hit the dict that's in the class, skip
-                    continue
-                else:
-                    spam = CLASS_DICTS[i]    # get the dictionary for the class
-                    out += spam[attribute]  # get the feature/attribute values for the class
-
-        notInClass: typ.List[float] = out   # set the attribute values that do not appear in the class using out
-
-    except AssertionError as err:                  # catches error thrown by the elif statements
-        lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-        log.error(f'ValuesInClass found more classIds than expected. Unexpected class(es) found: {classes}\n'
-                  + f'Label Number = {LABEL_NUMBER}, Classes = {classes}, Class Id = {classId}, line = {lineNm}')
-        tqdm.write(f'ValuesInClass found more classIds than expected. Unexpected class(es) found: {classes}')
-        tqdm.write(str(err) + f'line{lineNm}')
-        sys.exit(-1)
-    # ************************************************************************************************************* #
-    
-    try:
-        if not inClass and not notInClass:
-            log.debug('The valuesInClass method has found that both inClass & notInClass are empty')
-            raise Exception('valuesInClass() found notInClass[] & inClass[] to be empty')
-        elif not inClass:     # if inClass is empty
-            # BUG now this is being triggered
-            log.debug('The valuesInClass method has found that inClass is empty')
-            raise Exception('valuesInClass() found inClass[] to be empty')
-        elif not notInClass:  # if notInClass is empty
-            log.debug('The valuesInClass method has found that notInClass is empty')
-            raise Exception('valuesInClass() found notInClass[] to be empty')
-    except Exception as err:
-        lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-        tqdm.write(str(err) + f', line = {lineNm}')
-        sys.exit(-1)        # exit on error; recovery not possible
-    
-    return inClass, notInClass  # return inClass & notInClass
-
-
 def __grow(relevantIndex: typ.List[np.float], depth: int = 0) -> typ.Tuple[Tree, int]:
     # This function uses the grow method to generate an initial population
     # the last thing returned should be a trees root node
@@ -703,13 +612,13 @@ def createInitialPopulation() -> Population:
 
             if random.choice([True, False]):
                 log.debug(f'createHypothesis chose grow with the classId {name}')
-                tree, size = __grow(terminals(name))  # create tree
+                tree, size = __grow(TERMINALS[name])  # create tree
                 log.debug(f'createHypothesis created tree (grow) successfully using classId {name}')
                 ftrs.append(ConstructedFeature(name, tree, size))
                 log.debug(f'createHypothesis created constructedFeature (grow) successfully using classId {name}')
             else:
                 log.debug(f'createHypothesis chose full with the classId {name}')
-                tree, size = __full(terminals(name))  # create tree
+                tree, size = __full(TERMINALS[name])  # create tree
                 log.debug(f'createHypothesis created tree (full) successfully using classId {name}')
                 ftrs.append(ConstructedFeature(name, tree, size))
                 log.debug(f'createHypothesis created constructedFeature (full) successfully using classId {name}')
@@ -890,9 +799,12 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
     return newPopulation, elite
 
 
-def cdfc(values) -> Hypothesis:
+def cdfc(dataIn) -> Hypothesis:
     # Class Dependent Feature Construction
 
+    values = dataIn[0]
+    terminals = dataIn[1]
+    
     # makes sure we're using global variables
     global FEATURE_NUMBER
     global CLASS_IDS
@@ -904,6 +816,7 @@ def cdfc(values) -> Hypothesis:
     global row
     global ENTROPY_OF_S  # * used in entropy calculation * #
     global CLASS_DICTS
+    global TERMINALS
     
     # Read the values in the dictionary into the constants
     FEATURE_NUMBER = values['FEATURE_NUMBER']
@@ -915,6 +828,7 @@ def cdfc(values) -> Hypothesis:
     rows = values['rows']
     ENTROPY_OF_S = values['ENTROPY_OF_S']
     CLASS_DICTS = values['CLASS_DICTS']
+    TERMINALS = terminals
     
     # *********************** Run the Algorithm *********************** #
 
