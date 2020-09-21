@@ -74,9 +74,9 @@ ScalarsIn = typ.Union[None, StandardScaler]
 def parseFile(train: np.ndarray):
     # TODO: review for bugs. Remember this parses bucket(s) now, not files
     # *** the constants to be set * #
-    INSTANCES_NUMBER = 0
+    INSTANCES_NUMBER: int = 0
     rows: typ.List[row] = []
-    ENTROPY_OF_S = 0  # * used in entropy calculation * #
+    ENTROPY_OF_S: int = 0  # * used in entropy calculation * #
     CLASS_DICTS = {}
     # *** (the rest are set after the loop) *** #
     
@@ -197,6 +197,13 @@ def parseFile(train: np.ndarray):
         'ENTROPY_OF_S': ENTROPY_OF_S,
         'CLASS_DICTS': CLASS_DICTS,
     }
+    
+    try:
+        if not (type(constants) is dict):
+            raise Exception(f'parseFile set constants to something other than a dictionary')
+    except Exception as err:
+        SYSOUT.write(str(err) + f'\n constants = {constants}, \n feature num = {FEATURE_NUMBER}, \n'
+                                f'class ids = {CLASS_IDS}, \n pop size = {POPULATION_SIZE}, \n')
     
     return constants
 
@@ -607,7 +614,7 @@ def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
             constants = parseFile(train)                                             # parse the file to get the constants
             relevant = {}                                                            # this will hold the relevant features found by terminals
             for classId in constants['CLASS_IDS']:                                   # loop over all class ids
-                relevant[classId] = terminals(classId, constants['FEATURE_NUMBER'])  # store the relevant features for a class using the classId as a key
+                relevant[classId] = terminals(classId, constants)  # store the relevant features for a class using the classId as a key
             data = (constants, relevant)
             pickles[r] = data
             

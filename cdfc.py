@@ -4,7 +4,6 @@ import random
 import sys
 import warnings
 import cProfile
-import pstats
 from pathlib import Path
 import logging as log
 import numpy as np
@@ -822,7 +821,7 @@ def cdfc(dataIn) -> Hypothesis:
     FEATURE_NUMBER = values['FEATURE_NUMBER']
     CLASS_IDS = values['CLASS_IDS']
     POPULATION_SIZE = values['POPULATION_SIZE']
-    INSTANCES_NUMBER = values['INSTANCE_NUMBER']
+    INSTANCES_NUMBER = values['INSTANCES_NUMBER']
     LABEL_NUMBER = values['LABEL_NUMBER']
     M = values['M']
     rows = values['rows']
@@ -832,11 +831,7 @@ def cdfc(dataIn) -> Hypothesis:
     
     # *********************** Run the Algorithm *********************** #
 
-    # !!!!!!!!!!!!!! Profile CDFC (Remove When Not Testing) !!!!!!!!!!!!!! #
-    currentPopulation = profiler.runcall(createInitialPopulation())  # run initialPop & profile it using cProfile
-    lg = pstats.Stats(profiler)                                      # use pStats to parse the profiled info
-    lg.dump_stats(statsPath)                                         # send the info to the file logs/stats.log
-    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
+    currentPopulation = createInitialPopulation()  # run initialPop
     # currentPopulation = createInitialPopulation()     # create initial population
     elite = currentPopulation.candidateHypotheses[0]  # init elitism
 
