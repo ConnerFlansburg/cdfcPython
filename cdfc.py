@@ -13,8 +13,7 @@ from tqdm import tqdm
 from tqdm import trange
 
 # ! Next Steps
-# TODO fix index error in parse
-# TODO review relevancy calculation, check for possible enhancements
+# TODO review loop in Distance function & check for accuracy
 # TODO fix bug with Leukemia's NaN errors
 # TODO fix bug in run tree
 
@@ -57,6 +56,8 @@ SYSOUT = sys.stdout
 
 row = collect.namedtuple('row', ['className', 'attributes'])  # a single line in the csv, representing a record/instance
 rows: typ.List[row] = []  # this will store all of the records read in (the training dat) as a list of rows
+
+Instance = collect.namedtuple('Instance', ['className', 'values'])  # this will be used by the transform function
 
 np.seterr(divide='ignore')  # suppress divide by zero warnings from numpy
 warnings.filterwarnings('ignore', message='invalid value encountered in true_divide')
@@ -103,10 +104,10 @@ class Tree:
         
     # running a tree should return a single value
     # featureValues -- the values of the relevant features keyed by their index in the original data
-    def runTree(self, featureValues):
-        return self.__runNode(featureValues)
+    def runTree(self, featureValues: typ.Union[typ.Dict[int, float], np.ndarray], relevant) -> float:
+        return self.__runNode(featureValues, relevant)
 
-    def __runNode(self, featureValues):
+    def __runNode(self, featureValues, relevantFeatures: typ.List[int]):
         
         # BUG somehow +,-,*, and min() are being called on None type objects.
         # !   This is because for some reason it keeps trying to access the children that don't exist, even though it
@@ -124,25 +125,25 @@ class Tree:
                 log.debug('self.data was found in OPS...')
                 # find out which operation it is & return it's value
                 if self.data == 'add':
-                    lft = self.left.__runNode(featureValues)
-                    rgt = self.right.__runNode(featureValues)
+                    lft = self.left.__runNode(featureValues, relevantFeatures)
+                    rgt = self.right.__runNode(featureValues, relevantFeatures)
                     vl = lft + rgt
                     return vl
         
                 elif self.data == 'subtract':
-                    lft = self.left.__runNode(featureValues)
-                    rgt = self.right.__runNode(featureValues)
+                    lft = self.left.__runNode(featureValues, relevantFeatures)
+                    rgt = self.right.__runNode(featureValues, relevantFeatures)
                     vl = lft - rgt
                     return vl
         
                 elif self.data == 'times':
-                    lft = self.left.__runNode(featureValues)
-                    rgt = self.right.__runNode(featureValues)
+                    lft = self.left.__runNode(featureValues, relevantFeatures)
+                    rgt = self.right.__runNode(featureValues, relevantFeatures)
                     vl = lft * rgt
                     return vl
                 elif self.data == 'min':
-                    lft = self.left.__runNode(featureValues)
-                    rgt = self.right.__runNode(featureValues)
+                    lft = self.left.__runNode(featureValues, relevantFeatures)
+                    rgt = self.right.__runNode(featureValues, relevantFeatures)
                     vl = min(lft, rgt)
                     return vl
 
@@ -150,7 +151,7 @@ class Tree:
             # should return a float or an int (the value of some feature in an instance) not a None
             # if the node is not an operation and is a number, then it should be a terminal index
             # so check if it's a valid value. If so return the value
-            elif self.data in range(FEATURE_NUMBER):
+            elif self.data in relevantFeatures:
                 log.debug(f'__runNode found the feature value {featureValues[self.data]} in a node')
                 return featureValues[self.data]
             
@@ -159,12 +160,13 @@ class Tree:
                 log.error(f'NaN stored in tree. Expect OPS value or number, got {self.data}')
                 raise Exception(f'ERROR: NaN stored in tree. Expect OPS value or number, got {self.data}')
             # if the data stored is null, raise exception
-            elif self.data is None:
-                log.error(f'None stored in tree. Expect OPS value or number, got {self.data}')
-                raise Exception(f'ERROR: None stored in tree. Expect OPS value or number, got {self.data}')
+            elif self.data in relevantFeatures:
+                msg = f'Data stored in tree is not a relevant feature index. Expect OPS value or number, got {self.data}'
+                log.error(msg)
+                raise Exception('ERROR: ' + msg)
             else:  # if the values is not in OPS, not in feature range, is a number, and is not none throw exception
-                log.error(f'Value stored in tree is a number outside of feature range. value{self.data}')
-                raise Exception(f'ERROR: Value stored in tree is a number outside of feature range. value{self.data}')
+                log.error(f'Value stored in tree is invalid. value = {self.data}')
+                raise Exception(f'ERROR: Value stored in tree is invalid. value = {self.data}')
             
         except IndexError:
             lineNm = sys.exc_info()[-1].tb_lineno    # print line number error occurred on
@@ -259,9 +261,9 @@ class ConstructedFeature:
             tqdm.write(str(err) + f', line = {lineNm}')
             sys.exit(-1)  # exit on error; recovery not possible
 
-    def transform(self, instance: row) -> float:
+    def transform(self, inst: row) -> float:
         # Send the tree a list of all the attribute values in a single instance
-        return self.tree.runTree(instance.attributes)
+        return self.tree.runTree(inst.attributes, self.relevantFeatures)
 
     def setSize(self):
         self.size = self.tree.getSize(0)  # call getSize on the root of the tree
@@ -284,52 +286,54 @@ class Hypothesis:
     
         log.debug('Starting getFitness() method')
         
-        def __Czekanowski(Vi: typ.List[typ.Union[int, float]], Vj: typ.List[typ.Union[int, float]]):
+        def __Czekanowski(Vi: typ.List[float], Vj: typ.List[float]):
             log.debug('Starting Czekanowski() method')
-            
-            minSum = 0
-            addSum = 0
 
-            # ! Should this be looping of the range of self.features or just self.features?
+            # ************************** Error checking ************************** #
+            try:
+                if len(Vi) != len(Vj):
+                    log.error(f'In Czekanowski Vi[d] & Vi[d] are not equal Vi = {Vi}, Vj = {Vj}')
+                    raise Exception(f'ERROR: In Czekanowski Vi[d] & Vi[d] are not equal Vi = {Vi}, Vj = {Vj}')
+                if None in Vi:
+                    log.error(f'In Czekanowski Vi ({Vi}) was found to be a \'None type\'')
+                    raise Exception(f'ERROR: In Czekanowski Vi ({Vi}) was found to be a \'None type\'')
+                if None in Vj:
+                    log.error(f'In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
+                    raise Exception(f'ERROR: In Czekanowski Vi ({Vj}) was found to be a \'None type\'')
+            except Exception as err:
+                lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+                tqdm.write(str(err) + f', line = {lineNm}')
+                sys.exit(-1)  # recovery impossible, exit with an error
+            # ******************************************************************** #
+
+            minSum: typ.Union[int, float] = 0
+            addSum: typ.Union[int, float] = 0
+            
             # + range(len(self.features)) loops over the number of features the hypothesis has.
             # + Vi & Vj are lists of the instances from the original data, that have been transformed
             # + by the hypothesis.
-            # ? Therefore their length should be equal to the len of self.features
-            for d in range(len(self.features)):  # loop over the number of features stored in the hypothesis
-                # BUG unsupported operand += for int & list
-                # ? is what Vi & Vj want the index of the feature?
-                # + Vi & Vj are instance structs with 2 fields className (int) values (list)
-                # ? we want to access the index of an instance in values
-                top = min(Vi[d], Vj[d])  # get the top of the fraction
-                bottom = Vi[d] + Vj[d]   # get the bottom of the fraction
-
-                # ************************** Error checking ************************** #
-                try:
-                    if type(Vi[d]) is list:
-                        log.error(f'In Czekanowski Vi[d] is a list. Vi[d] = {Vi[d]}')
-                        raise Exception(f'ERROR: In Czekanowski Vi[d] is a list. Vi[d] = {Vi[d]}')
-                    if type(Vj[d]) is list:
-                        log.error(f'In Czekanowski Vj[d] is a list. Vj[d] = {Vj[d]}')
-                        raise Exception(f'ERROR: In Czekanowski Vj[d] is a list. Vj[d] = {Vj[d]}')
-                    if type(top) is list:  # check if min is a list
-                        log.error(f'In Czekanowski min is a list {top}')
-                        raise Exception(f'ERROR: In Czekanowski min is a list {top}')
-                    if type(bottom) is list:  # check if min is a list
-                        log.error(f'In Czekanowski bottom of fraction is a list {bottom}')
-                        raise Exception(f'ERROR: In Czekanowski bottom of fraction is a list {bottom}')
-                except Exception as err:
-                    lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-                    tqdm.write(str(err) + f', line = {lineNm}')
-                # ******************************************************************** #
-                
-                minSum += top     # the top of the fraction
-                addSum += bottom  # the bottom of the fraction
-
+            try:
+            
+                for i, j in zip(Vi, Vj):                    # zip Vi & Vj so that we can iterate in parallel
+                    top: typ.Union[int, float] = min(i, j)  # get the top of the fraction
+                    bottom: typ.Union[int, float] = i + j   # get the bottom of the fraction
+                    minSum += top                           # the top of the fraction
+                    addSum += bottom                        # the bottom of the fraction
+            
+                # BUG unsupported operand type(s) for *: 'float' and 'NoneType' -- possibly because of the error in tree
+                value = 1 - ((2*minSum) / addSum)           # capture the return value
+            
+            except Exception as err:
+                lineNm = sys.exc_info()[-1].tb_lineno       # print line number error occurred on
+                log.error(str(err))
+                tqdm.write(str(err) + f', line = {lineNm}')
+                sys.exit(-1)                                # recovery impossible, exit with error
+            
             log.debug('Finished Czekanowski() method')
             
-            return 1 - ((2*minSum) / addSum)  # calculate it & return
+            return value
 
-        def Distance(values):
+        def Distance(values: typ.List[Instance]):
     
             log.debug('Starting Distance() method')
 
@@ -337,17 +341,21 @@ class Hypothesis:
             Db = 0  # the sum of mins
             Dw = 0  # the sum of maxs
             
-            for i, vi in enumerate(values):  # loop over all the transformed values
+            # TODO improve this loop structure
+            # loop over all the transformed values, where i is the classId & vi is the list of values
+            for i, vi in enumerate(values):
 
                 minSum = 2  # NOTE must be high enough that it is always reset
                 maxSum = 0
 
+                # loop over all the transformed values, where j is the classId & vj is the list of values
                 for j, vj in enumerate(values):
 
                     if i == j:    # if i equals j ignore this case
                         continue  # continue / skip / return go to next element
 
-                    dist = __Czekanowski(vi, vj)  # compute the distance
+                    # BUG Vi.values and/or Vj.values contains None -- possibly because of the error in tree
+                    dist = __Czekanowski(vi.values, vj.values)  # compute the distance using the values
 
                     if vi.className == vj.className:  # if vi & vj are in the same class (Dw), then
                         if dist > maxSum:             # replace the max if the current value is higher
@@ -464,11 +472,9 @@ class Hypothesis:
         return final
 
     # ! this is the function used by cdfcProject
-    def transform(self, data=None):
+    def transform(self, data: None = None) -> typ.List[Instance]:
     
         log.debug('Starting transform() method')
-    
-        instance = collect.namedtuple('instance', ['className', 'values'])
         
         transformed = []  # this will hold the transformed values
         
@@ -478,15 +484,15 @@ class Hypothesis:
             
             rowBar = tqdm(rows, desc='Transforming as part of the distance calculation', ncols=BARCOLS)  # create progress bar
             
-            for r in rowBar:  # for each instance
+            for r in rowBar:  # for each Instance
                 values = []   # this will hold the calculated values for all the constructed features
 
                 for f in self.features:            # transform the original input using each constructed feature
                     values.append(f.transform(r))  # append the transformed values for a single CF to values
                 
-                # each instance will hold the new values for an instance & className, and
+                # each Instance will hold the new values for an Instance & className, and
                 # transformed will hold all the instances for a hypothesis
-                transformed.append(instance(r.className, values))
+                transformed.append(Instance(r.className, values))
 
             log.debug('Finished transform() method')
 
@@ -498,15 +504,15 @@ class Hypothesis:
             
             bar = tqdm(data, desc='Transforming as part of evolution', ncols=BARCOLS)  # create progress bar
             
-            for d in bar:    # for each instance
+            for d in bar:    # for each Instance
                 values = []  # this will hold the calculated values for all the constructed features
                 
                 for f in self.features:            # transform the original input using each constructed feature
                     values.append(f.transform(d))  # append the transformed values for a single CF to values
                 
-                # each instance will hold the new values for an instance & className, and
+                # each Instance will hold the new values for an Instance & className, and
                 # transformed will hold all the instances for a hypothesis
-                transformed.append(instance(d.className, values))
+                transformed.append(Instance(d.className, values))
 
             log.debug('Finished transform() method')
 
@@ -525,6 +531,7 @@ class Population:
 # ***************** End of Namespaces/Structs & Objects ******************* #
 
 
+# TODO check here for error in tree transformation
 def __grow(relevantIndex: typ.List[np.float], depth: int = 0) -> typ.Tuple[Tree, int]:
     # This function uses the grow method to generate an initial population
     # the last thing returned should be a trees root node
@@ -555,6 +562,7 @@ def __grow(relevantIndex: typ.List[np.float], depth: int = 0) -> typ.Tuple[Tree,
             return newTree, totalDepth  # after the recursive calls have finished return the tree
 
 
+# TODO check here for error in tree transformation
 def __full(relevantValues: typ.List[np.float], depth: int = 0) -> typ.Tuple[Tree, int]:
     # This function uses the full method to generate an initial population
     # the last thing returned should be a trees root node
