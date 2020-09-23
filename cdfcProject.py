@@ -70,9 +70,9 @@ ScalarsIn = typ.Union[None, StandardScaler]
 # TODO add more unit tests
 
 
-class Row:
+class Instance:
     # This class replace the older collect.namedtuple('Instance', ['className', 'values']) named tuple
-    # NOTE: a Row IS an instance
+    # NOTE: a Instance IS an instance
     
     def __init__(self, className: int, values: np.ndarray):
         # this stores the name of the class that the instance is in
@@ -83,7 +83,7 @@ class Row:
         self.vList: typ.List[float] = list(self.attributes.values())  # ? is this to expensive?
         
         try:  # check that all the feature values are valid
-            if None in self.attributes.values():  # if a None is in the list of feature values
+            if None in self.vList:  # if a None is in the list of feature values
                 raise Exception('Tried to create an Instance obj with a None feature value')
         except Exception as err:
             log.error(str(err))
@@ -96,7 +96,7 @@ def parseFile(train: np.ndarray):
     # TODO: review for bugs. Remember this parses bucket(s) now, not files
     # *** the constants to be set * #
     INSTANCES_NUMBER: int = 0
-    rows: typ.List[Row] = []
+    rows: typ.List[Instance] = []
     ENTROPY_OF_S: int = 0  # * used in entropy calculation * #
     CLASS_DICTS = {}
     # *** (the rest are set after the loop) *** #
@@ -131,7 +131,7 @@ def parseFile(train: np.ndarray):
             tqdm.write(str(err))
         # ************************************************************************************ #
         # now that we know the classId/className (they're the same thing) is an integer, continue parsing
-        rows.append(Row(name, line[1:]))  # reader[0] = classId, reader[1:] = attribute values
+        rows.append(Instance(name, line[1:]))  # reader[0] = classId, reader[1:] = attribute values
         classes.append(name)
         classSet.add(name)
         INSTANCES_NUMBER += 1
@@ -237,7 +237,7 @@ def valuesInClass(classId: int, attribute: int, constants) -> typ.Tuple[typ.List
         classId {String or int} -- This is the identifier for the class that
                                     should be examined
         attribute {int} -- this is the attribute to be investigated. It should
-                            be the index of the attribute in the Row
+                            be the index of the attribute in the Instance
                             namedtuple in the rows list
 
     Returns:
@@ -563,8 +563,8 @@ def __dealToBuckets(classToInstances: typ.Dict[int, typ.List[typ.Union[int, typ.
 
         # *** assign instances to buckets *** #
         # loop over every instance in the class classId, in what is now a random order
-        # p will be a single Row from permutation & so will be a 1D numpy array representing an instance
-        for p in permutation:  # for every Row in permutation
+        # p will be a single Instance from permutation & so will be a 1D numpy array representing an instance
+        for p in permutation:  # for every Instance in permutation
             buckets[index].append(p)  # add the random instance to the bucket at index
             index = (index + 1) % K  # increment index in a round robin style
     

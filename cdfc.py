@@ -56,9 +56,9 @@ SYSOUT = sys.stdout
 # ********************** Namespaces/Structs & Objects ***********************
 
 
-class Row:
+class Instance:
     # This class replace the older collect.namedtuple('Instance', ['className', 'values']) named tuple
-    # NOTE: a Row IS an instance
+    # NOTE: a row IS an instance
     
     def __init__(self, className: int, values: typ.Dict[int, float]):
         # this stores the name of the class that the instance is in
@@ -79,7 +79,7 @@ class Row:
             sys.exit(-1)                      # exit on error; recovery not possible
 
 
-rows: typ.List[Row] = []  # this will store all of the records read in (the training dat) as a list of rows
+rows: typ.List[Instance] = []  # this will store all of the records read in (the training dat) as a list of rows
 
 np.seterr(divide='ignore')  # suppress divide by zero warnings from numpy
 warnings.filterwarnings('ignore', message='invalid value encountered in true_divide')
@@ -322,7 +322,7 @@ class ConstructedFeature:
             tqdm.write(str(err) + f', line = {lineNm}')
             sys.exit(-1)  # exit on error; recovery not possible
 
-    def transform(self, instance: Row) -> float:
+    def transform(self, instance: Instance) -> float:
         # Send the tree a list of all the attribute values in a single instance
         featureValues: typ.Dict[int, float] = instance.attributes
         return self.tree.runTree(featureValues)
@@ -412,7 +412,7 @@ class Hypothesis:
             
             return value
 
-        def Distance(values: typ.List[Row]):
+        def Distance(values: typ.List[Instance]):
     
             log.debug('Starting Distance() method')
             
@@ -450,7 +450,7 @@ class Hypothesis:
             
             return 1 / (1 + math.pow(math.e, -5*(Db - Dw)))
 
-        def __entropy(partition: typ.List[Row]) -> float:
+        def __entropy(partition: typ.List[Instance]) -> float:
     
             log.debug('Starting entropy() method')
             
@@ -481,14 +481,14 @@ class Hypothesis:
             ft = collect.namedtuple('ft', ['id', 'value'])
             
             # key = CF(Values), Entry = instance in training data
-            partition: typ.Dict[float, typ.List[Row]] = {}
+            partition: typ.Dict[float, typ.List[Instance]] = {}
             
             s = 0                             # used to sum CF's conditional entropy
             used = feature.getUsedFeatures()  # get the indexes of the used features
             v = []                            # this will hold the used features ids & values
             for i in rows:                    # loop over all instances
 
-                # get CF(v) for this instance (i is a Row struct which is what transform needs)
+                # get CF(v) for this instance (i is a Instance struct which is what transform needs)
                 cfv = feature.transform(i)  # needs the values for an instance
 
                 # get the values in this instance i of the used feature
@@ -569,7 +569,7 @@ class Hypothesis:
                 # each Instance will hold the new values for an Instance & className, and
                 # transformed will hold all the instances for a hypothesis
                 vls = dict(zip(range(len(values)), values))  # create a dict of the values keyed by their index
-                transformed.append(Row(r.className, vls))
+                transformed.append(Instance(r.className, vls))
 
             log.debug('Finished transform() method')
 
@@ -590,7 +590,7 @@ class Hypothesis:
                 # each Instance will hold the new values for an Instance & className, and
                 # transformed will hold all the instances for a hypothesis
                 vls = dict(zip(range(len(values)), values))  # create a dict of the values keyed by their index
-                transformed.append(Row(d.className, vls))
+                transformed.append(Instance(d.className, vls))
 
             log.debug('Finished transform() method')
 
