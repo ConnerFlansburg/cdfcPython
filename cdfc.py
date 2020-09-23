@@ -134,12 +134,36 @@ class Tree:
     def setRight(self, right):
         self.left = right
         
+    def getLeft(self):
+        try:
+            if self.left is None:
+                raise Exception('Try to access a child that didn\'t exist')
+            else:
+                return self.left
+        except Exception as err:
+            log.error(str(err))
+            tqdm.write(str(err))
+            traceback.print_stack()
+            sys.exit(-1)  # exit on error; recovery not possible
+        
+    def getRight(self):
+        try:
+            if self.right is None:
+                raise Exception('Try to access a child that didn\'t exist')
+            else:
+                return self.right
+        except Exception as err:
+            log.error(str(err))
+            tqdm.write(str(err))
+            traceback.print_stack()
+            sys.exit(-1)  # exit on error; recovery not possible
+        
     # running a tree should return a single value
     # featureValues -- the values of the relevant features keyed by their index in the original data
     def runTree(self, featureValues: typ.Dict[int, float]) -> float:
         return self.__runNode(featureValues)
 
-    def __runNode(self, featureValues):
+    def __runNode(self, featureValues: typ.Dict[int, float]) -> typ.Union[int, float]:
         
         # BUG somehow +,-,*, and min() are being called on None type objects.
         # !   This is because for some reason it keeps trying to access the children that don't exist, even though it
@@ -156,27 +180,26 @@ class Tree:
             if self.data in OPS:  # if this tree's node is a valid operation, then execute it
                 # ! error gets into here so so data must be in OPS
                 log.debug('self.data was found in OPS...')
+
+                lft = self.getLeft().__runNode(featureValues)
+                rgt = self.getRight().__runNode(featureValues)
+                
+                if lft is None or rgt is None:
+                    raise Exception('runNode tried to access a child that didn\'t exist')
+                
                 # find out which operation it is & return it's value
                 if self.data == 'add':
-                    lft = self.left.__runNode(featureValues)
-                    rgt = self.right.__runNode(featureValues)
                     vl = lft + rgt
                     return vl
         
                 elif self.data == 'subtract':
-                    lft = self.left.__runNode(featureValues)
-                    rgt = self.right.__runNode(featureValues)
                     vl = lft - rgt
                     return vl
         
                 elif self.data == 'times':
-                    lft = self.left.__runNode(featureValues)
-                    rgt = self.right.__runNode(featureValues)
                     vl = lft * rgt
                     return vl
                 elif self.data == 'min':
-                    lft = self.left.__runNode(featureValues)
-                    rgt = self.right.__runNode(featureValues)
                     vl = min(lft, rgt)
                     return vl
 
@@ -186,6 +209,10 @@ class Tree:
             # so check if it's a valid value. If so return the value
             elif self.data in range(FEATURE_NUMBER):
                 log.debug(f'__runNode found the feature value {featureValues[self.data]} in a node')
+                
+                if featureValues[self.data] is None:
+                    raise Exception('featureValues contained a None at index self.data')
+                
                 return featureValues[self.data]
             
             # if the data stored is not in OPS, not in feature range, and is not a number raise an exception
@@ -209,6 +236,7 @@ class Tree:
         except Exception as err:
             lineNm = sys.exc_info()[-1].tb_lineno    # print line number error occurred on
             tqdm.write(str(err) + f', line = {lineNm}')
+            traceback.print_stack()
             sys.exit(-1)  # exit on error; recovery not possible
 
     def getSize(self, counter) -> int:
@@ -294,9 +322,9 @@ class ConstructedFeature:
             tqdm.write(str(err) + f', line = {lineNm}')
             sys.exit(-1)  # exit on error; recovery not possible
 
-    def transform(self, inst: Row) -> float:
+    def transform(self, instance: Row) -> float:
         # Send the tree a list of all the attribute values in a single instance
-        featureValues: typ.Dict[int, float] = inst.attributes
+        featureValues: typ.Dict[int, float] = instance.attributes
         return self.tree.runTree(featureValues)
 
     def setSize(self):
@@ -528,8 +556,9 @@ class Hypothesis:
         # if data is None then we are transforming as part of the distance calculation
         # so we should use rows (the provided training data)
         if data is None:
-            
-            rowBar = tqdm(rows, desc='Transforming as part of the distance calculation', ncols=BARCOLS)  # create progress bar
+    
+            # create progress bar that loops over rows
+            rowBar = tqdm(rows, desc='Transforming as part of the distance calculation', ncols=BARCOLS)
             
             for r in rowBar:  # for each Instance
                 values = []   # this will hold the calculated values for all the constructed features
