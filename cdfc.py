@@ -1,14 +1,16 @@
+import cProfile
+import collections as collect
 import copy
+import logging as log
 import math
 import random
 import sys
-import warnings
-import cProfile
-from pathlib import Path
-import logging as log
-import numpy as np
 import typing as typ
-import collections as collect
+import warnings
+from pathlib import Path
+import traceback
+
+import numpy as np
 from tqdm import tqdm
 from tqdm import trange
 
@@ -23,7 +25,6 @@ from tqdm import trange
 
 # **************************** Constants/Globals **************************** #
 ALPHA: typ.Final = 0.8           # ALPHA is the fitness weight alpha
-
 BARCOLS = 25                     # BARCOLS is the number of columns for the progress bar to print
 CROSSOVER_RATE: typ.Final = 0.8  # CROSSOVER_RATE is the chance that a candidate will reproduce
 ELITISM_RATE: typ.Final = 1      # ELITISM_RATE is the elitism rate
@@ -54,10 +55,31 @@ SYSOUT = sys.stdout
 
 # ********************** Namespaces/Structs & Objects ***********************
 
-row = collect.namedtuple('row', ['className', 'attributes'])  # a single line in the csv, representing a record/instance
-rows: typ.List[row] = []  # this will store all of the records read in (the training dat) as a list of rows
 
-Instance = collect.namedtuple('Instance', ['className', 'values'])  # this will be used by the transform function
+class Row:
+    # This class replace the older collect.namedtuple('Instance', ['className', 'values']) named tuple
+    # NOTE: a Row IS an instance
+    
+    def __init__(self, className: int, values: typ.Dict[int, float]):
+        # this stores the name of the class that the instance is in
+        self.className: int = className
+        # this stores the values of the features, keyed by index, in the instance
+        self.attributes: typ.Dict[int, float] = values
+        # this creates a list of the values stored in the dictionary for when iteration is wanted
+        self.vList: typ.List[float] = list(self.attributes.values())  # ? is this to expensive?
+        
+        try:                                  # check that all the feature values are valid
+            if None in self.attributes.values():  # if a None is in the list of feature values
+                raise Exception('Tried to create an Instance obj with a None feature value')
+        except Exception as err:
+            log.error(str(err))
+            tqdm.write(str(err))
+            traceback.print_exc()             # print stack trace so we know how None is reaching Instance
+            traceback.print_stack()
+            sys.exit(-1)                      # exit on error; recovery not possible
+
+
+rows: typ.List[Row] = []  # this will store all of the records read in (the training dat) as a list of rows
 
 np.seterr(divide='ignore')  # suppress divide by zero warnings from numpy
 warnings.filterwarnings('ignore', message='invalid value encountered in true_divide')
@@ -92,6 +114,16 @@ class Tree:
     
     def __init__(self, data: typ.Union[str, int], left: typ.Union[None, "Tree"] = None,
                  right: typ.Union[None, "Tree"] = None) -> None:
+        
+        try:
+            if data is None:  # check that we aren't storing a none in data, if we are throw exception
+                raise Exception(f'ERROR: Tried to add a \'None\' to a tree as data')
+        except Exception as err:
+            log.error(str(err))
+            tqdm.write(str(err))
+            traceback.print_exc()  # print stack trace so we know how None is reaching tree
+            sys.exit(-1)           # exit on error; recovery not possible
+        
         self.data: typ.Union[int, str] = data    # must either be a function or a terminal (if a terminal it should be it's index)
         self.left = left
         self.right = right
@@ -104,10 +136,10 @@ class Tree:
         
     # running a tree should return a single value
     # featureValues -- the values of the relevant features keyed by their index in the original data
-    def runTree(self, featureValues: typ.Union[typ.Dict[int, float], np.ndarray], relevant) -> float:
-        return self.__runNode(featureValues, relevant)
+    def runTree(self, featureValues: typ.Dict[int, float]) -> float:
+        return self.__runNode(featureValues)
 
-    def __runNode(self, featureValues, relevantFeatures: typ.List[int]):
+    def __runNode(self, featureValues):
         
         # BUG somehow +,-,*, and min() are being called on None type objects.
         # !   This is because for some reason it keeps trying to access the children that don't exist, even though it
@@ -122,28 +154,29 @@ class Tree:
         log.debug('Attempting to run __runNode method...')
         try:
             if self.data in OPS:  # if this tree's node is a valid operation, then execute it
+                # ! error gets into here so so data must be in OPS
                 log.debug('self.data was found in OPS...')
                 # find out which operation it is & return it's value
                 if self.data == 'add':
-                    lft = self.left.__runNode(featureValues, relevantFeatures)
-                    rgt = self.right.__runNode(featureValues, relevantFeatures)
+                    lft = self.left.__runNode(featureValues)
+                    rgt = self.right.__runNode(featureValues)
                     vl = lft + rgt
                     return vl
         
                 elif self.data == 'subtract':
-                    lft = self.left.__runNode(featureValues, relevantFeatures)
-                    rgt = self.right.__runNode(featureValues, relevantFeatures)
+                    lft = self.left.__runNode(featureValues)
+                    rgt = self.right.__runNode(featureValues)
                     vl = lft - rgt
                     return vl
         
                 elif self.data == 'times':
-                    lft = self.left.__runNode(featureValues, relevantFeatures)
-                    rgt = self.right.__runNode(featureValues, relevantFeatures)
+                    lft = self.left.__runNode(featureValues)
+                    rgt = self.right.__runNode(featureValues)
                     vl = lft * rgt
                     return vl
                 elif self.data == 'min':
-                    lft = self.left.__runNode(featureValues, relevantFeatures)
-                    rgt = self.right.__runNode(featureValues, relevantFeatures)
+                    lft = self.left.__runNode(featureValues)
+                    rgt = self.right.__runNode(featureValues)
                     vl = min(lft, rgt)
                     return vl
 
@@ -151,7 +184,7 @@ class Tree:
             # should return a float or an int (the value of some feature in an instance) not a None
             # if the node is not an operation and is a number, then it should be a terminal index
             # so check if it's a valid value. If so return the value
-            elif self.data in relevantFeatures:
+            elif self.data in range(FEATURE_NUMBER):
                 log.debug(f'__runNode found the feature value {featureValues[self.data]} in a node')
                 return featureValues[self.data]
             
@@ -160,7 +193,7 @@ class Tree:
                 log.error(f'NaN stored in tree. Expect OPS value or number, got {self.data}')
                 raise Exception(f'ERROR: NaN stored in tree. Expect OPS value or number, got {self.data}')
             # if the data stored is null, raise exception
-            elif self.data in relevantFeatures:
+            elif not (self.data in range(FEATURE_NUMBER)):
                 msg = f'Data stored in tree is not a relevant feature index. Expect OPS value or number, got {self.data}'
                 log.error(msg)
                 raise Exception('ERROR: ' + msg)
@@ -261,9 +294,10 @@ class ConstructedFeature:
             tqdm.write(str(err) + f', line = {lineNm}')
             sys.exit(-1)  # exit on error; recovery not possible
 
-    def transform(self, inst: row) -> float:
+    def transform(self, inst: Row) -> float:
         # Send the tree a list of all the attribute values in a single instance
-        return self.tree.runTree(inst.attributes, self.relevantFeatures)
+        featureValues: typ.Dict[int, float] = inst.attributes
+        return self.tree.runTree(featureValues)
 
     def setSize(self):
         self.size = self.tree.getSize(0)  # call getSize on the root of the tree
@@ -286,10 +320,12 @@ class Hypothesis:
     
         log.debug('Starting getFitness() method')
         
-        def __Czekanowski(Vi: typ.List[float], Vj: typ.List[float]):
+        def __Czekanowski(Vi: typ.List[float], Vj: typ.List[float]) -> float:
             log.debug('Starting Czekanowski() method')
 
             # ************************** Error checking ************************** #
+            # BUG Vi & Vj are [None, None]
+            # ? How???
             try:
                 if len(Vi) != len(Vj):
                     log.error(f'In Czekanowski Vi[d] & Vi[d] are not equal Vi = {Vi}, Vj = {Vj}')
@@ -299,7 +335,7 @@ class Hypothesis:
                     raise Exception(f'ERROR: In Czekanowski Vi ({Vi}) was found to be a \'None type\'')
                 if None in Vj:
                     log.error(f'In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
-                    raise Exception(f'ERROR: In Czekanowski Vi ({Vj}) was found to be a \'None type\'')
+                    raise Exception(f'ERROR: In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
             except Exception as err:
                 lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
                 tqdm.write(str(err) + f', line = {lineNm}')
@@ -313,8 +349,23 @@ class Hypothesis:
             # + Vi & Vj are lists of the instances from the original data, that have been transformed
             # + by the hypothesis.
             try:
-            
+                # TODO error is likely here
                 for i, j in zip(Vi, Vj):                    # zip Vi & Vj so that we can iterate in parallel
+                    
+                    # **************************************** Error Checking **************************************** #
+                    if Vi == [None, None] and Vj == [None, None]:
+                        log.error(f'In Czekanowski Vj ({Vj}) & Vi ({Vi}) was found to be a \'None type\'')
+                        raise Exception(f'ERROR: In Czekanowski Vj ({Vj}) & Vi ({Vi}) was found to be a \'None type\'')
+                    
+                    elif Vj == [None, None]:
+                        log.error(f'In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
+                        raise Exception(f'ERROR: In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
+                    
+                    elif Vi == [None, None]:
+                        log.error(f'In Czekanowski Vi ({Vi}) was found to be a \'None type\'')
+                        raise Exception(f'ERROR: In Czekanowski Vi ({Vi}) was found to be a \'None type\'')
+                    # ************************************************************************************************ #
+                    
                     top: typ.Union[int, float] = min(i, j)  # get the top of the fraction
                     bottom: typ.Union[int, float] = i + j   # get the bottom of the fraction
                     minSum += top                           # the top of the fraction
@@ -333,49 +384,45 @@ class Hypothesis:
             
             return value
 
-        def Distance(values: typ.List[Instance]):
+        def Distance(values: typ.List[Row]):
     
             log.debug('Starting Distance() method')
-
-            # ********** Compute Vi & Vj ********** #
-            Db = 0  # the sum of mins
-            Dw = 0  # the sum of maxs
             
-            # TODO improve this loop structure
-            # loop over all the transformed values, where i is the classId & vi is the list of values
-            for i, vi in enumerate(values):
+            # NOTE these must be high/low enough that it is always reset
+            # NOTE these will be replaced when higher/lower values are found, they will NOT be added to
+            # TODO ^^^^ check this ^^^^
+            Db: typ.Union[int, float] = 2  # this will hold the lowest distance Czekanowski found
+            Dw: typ.Union[int, float] = 0  # this will hold the highest distance Czekanowski found
+    
+            # ********** Compute Vi & Vj ********** #
+            # the reason for these two loops is to allow us to compare vi with every other instance (vj)
+            for vi in values:                                   # loop over all the training examples
+                for vj in values:                               # loop over all the training examples
 
-                minSum = 2  # NOTE must be high enough that it is always reset
-                maxSum = 0
-
-                # loop over all the transformed values, where j is the classId & vj is the list of values
-                for j, vj in enumerate(values):
-
-                    if i == j:    # if i equals j ignore this case
-                        continue  # continue / skip / return go to next element
-
-                    # BUG Vi.values and/or Vj.values contains None -- possibly because of the error in tree
-                    dist = __Czekanowski(vi.values, vj.values)  # compute the distance using the values
-
-                    if vi.className == vj.className:  # if vi & vj are in the same class (Dw), then
-                        if dist > maxSum:             # replace the max if the current value is higher
-                            maxSum = dist
-                    else:                  # if vi & vj are not in the same class (Db), then
-                        if dist < minSum:  # replace the min if the current value is smaller
-                            minSum = dist
-
-                Db += minSum  # update the min total
-                Dw += maxSum  # update the max total
+                    dist = __Czekanowski(vi.vList, vj.vList)  # compute the distance using the values
+            
+                    if vi.className == vj.className:            # if the instances vi & vj are from the same class, skip
+                        continue
+            
+                    elif vi.attributes == vj.attributes:    # if vi & vj are not in the same class (Db), skip
+                        continue
+            
+                    else:                                   # if vi & vj are valid
+                        if dist > Dw:                       # replace the max if the current value is higher
+                            Dw = dist
+                            
+                        if dist < Db:                       # replace the min if the current value is smaller
+                            Db = dist
 
             # perform the final distance calculations
-            t1 = Db / len(values)
-            t2 = Dw / len(values)
+            Db *= (1 / len(values))  # multiply by 1/|S|
+            Dw *= (1 / len(values))  # multiply by 1/|S|
 
             log.debug('Finished Distance() method')
             
-            return 1 / (1 + math.pow(math.e, -5*(t1 - t2)))
+            return 1 / (1 + math.pow(math.e, -5*(Db - Dw)))
 
-        def __entropy(partition: typ.List[row]) -> float:
+        def __entropy(partition: typ.List[Row]) -> float:
     
             log.debug('Starting entropy() method')
             
@@ -406,14 +453,14 @@ class Hypothesis:
             ft = collect.namedtuple('ft', ['id', 'value'])
             
             # key = CF(Values), Entry = instance in training data
-            partition: typ.Dict[float, typ.List[row]] = {}
+            partition: typ.Dict[float, typ.List[Row]] = {}
             
             s = 0                             # used to sum CF's conditional entropy
             used = feature.getUsedFeatures()  # get the indexes of the used features
             v = []                            # this will hold the used features ids & values
             for i in rows:                    # loop over all instances
 
-                # get CF(v) for this instance (i is a row struct which is what transform needs)
+                # get CF(v) for this instance (i is a Row struct which is what transform needs)
                 cfv = feature.transform(i)  # needs the values for an instance
 
                 # get the values in this instance i of the used feature
@@ -471,8 +518,8 @@ class Hypothesis:
         
         return final
 
-    # ! this is the function used by cdfcProject
-    def transform(self, data: None = None) -> typ.List[Instance]:
+    # NOTE: this is the function used by cdfcProject
+    def transform(self, data: typ.Union[None, np.array] = None) -> np.array:
     
         log.debug('Starting transform() method')
         
@@ -492,7 +539,8 @@ class Hypothesis:
                 
                 # each Instance will hold the new values for an Instance & className, and
                 # transformed will hold all the instances for a hypothesis
-                transformed.append(Instance(r.className, values))
+                vls = dict(zip(range(len(values)), values))  # create a dict of the values keyed by their index
+                transformed.append(Row(r.className, vls))
 
             log.debug('Finished transform() method')
 
@@ -512,7 +560,8 @@ class Hypothesis:
                 
                 # each Instance will hold the new values for an Instance & className, and
                 # transformed will hold all the instances for a hypothesis
-                transformed.append(Instance(d.className, values))
+                vls = dict(zip(range(len(values)), values))  # create a dict of the values keyed by their index
+                transformed.append(Row(d.className, vls))
 
             log.debug('Finished transform() method')
 
@@ -786,7 +835,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
 
             # swap the two subtrees, this should be done in place as they are both references
             # these are not used as the don't need to be. We merely want to swap their pointers
-            feature1, feature2 = feature2, feature1
+            feature1, feature2 = feature2, feature1  # TODO check that this doesn't cause the error in tree
 
             # get the size of the new constructed features by walking the trees
             parent1.setSize()
@@ -820,7 +869,6 @@ def cdfc(dataIn) -> Hypothesis:
     global LABEL_NUMBER
     global M
     global rows
-    global row
     global ENTROPY_OF_S  # * used in entropy calculation * #
     global CLASS_DICTS
     global TERMINALS

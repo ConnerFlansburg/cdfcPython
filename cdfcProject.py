@@ -1,25 +1,25 @@
+import cProfile
+import collections as collect
 import copy
 import logging as log
-import collections as collect
-import cProfile
 import math
 import pickle
-from tqdm import tqdm
-from scipy import stats
-from cdfcFmt import *
+import traceback
 import tkinter as tk
-import typing as typ
 from pathlib import Path
-from tkinter import filedialog
 from tkinter import messagebox
-import numpy as np
+
 from pyfiglet import Figlet
+from scipy import stats
 from sklearn.metrics import accuracy_score
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
-from cdfc import cdfc
 from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeClassifier
+from tqdm import tqdm
+
+from cdfc import cdfc
+from cdfcFmt import *
 from cdfcFmt import __buildAccuracyFrame, __accuracyFrameToLatex, __formatForSciKit, __flattenTrainingData
 
 '''
@@ -42,7 +42,6 @@ instance n | class value | attribute value | attribute value | attribute value |
 
 '''
 # ********************************************* Constants used by Parser ********************************************* #
-row = collect.namedtuple('row', ['className', 'attributes'])  # a single line in the csv, representing a record/instance
 BETA: typ.Final = 2              # BETA is a constant used to calculate the pop size
 R: typ.Final = 2                 # R is the ratio of number of CFs to the number of classes (features/classes)
 # ******************************************** Constants used by Profiler ******************************************** #
@@ -71,11 +70,33 @@ ScalarsIn = typ.Union[None, StandardScaler]
 # TODO add more unit tests
 
 
+class Row:
+    # This class replace the older collect.namedtuple('Instance', ['className', 'values']) named tuple
+    # NOTE: a Row IS an instance
+    
+    def __init__(self, className: int, values: np.ndarray):
+        # this stores the name of the class that the instance is in
+        self.className: int = className
+        # this stores the values of the features, keyed by index, in the instance
+        self.attributes: typ.Dict[int, float] = dict(zip(range(values.size), values))
+        # this creates a list of the values stored in the dictionary for when iteration is wanted
+        self.vList: typ.List[float] = list(self.attributes.values())  # ? is this to expensive?
+        
+        try:  # check that all the feature values are valid
+            if None in self.attributes.values():  # if a None is in the list of feature values
+                raise Exception('Tried to create an Instance obj with a None feature value')
+        except Exception as err:
+            log.error(str(err))
+            tqdm.write(str(err))
+            traceback.print_stack()
+            sys.exit(-1)  # exit on error; recovery not possible
+
+
 def parseFile(train: np.ndarray):
     # TODO: review for bugs. Remember this parses bucket(s) now, not files
     # *** the constants to be set * #
     INSTANCES_NUMBER: int = 0
-    rows: typ.List[row] = []
+    rows: typ.List[Row] = []
     ENTROPY_OF_S: int = 0  # * used in entropy calculation * #
     CLASS_DICTS = {}
     # *** (the rest are set after the loop) *** #
@@ -110,7 +131,7 @@ def parseFile(train: np.ndarray):
             tqdm.write(str(err))
         # ************************************************************************************ #
         # now that we know the classId/className (they're the same thing) is an integer, continue parsing
-        rows.append(row(name, line[1:]))  # reader[0] = classId, reader[1:] = attribute values
+        rows.append(Row(name, line[1:]))  # reader[0] = classId, reader[1:] = attribute values
         classes.append(name)
         classSet.add(name)
         INSTANCES_NUMBER += 1
@@ -216,7 +237,7 @@ def valuesInClass(classId: int, attribute: int, constants) -> typ.Tuple[typ.List
         classId {String or int} -- This is the identifier for the class that
                                     should be examined
         attribute {int} -- this is the attribute to be investigated. It should
-                            be the index of the attribute in the row
+                            be the index of the attribute in the Row
                             namedtuple in the rows list
 
     Returns:
@@ -542,8 +563,8 @@ def __dealToBuckets(classToInstances: typ.Dict[int, typ.List[typ.Union[int, typ.
 
         # *** assign instances to buckets *** #
         # loop over every instance in the class classId, in what is now a random order
-        # p will be a single row from permutation & so will be a 1D numpy array representing an instance
-        for p in permutation:  # for every row in permutation
+        # p will be a single Row from permutation & so will be a 1D numpy array representing an instance
+        for p in permutation:  # for every Row in permutation
             buckets[index].append(p)  # add the random instance to the bucket at index
             index = (index + 1) % K  # increment index in a round robin style
     
@@ -575,7 +596,7 @@ def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
         pickles = pickle.load(fl)
         fl.close()
         wasPickle = True
-    except:
+    except FileNotFoundError:
         pickles = {}
         wasPickle = False
     # loop over all the random index values
