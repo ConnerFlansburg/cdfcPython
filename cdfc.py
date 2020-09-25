@@ -140,6 +140,8 @@ class Tree:
         self.left = left
         self.right = right
         self.middle = middle
+        self.size = None
+        self.size = self.setSize(0)  # ? every time that we create a tree we call seSize, does this create too much overhead?
         
     def setLeft(self, left):
         self.left = left
@@ -271,7 +273,7 @@ class Tree:
             traceback.print_stack()
             sys.exit(-1)  # exit on error; recovery not possible
 
-    def getSize(self, counter) -> int:
+    def setSize(self, counter) -> int:
 
         counter += 1  # increment the counter
 
@@ -279,14 +281,15 @@ class Tree:
         rightCount = 0
 
         if self.left:                               # if the left node is not null,
-            leftCount = self.left.getSize(counter)  # then call recursively
+            leftCount = self.left.setSize(counter)  # then call recursively
 
         if self.right:                                # if the right node is not null,
-            rightCount = self.right.getSize(counter)  # then call recursively
+            rightCount = self.right.setSize(counter)  # then call recursively
 
         # add the size of the left subtree to the right subtree to get the size
         # of everything below this node. Then return it up the recursive stack
-        return leftCount + rightCount
+        self.size = leftCount + rightCount
+        return self.size
 
 
 class ConstructedFeature:
@@ -320,7 +323,7 @@ class ConstructedFeature:
     def __init__(self, className: int, tree: Tree, size: int = 0) -> None:
         self.className = className  # the name of the class this tree is meant to distinguish
         self.tree = tree            # the root node of the constructed feature
-        self.size = size            # the individual size
+        self.size = size            # the individual size  # TODO set size
         # TODO change so relevant features is passed or not needed
         self.relevantFeatures = None  # holds the indexes of the relevant features
 
@@ -360,7 +363,7 @@ class ConstructedFeature:
         return self.tree.runTree(featureValues)
 
     def setSize(self):
-        self.size = self.tree.getSize(0)  # call getSize on the root of the tree
+        self.size = self.tree.setSize(0)  # call getSize on the root of the tree
         return
 
 
@@ -650,14 +653,15 @@ def __grow(relevantIndex: typ.List[int], depth: int = 0) -> typ.Tuple[Tree, int]
     depth += 1  # increase the depth by one
 
     if depth == MAX_DEPTH:  # if we've reached the max depth add a random terminal value and return
-        return Tree(random.randint(0, (len(relevantIndex) - 1))), depth
+        return Tree(random.choice(range(len(relevantIndex)))), depth
+    
     else:
         # combine the list of terminals & operations
         ls: typ.List[typ.Union[str, int]] = OPS[:]
         ls.extend(relevantIndex)
     
         # get a random value from the combined list
-        value = ls[random.randint(0, (len(ls) - 1))]
+        value = ls[random.choice(range(len(ls)))]
     
         # create a tree with value as it's data
         newTree = Tree(value)
@@ -689,11 +693,11 @@ def __full(relevantValues: typ.List[np.float], depth: int = 0) -> typ.Tuple[Tree
     depth += 1  # increase the depth by one
 
     if depth == MAX_DEPTH:  # if we've reached the max depth add a random terminal value and return
-        return Tree(random.randint(0, (len(relevantValues) - 1))), depth
+        return Tree(random.choice(range(len(relevantValues)))), depth
     else:
         # get a random operation
-        value = OPS[random.randint(0, (len(OPS) - 1))]
-    
+        value = OPS[random.choice(range(len(OPS)))]
+
         # create a tree with Value (an operation) as it's data
         newTree = Tree(value)
     
@@ -774,7 +778,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         first = None  # the tournament winner
         score = 0     # the winning score
         for i in range(TOURNEY):  # compare TOURNEY number of random hypothesis
-            randomIndex = random.randint(0, (len(candidates)-1))  # get a random index value
+            randomIndex = random.choice(range(len(candidates)))   # get a random index value
             candidate: Hypothesis = candidates.pop(randomIndex)   # get the hypothesis at the random index
             # we pop here to avoid getting duplicates. The index uses candidates current size so it will be in range
             fitness = candidate.getFitness()                      # get that hypothesis's fitness score
@@ -801,6 +805,43 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
     # ******************* Evolution ******************* #
     newPopulation = Population([], population.generation+1)  # create a new population with no hypotheses
     
+    def getSubtree(ftr: Tree, terms: typ.List[int]) -> typ.Tuple[Tree, typ.Tuple[Tree, str]]:
+        # walk the tree & find a random subtree for feature
+        # TODO calculate size during this first walk
+
+        oldFeature: Tree = ftr
+        while True:
+        
+            # make a random decision
+            decide = random.choice(["left", "right", "stop"])
+        
+            # ? if data is in terminals there is no subtree, does this need to be changed?
+            if decide == "stop" or ftr.data in terms:
+                break  # if we chose stop, break
+        
+            elif decide == "left" and ftr.left is None:
+                break  # if we try to go left, but left doesn't exist, break
+        
+            elif decide == "right" and ftr.right is None:
+                break  # if we try to go right, but right doesn't exist, break
+        
+            # ? is stopping the best move or should we try walking the other way ?
+            elif decide == "left" and ftr.left.data in terms:
+                break  # if we try to go left, but left is a terminal, break
+        
+            elif decide == "right" and ftr.right.data in terms:
+                break  # if we try to go right, but right is a terminal, break
+        
+            elif decide == "left" and ftr.left is not None:
+                oldFeature = ftr  # ? will this be overwritten on next step?
+                ftr = ftr.left  # if we chose left & left isn't None, go left
+        
+            elif decide == "right" and ftr.right is not None:
+                oldFeature = ftr
+                ftr = ftr.right  # if we chose right & right isn't None, go right
+        
+        return ftr, (oldFeature, decide)  # return the subtree, and the parent tree
+    
     # while the new population has fewer hypotheses than the max pop size
     while (len(newPopulation.candidateHypotheses)-1) < POPULATION_SIZE:
         
@@ -813,7 +854,8 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             parent: Hypothesis = __tournament(population)  # get parent hypothesis using tournament
             
             # get a random feature from the hypothesis, where M is the number of constructed features
-            featureIndex = random.randint(0, (M-1))
+            featureIndex = random.choice(range(M))
+            
             # get the indexes of the terminal values (for the feature)
             terminal: typ.List[int] = parent.features[featureIndex].relevantFeatures
             # get the tree (for the feature)
@@ -853,8 +895,8 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             
             # parent1 & parent2 are from a copy of population made by tournament, NOT original pop
             # because of this they should not be viewed as references
-            parent1 = __tournament(population)
-            parent2 = __tournament(population)
+            parent1: Hypothesis = __tournament(population)
+            parent2: Hypothesis = __tournament(population)
             
             #  check that each parent is unique
             # if they are the same they should reference the same object & so 'is' is used instead of ==
@@ -862,7 +904,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
                 parent2 = __tournament(population)
 
             # get a random feature from each parent, where M is the number of constructed features
-            featureIndex = random.randint(0, (M-1))
+            featureIndex: int = random.choice(range(M))
 
             # feature 1
             # get the indexes of the terminal values (for the feature)
@@ -876,39 +918,27 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             # get the tree (for the feature)
             feature2: Tree = parent2.features[featureIndex].tree
 
-            while True:  # walk the tree & find a random subtree for feature 1
-                
-                # make a random decision
-                decide = random.choice(["left", "right", "choose"])
-                
-                if decide == "choose" or feature1.data in terminals1:
-                    break
-    
-                elif decide == "left":   # go left
-                    feature1 = feature1.left
-                    
-                elif decide == "right":  # go right
-                    feature1 = feature1.right
-                    
-            while True:  # walk the tree & find a random subtree for feature 2
-                
-                # make a random decision
-                decide = random.choice(["left", "right", "choose"])
-                
-                if decide == "choose" or feature2.data in terminals2:
-                    break
+            # *************** Find the Two Sub-Trees **************** #
+            subTree1, parentTree1 = getSubtree(feature1, terminals1)
 
-                elif decide == "left":   # go left
-                    parent2 = feature2
-                    feature2 = feature2.left
+            subTree2, parentTree2 = getSubtree(feature2, terminals2)
+            # ******************************************************* #
+            
+            # ************************** swap the two subtrees ************************** #
+            # update the first parent tree
+            if parentTree1[1] == 'left':         # if subTree 1 went left to find the subTree
+                parentTree1[0].left = subTree2   # then replace the left with subTree 2
+            else:                                # if subTree 1 went right to find the subTree
+                parentTree1[0].right = subTree2  # then replace the right with subTree 2
+            
+            # update the second parent tree
+            if parentTree2[1] == 'left':         # if subTree 2 went left to find the subTree
+                parentTree2[0].left = subTree1   # then replace the left with subTree 1
+            else:                                # if subTree 2 went right to find the subTree
+                parentTree2[0].right = subTree1  # then replace the right with subTree 1
+            # **************************************************************************** #
 
-                elif decide == "right":  # go right
-                    feature2 = feature2.right
-
-            # swap the two subtrees, this should be done in place as they are both references
-            # these are not used as the don't need to be. We merely want to swap their pointers
-            feature1, feature2 = feature2, feature1  # TODO check that this doesn't cause the error in tree
-
+            # TODO change the size calculation so that we only walk the tree once
             # get the size of the new constructed features by walking the trees
             parent1.setSize()
             parent2.setSize()
