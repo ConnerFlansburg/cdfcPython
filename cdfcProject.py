@@ -720,7 +720,7 @@ def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> ModelList:
 
 
 def main() -> None:
-    # SYSOUT.write(Figlet(font='larry3d').renderText('C D F C'))  # formatted start up message
+    SYSOUT.write(Figlet(font='larry3d').renderText('C D F C'))  # formatted start up message
     SYSOUT.write("Program Initialized Successfully\n")
     
     parent = tk.Tk()            # prevent root window caused by Tkinter

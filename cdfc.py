@@ -15,9 +15,7 @@ from tqdm import tqdm
 from tqdm import trange
 
 # ! Next Steps
-# TODO review loop in Distance function & check for accuracy
-# TODO fix bug with Leukemia's NaN errors
-# TODO fix bug in run tree
+# TODO look over createInitialPopulation & try to fix bug in run tree
 
 # TODO write code for the if function in OPS
 # TODO add docstrings
@@ -152,7 +150,7 @@ class Tree:
     def getLeft(self):
         try:
             if self.left is None:
-                raise Exception('Try to access a child that didn\'t exist')
+                raise Exception('Tree tried to access a child that didn\'t exist')
             else:
                 return self.left
         except Exception as err:
@@ -164,7 +162,7 @@ class Tree:
     def getRight(self):
         try:
             if self.right is None:
-                raise Exception('Try to access a child that didn\'t exist')
+                raise Exception('Tree tried to access a child that didn\'t exist')
             else:
                 return self.right
         except Exception as err:
@@ -176,7 +174,7 @@ class Tree:
     def getMiddle(self):
         try:
             if self.middle is None:
-                raise Exception('Try to access a child that didn\'t exist')
+                raise Exception('Tree tried to access a child that didn\'t exist')
             else:
                 return self.middle
         except Exception as err:
@@ -193,12 +191,8 @@ class Tree:
     def __runNode(self, featureValues: typ.Dict[int, float]) -> typ.Union[int, float]:
         
         # BUG somehow +,-,*, and min() are being called on None type objects.
-        # !   This is because for some reason it keeps trying to access the children that don't exist, even though it
-        # !   encounters values before then - How??? If a node contains a number it should return a value & not run children
-        # ? Maybe  when we have a value and try to index it using featureValues[self.data], we are getting a None?
-        # ?   (i.e. the issue is that the instance has a None value at that index)
-        # ? Maybe it's because featureValues is a Dictionary not a list? -- check
-        # ? I think this error is a result of the error in the relevancy calculation that's preventing nodes from being set
+        # !     The error is exists after initial pop generation, so it must be in there & not in evolution
+
         # + Try creating a unit test for this, grow, & full
         # if the node is an operation both of it's branches should have operations or terminals
         # either way calling __runNode() won't return a None
@@ -222,17 +216,18 @@ class Tree:
                 elif self.data == 'subtract':
                     vl = lft - rgt
                     return vl
-
+                
                 elif self.data == 'if':
                     if lft >= 0:
                         vl = rgt
                     else:
                         vl = self.getMiddle().__runNode(featureValues)
                     return vl
-        
+    
                 elif self.data == 'times':
                     vl = lft * rgt
                     return vl
+                
                 elif self.data == 'min':
                     vl = min(lft, rgt)
                     return vl
@@ -713,7 +708,8 @@ def __full(relevantValues: typ.List[np.float], depth: int = 0) -> typ.Tuple[Tree
 
 
 def createInitialPopulation() -> Population:
-
+    
+    # TODO look for bug causing error in tree
     def createHypothesis() -> Hypothesis:
         # given a list of trees, create a hypothesis
         # NOTE this will make 1 tree for each feature, and 1 CF for each class
@@ -766,7 +762,16 @@ def createInitialPopulation() -> Population:
         hypothesis.append(createHypothesis())
 
     log.debug('The createInitialHypothesis() method has finished & is returning')
+    
+    sanityCheckPop(hypothesis)  # ! testing purposes only!
+    
     return Population(hypothesis, 0)
+
+
+# ! testing purposes only!
+def sanityCheckPop(hypothesis):
+    for h in hypothesis:
+        h.transform(rows)
 
 
 def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, Hypothesis]:
@@ -813,30 +818,33 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         while True:
         
             # make a random decision
-            decide = random.choice(["left", "right", "stop"])
+            choice = random.choice(["left", "right", "stop"])
         
-            # ? if data is in terminals there is no subtree, does this need to be changed?
-            if decide == "stop" or ftr.data in terms:
-                break  # if we chose stop, break
+            # *** Error checking *** #
+            if ftr.data in terms and ftr.left is None and ftr.right is None:
+                raise Exception('getSubTree found a terminal node with children')
+            
+            if choice == "stop" or ftr.data in terms:
+                break  # if we chose stop or if we have encountered a terminal, break
+                
+            elif choice == "left" and ftr.left is None:
+                break  # if choose to go left but there isn't a left, break
         
-            elif decide == "left" and ftr.left is None:
-                break  # if we try to go left, but left doesn't exist, break
+            elif choice == "right" and ftr.right is None:
+                break  # if choose to go right but there isn't a right, break
         
-            elif decide == "right" and ftr.right is None:
-                break  # if we try to go right, but right doesn't exist, break
+            # NOTE: the code below is used to prevent a singular terminal node from being a valid subtree
+            # elif choice == "left" and ftr.left.data in terms:
+            #     break  # if we try to go left, but left is a terminal, break
         
-            # ? is stopping the best move or should we try walking the other way ?
-            elif decide == "left" and ftr.left.data in terms:
-                break  # if we try to go left, but left is a terminal, break
+            # elif choice == "right" and ftr.right.data in terms:
+            #     break  # if we try to go right, but right is a terminal, break
         
-            elif decide == "right" and ftr.right.data in terms:
-                break  # if we try to go right, but right is a terminal, break
-        
-            elif decide == "left" and ftr.left is not None:
+            elif choice == "left" and ftr.left is not None:
                 oldFeature = ftr  # ? will this be overwritten on next step?
                 ftr = ftr.left  # if we chose left & left isn't None, go left
         
-            elif decide == "right" and ftr.right is not None:
+            elif choice == "right" and ftr.right is not None:
                 oldFeature = ftr
                 ftr = ftr.right  # if we chose right & right isn't None, go right
         
@@ -989,8 +997,8 @@ def cdfc(dataIn) -> Hypothesis:
     
     # *********************** Run the Algorithm *********************** #
 
-    currentPopulation = createInitialPopulation()  # run initialPop
-    # currentPopulation = createInitialPopulation()     # create initial population
+    currentPopulation = createInitialPopulation()     # run initialPop
+    # currentPopulation = createInitialPopulation()   # create initial population
     elite = currentPopulation.candidateHypotheses[0]  # init elitism
 
     # loop, evolving each generation. This is where most of the work is done
