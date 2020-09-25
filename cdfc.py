@@ -120,7 +120,7 @@ class Tree:
     """
     
     def __init__(self, data: typ.Union[str, int], left: typ.Union[None, "Tree"] = None,
-                 right: typ.Union[None, "Tree"] = None) -> None:
+                 right: typ.Union[None, "Tree"] = None, middle: typ.Union[None, "Tree"] = None,) -> None:
         
         # TODO add check that the correct number of terminals are created
         try:
@@ -139,6 +139,7 @@ class Tree:
         self.data: typ.Union[int, str] = data    # must either be a function or a terminal (if a terminal it should be it's index)
         self.left = left
         self.right = right
+        self.middle = middle
         
     def setLeft(self, left):
         self.left = left
@@ -164,6 +165,18 @@ class Tree:
                 raise Exception('Try to access a child that didn\'t exist')
             else:
                 return self.right
+        except Exception as err:
+            log.error(str(err))
+            tqdm.write(str(err))
+            traceback.print_stack()
+            sys.exit(-1)  # exit on error; recovery not possible
+            
+    def getMiddle(self):
+        try:
+            if self.middle is None:
+                raise Exception('Try to access a child that didn\'t exist')
+            else:
+                return self.middle
         except Exception as err:
             log.error(str(err))
             tqdm.write(str(err))
@@ -209,7 +222,11 @@ class Tree:
                     return vl
 
                 elif self.data == 'if':
-                    pass  # TODO write
+                    if lft >= 0:
+                        vl = rgt
+                    else:
+                        vl = self.getMiddle().__runNode(featureValues)
+                    return vl
         
                 elif self.data == 'times':
                     vl = lft * rgt
