@@ -44,7 +44,7 @@ TOURNEY: typ.Final = 7           # TOURNEY is the tournament size
 ENTROPY_OF_S = 0                 # ENTROPY_OF_S is used for entropy calculation
 FEATURE_NUMBER = 0               # FEATURE_NUMBER is the number of features in the data set
 LABEL_NUMBER = 0                 # LABEL_NUMBER is the number of classes/labels in the data
-CLASS_IDS = []                   # CLASS_IDS is a list of all the unique class ids
+CLASS_IDS: typ.List[int] = []    # CLASS_IDS is a list of all the unique class ids
 INSTANCES_NUMBER = 0             # INSTANCES_NUMBER is  the number of instances in the training data
 M = 0                            # M is the number of constructed features
 POPULATION_SIZE = 0              # POPULATION_SIZE is the population size
@@ -91,8 +91,8 @@ warnings.filterwarnings('ignore', message='invalid value encountered in true_div
 
 # create the file path for the log file & configure the logger
 logPath = str(Path.cwd() / 'logs' / 'cdfc.log')
-log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w',
-                format='%(levelname)s - %(lineno)d: %(message)s')
+# log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
+log.basicConfig(level=log.ERROR, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
 
 profiler = cProfile.Profile()                       # create a profiler to profile cdfc during testing
 statsPath = str(Path.cwd() / 'logs' / 'stats.log')  # set the file path that the profiled info will be stored at
@@ -316,11 +316,10 @@ class ConstructedFeature:
     transformedValues = None  # the values data after they have been transformed by the tree
 
     def __init__(self, className: int, tree: Tree, size: int = 0) -> None:
-        self.className = className  # the name of the class this tree is meant to distinguish
-        self.tree = tree            # the root node of the constructed feature
-        self.size = size            # the individual size  # TODO set size
-        # TODO change so relevant features is passed or not needed
-        self.relevantFeatures = None  # holds the indexes of the relevant features
+        self.className = className                    # the name of the class this tree is meant to distinguish
+        self.tree = tree                              # the root node of the constructed feature
+        self.size = size                              # the individual size  # TODO set size
+        self.relevantFeatures = TERMINALS[className]  # holds the indexes of the relevant features
 
     def getUsedFeatures(self) -> typ.List[int]:
     
@@ -331,9 +330,9 @@ class ConstructedFeature:
         def __walk(node: Tree) -> None:
             # if this tree's node is a valid operation, keep walking done the tree
             if node.data in OPS:
-                __walk(node.left)  # walk down the left branch
+                __walk(node.left)   # walk down the left branch
                 __walk(node.right)  # walk down the right branch
-                return  # now that I have walked down both branches return
+                return              # now that I have walked down both branches return
         
             # if the node is not an operation, then it is a terminal index so add it to value
             else:
@@ -344,11 +343,12 @@ class ConstructedFeature:
         
         try:
             if not values:  # if values is empty
-                log.debug('The getUsedFeatures found no features (values list is empty)')
+                
                 raise Exception('ERROR: The getUsedFeatures found no features (values list is empty)')
             return values      # values should now hold the indexes of the tree's terminals
         except Exception as err:
             lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+            log.error(f'The getUsedFeatures found no features (values list is empty), line number = {lineNm}')
             tqdm.write(str(err) + f', line = {lineNm}')
             sys.exit(-1)  # exit on error; recovery not possible
 
@@ -714,44 +714,54 @@ def createInitialPopulation() -> Population:
         # given a list of trees, create a hypothesis
         # NOTE this will make 1 tree for each feature, and 1 CF for each class
 
-        # get a copy of the list of all the unique classIds
-        classIds = copy.deepcopy(CLASS_IDS)  # ? does this need to be a deep copy?
-        random.shuffle(classIds)
+        classIds: typ.List[int] = copy.copy(CLASS_IDS)  # create a copy of all the unique class ids
+        random.shuffle(classIds)                        # shuffle the class ids so their order is random
 
         ftrs: typ.List[ConstructedFeature] = []
         size = 0
         
-        for nll in range(LABEL_NUMBER):
+        for nll in range(LABEL_NUMBER):  # ? is label number the correct constant?
             # randomly decide if grow or full should be used.
             # Also randomly assign the class ID then remove that ID
             # so each ID may only be used once
             
             try:
                 name = classIds.pop(0)  # get a random id
+                
+                if name not in CLASS_IDS:
+                    raise Exception(f'createHypothesis got an invalid name ({name}) from classIds')
             
-            except IndexError:  # if classIds.pop() tried to pop an empty list, log error & exit
+            except IndexError:                         # if classIds.pop() tried to pop an empty list, log error & exit
                 lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
                 log.error(f'Index error encountered in createInitialPopulation (popped from an empty list), line {lineNm}')
                 tqdm.write(f'ERROR: Index error encountered in createInitialPopulation (popped from an empty list), line {lineNm}')
-                sys.exit(-1)  # exit on error; recovery not possible
-
+                sys.exit(-1)                           # exit on error; recovery not possible
+            except Exception as err:                   # if class ids some how gave an invalid name
+                lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+                log.error(str(err))
+                tqdm.write(f'ERROR: {str(err)}, line {lineNm}')
+                sys.exit(-1)                           # exit on error; recovery not possible
+            # ! DEBUG if we pass this point we know that name is valid
             # if no error occurred log the value found
             log.debug(f'createHypothesis found a valid classId: {name}')
 
             if random.choice([True, False]):
-                log.debug(f'createHypothesis chose grow with the classId {name}')
                 tree, size = __grow(TERMINALS[name])  # create tree
-                log.debug(f'createHypothesis created tree (grow) successfully using classId {name}')
+                sanityCheckTree(tree)                      # ! testing purposes only!
+                log.error('Population Sanity Check Pass')  # ! if tree sanity check passes then the error is in the ConstructedFeature()
                 ftrs.append(ConstructedFeature(name, tree, size))
-                log.debug(f'createHypothesis created constructedFeature (grow) successfully using classId {name}')
             else:
-                log.debug(f'createHypothesis chose full with the classId {name}')
                 tree, size = __full(TERMINALS[name])  # create tree
-                log.debug(f'createHypothesis created tree (full) successfully using classId {name}')
+                sanityCheckTree(tree)                      # ! testing purposes only!
+                log.error('Population Sanity Check Pass')  # ! if tree sanity check passes then the error is in the ConstructedFeature()
                 ftrs.append(ConstructedFeature(name, tree, size))
-                log.debug(f'createHypothesis created constructedFeature (full) successfully using classId {name}')
 
             size += size
+            
+        if classIds:  # if we didn't pop everything from the classIds list, raise an exception
+            log.error(f'creatInitialPopulation didn\'t use all of classIds, classIds = {classIds}')
+            raise Exception(f'ERROR: creatInitialPopulation didn\'t use all of classIds, classIds = {classIds}')
+            
         # create a hypothesis & return it
         return Hypothesis(ftrs, size)
 
@@ -761,17 +771,50 @@ def createInitialPopulation() -> Population:
     for __ in trange(POPULATION_SIZE, desc="Creating Initial Hypotheses", unit="hyp"):
         hypothesis.append(createHypothesis())
 
-    log.debug('The createInitialHypothesis() method has finished & is returning')
-    
     sanityCheckPop(hypothesis)  # ! testing purposes only!
+    
+    log.debug('The createInitialHypothesis() method has finished & is returning')
     
     return Population(hypothesis, 0)
 
 
 # ! testing purposes only!
-def sanityCheckPop(hypothesis):
+def sanityCheckPop(hypothesis: typ.List[Hypothesis]):
+    log.debug('Starting Population Sanity Check...')
     for h in hypothesis:
         h.transform(rows)
+    log.debug('Population Sanity Check Pass')
+
+ 
+# ! testing purposes only!
+def sanityCheckTree(tree: Tree):
+    log.debug('Starting Tree Sanity Check...')
+    try:
+        # ********* Check this node for a None value ********* #
+        if tree.data is None:  # if we have reached a None value in the tree
+            raise Exception('sanityCheckTree found a None value stored in the tree')
+    
+        # ********* Walk the Tree Looking for Nones ********* #
+        else:
+            # walk left
+            if tree.left is not None:          # if there is a left child,
+                sanityCheckTree(tree.left)     # walk down it & look for Nones
+        
+            # walk right
+            if tree.right is not None:         # if there is a right child,
+                sanityCheckTree(tree.right)    # walk down it & look for Nones
+        
+            # walk middle
+            if tree.middle is not None:        # if there is a middle child,
+                sanityCheckTree(tree.middle)   # walk down it & look for Nones
+    
+    except Exception as err:                   # if a None was found
+        lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+        log.error(f'{str(err)}, line = {lineNm}')
+        tqdm.write(f'ERROR: {str(err)}, line = {lineNm}')
+        sys.exit(-1)                           # exit on error; recovery not possible
+
+    return  # if we've reached this then we've hit the bottom & and are walking back up
 
 
 def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, Hypothesis]:
@@ -797,10 +840,10 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
                 
         try:
             if first is None:
-                log.error(f'Tournament could not set first correctly, first = {first}')
                 raise Exception(f'ERROR: Tournament could not set first correctly, first = {first}')
         except Exception as err:
             lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+            log.error(f'Tournament could not set first correctly, first = {first}, line number = {lineNm}')
             tqdm.write(str(err) + f', line = {lineNm}')
             sys.exit(-1)  # exit on error; recovery not possible
         
