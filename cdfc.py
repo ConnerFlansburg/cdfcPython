@@ -29,7 +29,7 @@ ELITISM_RATE: typ.Final = 1                   # ELITISM_RATE is the elitism rate
 GENERATIONS: typ.Final = 50                   # GENERATIONS is the number of generations the GP should run for
 MAX_DEPTH: typ.Final = 8                      # MAX_DEPTH is the max depth trees are allowed to be & is used in grow/full
 MUTATION_RATE: typ.Final = 0.2                # MUTATION_RATE is the chance that a candidate will be mutated
-# ! changes here must also be made in the tree object ! #
+# ! changes here must also be made in the tree object, and the grow & full functions ! #
 OPS: typ.Final = ['add', 'subtract',          # OPS is the list of valid operations on the tree
                   'times', 'max', 'if']
 NUM_TERMINALS = {'add': 2, 'subtract': 2,     # NUM_TERMINALS is a dict that, when given an OP as a key, give the number of terminals it needs
@@ -75,8 +75,7 @@ class Instance:
         except Exception as err:
             log.error(str(err))
             tqdm.write(str(err))
-            traceback.print_exc()             # print stack trace so we know how None is reaching Instance
-            traceback.print_stack()
+            traceback.print_stack()           # print stack trace so we know how None is reaching Instance
             sys.exit(-1)                      # exit on error; recovery not possible
 
 
@@ -115,26 +114,35 @@ class Tree:
     
     def __init__(self, data: typ.Union[str, int], left: typ.Union[None, "Tree"] = None,
                  right: typ.Union[None, "Tree"] = None, middle: typ.Union[None, "Tree"] = None,) -> None:
-        
-        # TODO add check that the correct number of terminals are created
+
+        # *********************** Error Checking *********************** #
         try:
+            
             if data is None:  # check that we aren't storing a none in data, if we are throw exception
-                raise Exception(f'ERROR: Tried to add a \'None\' to a tree as data')
-            if left is None and right is not None:  # check if on child is None, but the other is not
-                raise Exception(f'ERROR: Tried to create a tree with left as None & with as a right value')
-            if right is None and left is not None:  # check if on child is None, but the other is not
-                raise Exception(f'ERROR: Tried to create a tree with right as None & with as a left value')
-        except Exception as err:
-            log.error(str(err))
-            tqdm.write(str(err))
-            traceback.print_exc()  # print stack trace so we know how None is reaching tree
-            sys.exit(-1)           # exit on error; recovery not possible
+                raise Exception('ERROR: Tree constructor tried to add a \'None\' to a tree as data')
+            
+            if data in OPS:   # check that we are not creating an OP with too few terminals
+                if left is None or right is None:    # if left or right are not terminals, raise exception
+                    raise Exception("ERROR: Tree constructor tried to create a terminal Tree node using an operation and 1 None")
+                if left is None and right is None:   # if left & right are not terminals, raise exception
+                    raise Exception("ERROR: Tree constructor tried to create a terminal Tree node using an operation and 2 Nones")
+                if data == 'if' and middle is None:  # if we are using the if OP with no middle, raise exception
+                    raise Exception("ERROR: Tree constructor tried to create an IF transformation with too few children")
         
+        except Exception as err:
+            lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+            msg = f'{str(err)}, line = {lineNm}'   # create the error/log message
+            log.error(msg)                         # log the error
+            tqdm.write(msg)                        # print error to console
+            traceback.print_stack()                # print stack trace so we know how None is reaching tree
+            sys.exit(-1)                           # exit on error; recovery not possible
+
+        # ************************ If data isn't null, we can build the tree ************************ #
         self.data: typ.Union[int, str] = data    # must either be a function or a terminal (if a terminal it should be it's index)
         self.left = left
         self.right = right
         self.middle = middle
-        self.size = None
+        self.size = None             # initialize size to 0 & then call setSize to set it
         self.size = self.setSize(0)  # ? every time that we create a tree we call seSize, does this create too much overhead?
         
     def setLeft(self, left):
@@ -201,9 +209,12 @@ class Tree:
                 lft = self.getLeft().__runNode(featureValues)
                 rgt = self.getRight().__runNode(featureValues)
                 
-                if lft is None or rgt is None:
-                    raise Exception('runNode tried to access a child that didn\'t exist')
-                
+                # if one child is None, but not both
+                if (lft is None and rgt is not None) or (rgt is None and lft is not None):
+                    raise Exception('runNode found a node in OPS with 1 \'None\' child')
+                if lft is None and rgt is None:  # if both children are None
+                    raise Exception('runNode found a node in OPS with 2 \'None\' children')
+
                 # find out which operation it is & return it's value
                 if self.data == 'add':
                     vl = lft + rgt
@@ -635,7 +646,7 @@ class Population:
 # ***************** End of Namespaces/Structs & Objects ******************* #
 
 
-def __grow(relevantIndex: typ.List[int], depth: int = 0) -> typ.Tuple[Tree, int]:
+def __grow(relevantValues: typ.List[int], depth: int = 0) -> typ.Tuple[Tree, int]:
     # This function uses the grow method to generate an initial population
     # the last thing returned should be a trees root node
     if int == 0:  # only print to log on first call
@@ -644,38 +655,38 @@ def __grow(relevantIndex: typ.List[int], depth: int = 0) -> typ.Tuple[Tree, int]
     depth += 1  # increase the depth by one
 
     if depth == MAX_DEPTH:  # if we've reached the max depth add a random terminal value and return
-        return Tree(random.choice(range(len(relevantIndex)))), depth
+        return Tree(random.choice(relevantValues)), depth
     
     else:
-        # combine the list of terminals & operations
-        ls: typ.List[typ.Union[str, int]] = OPS[:]
-        ls.extend(relevantIndex)
+        # unpack the list of terminals & operations, and then combine them
+        ls: typ.List[typ.Union[int, str]] = [*OPS[:], *relevantValues]
+
+        value: typ.Union[int, str] = random.choice(ls)   # get a random value from the combined list
     
-        # get a random value from the combined list
-        value = ls[random.choice(range(len(ls)))]
-    
-        # create a tree with value as it's data
-        newTree = Tree(value)
-    
-        if value in relevantIndex:  # if the value added was a terminal value,
-            return newTree, depth   # return the new tree
+        if value in relevantValues:     # if a terminal value was chosen
+            return Tree(value), depth   # create a new tree & return it
+        
         else:  # if the value was not a terminal value, then grow both children
             
-            if NUM_TERMINALS[value] == 2:                                 # if the number of terminals needed is two
-                newTree.left, leftDepth = __grow(relevantIndex, depth)    # grow the left terminal
-                newTree.right, rightDepth = __grow(relevantIndex, depth)  # grow the right terminal
-                totalDepth = leftDepth + rightDepth                       # update total size
-            # elif NUM_TERMINALS[value] == 3:
-            else:                                                           # if the number of terminals needed is three
-                newTree.left, leftDepth = __grow(relevantIndex, depth)      # grow the left terminal
-                newTree.right, rightDepth = __grow(relevantIndex, depth)    # grow the right terminal
-                newTree.middle, middleDepth = __grow(relevantIndex, depth)  # grow the middle terminal
-                totalDepth = leftDepth + rightDepth                         # update total size
+            # change the below to an elif if more than 2/3 terminals are needed
+            if NUM_TERMINALS[value] == 2:                          # if the number of terminals needed is two
+                lft, leftDepth = __grow(relevantValues, depth)     # grow the left terminal or operation tree
+                rgt, rightDepth = __grow(relevantValues, depth)    # grow the right terminal or operation tree
+                newTree = Tree(value, lft, rgt)                    # create the new tree
+                totalDepth = leftDepth + rightDepth                # update total size
+                
+            else:                                                  # if the number of terminals needed is three
+                lft, leftDepth = __grow(relevantValues, depth)     # grow the left terminal or operation tree
+                rgt, rightDepth = __grow(relevantValues, depth)    # grow the right terminal or operation tree
+                mdl, middleDepth = __grow(relevantValues, depth)   # grow the right terminal or operation tree
+                newTree = Tree(value, lft, rgt, mdl)               # create the new tree
+                totalDepth = leftDepth + rightDepth + middleDepth  # update total size
             
             return newTree, totalDepth  # after the recursive calls have finished return the tree
 
 
-def __full(relevantValues: typ.List[np.float], depth: int = 0) -> typ.Tuple[Tree, int]:
+# BUG full is creating a Tree with OPs that do not have terminals
+def __full(relevantFeatures: typ.List[int], depth: int = 0) -> typ.Tuple[Tree, int]:
     # This function uses the full method to generate an initial population
     # the last thing returned should be a trees root node
     if int == 0:  # only print to log on first call
@@ -684,22 +695,25 @@ def __full(relevantValues: typ.List[np.float], depth: int = 0) -> typ.Tuple[Tree
     depth += 1  # increase the depth by one
 
     if depth == MAX_DEPTH:  # if we've reached the max depth add a random terminal value and return
-        return Tree(random.choice(range(len(relevantValues)))), depth
-    else:
-        # get a random operation
-        value = OPS[random.choice(range(len(OPS)))]
-
-        # create a tree with Value (an operation) as it's data
-        newTree = Tree(value)
+        # this tree should store a terminal, so no children should be created
+        return Tree(random.choice(relevantFeatures)), depth
     
-        # we didn't add a terminal so, then grow both children
-        newTree.left, leftDepth = __full(relevantValues, depth)
-        newTree.right, rightDepth = __full(relevantValues, depth)
-        if NUM_TERMINALS[value] == 3:  # if the number of terminals is more than two
-            newTree.middle, middleDepth = __full(relevantValues, depth)
-        else:                          # if the number of terminals is two then,
-            middleDepth = 0            # set the middle depth to 0
-        totalDepth = leftDepth + rightDepth + middleDepth  # update the total depth
+    else:  # if we haven't reached the max depth, we should create a tree with an OP
+        value = random.choice(OPS)                             # select a random operation
+        
+        if NUM_TERMINALS[value] == 2:                          # if the number of terminals needed is two
+            lft, leftDepth = __full(relevantFeatures, depth)   # grow the left terminal or operation tree
+            rgt, rightDepth = __full(relevantFeatures, depth)  # grow the right terminal or operation tree
+            newTree = Tree(value, lft, rgt)                    # create a new tree with Value (an operation) as it's data
+            totalDepth = leftDepth + rightDepth                # update total size
+
+        else:                                                   # if the number of terminals needed is three
+            lft, leftDepth = __full(relevantFeatures, depth)    # grow the left terminal or operation tree
+            rgt, rightDepth = __full(relevantFeatures, depth)   # grow the right terminal or operation tree
+            mdl, middleDepth = __full(relevantFeatures, depth)  # grow the right terminal or operation tree
+            newTree = Tree(value, lft, rgt, mdl)                # create the new tree
+            totalDepth = leftDepth + rightDepth + middleDepth   # update total size
+    
         return newTree, totalDepth  # after the recursive calls have finished return the tree
 
 
@@ -785,14 +799,14 @@ def sanityCheckPop(hypothesis: typ.List[Hypothesis]):
     log.debug('Starting Population Sanity Check...')
     for h in hypothesis:
         h.transform(rows)
-    log.debug('Population Sanity Check Pass')
+    log.debug('Population Sanity Check Passed')
 
 
 # ! testing purposes only!
 def sanityCheckHyp(hyp: Hypothesis):
     log.debug('Starting Hypothesis Sanity Check...')
     hyp.transform()
-    log.debug('Population Hypothesis Check Pass')
+    log.debug('Population Hypothesis Check Passed')
 
 
 # ! testing purposes only!
@@ -806,7 +820,7 @@ def sanityCheckCF(cf: ConstructedFeature):
 def sanityCheckTree(tree: Tree):
     log.debug('Starting Tree Sanity Check...')
     tree.runTree(rows[0].attributes)
-    log.debug('Tree Sanity Check Completed')
+    log.debug('Tree Sanity Check Passed')
 
 
 def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, Hypothesis]:
