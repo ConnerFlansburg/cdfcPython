@@ -3,6 +3,7 @@ import collections as collect
 import copy
 import logging as log
 import math
+import os
 import pickle
 import traceback
 import tkinter as tk
@@ -380,6 +381,7 @@ def __transform(entries: np.ndarray, scalarPassed: ScalarsIn) -> ScalarsOut:
 
 
 # TODO change so terminals is done before calling cdfc & the result gets passed (as a dict?)
+# BUG is the Tree error coming from terminals setting something wrong?
 def terminals(classId: int, constants) -> typ.List[int]:
     """terminals creates the list of relevant terminals for a given class.
 
@@ -397,7 +399,7 @@ def terminals(classId: int, constants) -> typ.List[int]:
     FEATURE_NUMBER = constants['FEATURE_NUMBER']
     
     Score = collect.namedtuple('Score', ['Attribute', 'Relevancy'])
-    ScoreList = typ.List[typ.Union[typ.List, Score]]
+    ScoreList = typ.List[Score]
     scores: ScoreList = []
     
     # FEATURE_NUMBER is the number of features in the data. This means that it can also be a list of
@@ -489,21 +491,24 @@ def terminals(classId: int, constants) -> typ.List[int]:
     
     ordered: ScoreList = sorted(scores, key=lambda s: s.Relevancy)  # sort the features by relevancy scores
     
-    terminalSet: typ.Union[int, typ.List] = []  # this will hold relevant terminals
+    terminalSet: typ.List[int] = []  # this will hold relevant terminals
     top: int = len(ordered) // 2  # find the halfway point
     relevantScores: ScoreList = ordered[:top]  # slice top half
     
     for i in relevantScores:  # loop over relevant scores
-        # ? this is where the terminal index is added. Is the index correct?
         terminalSet.append(i.Attribute)  # add the attribute number to the terminal set
     
     # ************************* Test if terminalSet is empty ************************* #
     try:
-        if not terminalSet:  # if terminalSet is empty
+        if not terminalSet:      # if terminalSet is empty
             log.error('Terminals calculation failed: terminalSet is empty')
             raise Exception('ERROR: Terminals calculation failed: terminalSet is empty')
+        if None in terminalSet:  # if terminalSet contains a None
+            log.error('Terminals calculation failed: terminalSet contains a None')
+            raise Exception('ERROR: Terminals calculation failed: terminalSet contains a None')
     except Exception as err:
-        tqdm.write(str(err))
+        lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+        tqdm.write(f'{str(err)}, line = {lineNm}')
         sys.exit(-1)  # exit on error; recovery not possible
     # ********************************************************************************* #
     
@@ -589,18 +594,29 @@ def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
     trainList = copy.deepcopy(buckets)  # make a copy of buckets so we don't override it
     accuracy = []                       # this will store the details about the accuracy of our hypotheses
 
-    # *** Divide them into training & test data K times ***
+    # TODO pickle isn't making a file; why?
+    # *** Open the Pickle Jar file *** #
     pth = Path.cwd() / 'jar' / 'features'  # create the file path
     try:
-        fl = open(str(pth), 'rb')
-        pickles = pickle.load(fl)
-        fl.close()
-        wasPickle = True
-    except FileNotFoundError:
-        pickles = {}
-        wasPickle = False
+
+        if os.path.isfile(str(pth)):           # if the file does exist
+            with open(str(pth), 'rb') as fl:   # try to open the file
+                pickles = pickle.load(fl)      # load the file into pickles
+            wasPickle = True                   # since we read in the file set to True
+
+        else:                                  # if the file didn't exist
+            pickles = {}                       # set pickles to be an empty dict
+            wasPickle = False                  # set wasPickle to False, since we didn't read
+    
+    except (FileNotFoundError, IOError):       # if we encountered an error while reading
+        lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+        tqdm.write(f'Pickle encountered an error while reading in the file, line = {lineNm}')
+        wasPickle = False                      # since we don't know if we read in, set to false and
+        pickles = {}                           # set pickles to empty to avoid data corruption errors
+
+    # *** Divide them into training & test data K times ***
     # loop over all the random index values
-    for r in range(0, K):  # len(r) = K so this will be done K times
+    for r in range(K):  # len(r) = K so this will be done K times
     
         # ********** Get the Training & Testing Data ********** #
         # the Rth bucket becomes our testing data, everything else becomes training data
@@ -627,19 +643,23 @@ def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
             scalar = None
     
         # ********** 3B Train the CDFC Model & Transform the Training Data using It ********** #
-        SYSOUT.write(HDR + ' Training CDFC ......')                                  # print \tab * Training CDFC ....
+        SYSOUT.write(HDR + ' Training CDFC ......')                              # print \tab * Training CDFC ....
         SYSOUT.flush()
-        if wasPickle:                                                                # if there was a saved data object
-            data = pickles[r]                                                        # read in from it
-        else:                                                                        # if there wasn't a saved data object,
-            constants = parseFile(train)                                             # parse the file to get the constants
-            relevant = {}                                                            # this will hold the relevant features found by terminals
-            for classId in constants['CLASS_IDS']:                                   # loop over all class ids
-                relevant[classId] = terminals(classId, constants)  # store the relevant features for a class using the classId as a key
-            data = (constants, relevant)
+        
+        if wasPickle:                                                            # if there was a saved data object
+            data = pickles[r]                                                    # read in from it
+        else:                                                                    # if there wasn't a saved data object,
+            constants = parseFile(train)                                         # parse the file to get the constants
+            # BUG check here that relevant & TERMINALS is being set correctly
+            # ! does the assignment below overwrite the old dict each time?
+            relevant: typ.Dict[int, typ.List[int]] = {}                          # this will hold the relevant features found by terminals
+            for classId in constants['CLASS_IDS']:                               # loop over all class ids and get the relevant features for each one
+                relevant[classId] = terminals(classId, constants)                # store the relevant features for a class using the classId as a key
+            # ! terminals contains no None values if this completes
+            data = (constants, relevant)                                         # data[0] = constants to be set, data[1] = TERMINALS
             pickles[r] = data
-            
-        CDFC_Hypothesis = cdfc(data)                              # now that we have our train & test data create our hypothesis
+
+        CDFC_Hypothesis = cdfc(data)                                             # now that we have our train & test data create our hypothesis
         SYSOUT.write(OVERWRITE + ' CDFC Trained '.ljust(50, '-') + SUCCESS)      # replace starting with complete
         
         SYSOUT.write(HDR + ' Transforming Training Data ......')                 # print
@@ -673,10 +693,14 @@ def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
         accuracy.append(accuracy_score(trueLabels, labelPrediction))
     
     if not wasPickle:  # if there wasn't a saved object, save
-        # *** Save the Features/Terminals using Pickle *** #
-        fl = open(str(pth), 'wb')              # open the file
-        pickle.dump(pickles, fl)               # pickle the dict, storing it in a file
-        fl.close()                             # close the file
+        try:  # *** Save the Features/Terminals using Pickle *** #
+            
+            with open(str(pth), 'wb') as fl:  # open the file with write binary privileges
+                pickle.dump(pickles, fl)      # pickle the dict, storing it in a file
+                
+        except FileNotFoundError:  # if the file wasn't found, and it couldn't be created
+            log.error(f'Pickle could not open or create file {pth}')         # log the error & print it
+            SYSOUT.write(f'\nPickle could not open or create file {pth}\n')  # to console, but continue
     
     # *** Return Accuracy *** #
     return accuracy

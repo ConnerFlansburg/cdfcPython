@@ -22,34 +22,30 @@ from tqdm import trange
 # TODO add testing functions
 
 # **************************** Constants/Globals **************************** #
-ALPHA: typ.Final = 0.8           # ALPHA is the fitness weight alpha
-BARCOLS = 25                     # BARCOLS is the number of columns for the progress bar to print
-CROSSOVER_RATE: typ.Final = 0.8  # CROSSOVER_RATE is the chance that a candidate will reproduce
-ELITISM_RATE: typ.Final = 1      # ELITISM_RATE is the elitism rate
-GENERATIONS: typ.Final = 50      # GENERATIONS is the number of generations the GP should run for
-MAX_DEPTH: typ.Final = 8         # MAX_DEPTH is the max depth trees are allowed to be & is used in grow/full
-MUTATION_RATE: typ.Final = 0.2   # MUTATION_RATE is the chance that a candidate will be mutated
+ALPHA: typ.Final = 0.8                        # ALPHA is the fitness weight alpha
+BARCOLS = 25                                  # BARCOLS is the number of columns for the progress bar to print
+CROSSOVER_RATE: typ.Final = 0.8               # CROSSOVER_RATE is the chance that a candidate will reproduce
+ELITISM_RATE: typ.Final = 1                   # ELITISM_RATE is the elitism rate
+GENERATIONS: typ.Final = 50                   # GENERATIONS is the number of generations the GP should run for
+MAX_DEPTH: typ.Final = 8                      # MAX_DEPTH is the max depth trees are allowed to be & is used in grow/full
+MUTATION_RATE: typ.Final = 0.2                # MUTATION_RATE is the chance that a candidate will be mutated
 # ! changes here must also be made in the tree object ! #
-OPS: typ.Final = ['add', 'subtract', 'times', 'max', 'if']  # OPS is the list of valid operations on the tree
-NUM_TERMINALS = {                # NUM_TERMINALS is a dict that, when given an OP as a key, give the number of terminals it needs
-    'add': 2,
-    'subtract': 2,
-    'times': 2,
-    'max': 2,
-    'if': 3
-}
+OPS: typ.Final = ['add', 'subtract',          # OPS is the list of valid operations on the tree
+                  'times', 'max', 'if']
+NUM_TERMINALS = {'add': 2, 'subtract': 2,     # NUM_TERMINALS is a dict that, when given an OP as a key, give the number of terminals it needs
+                 'times': 2, 'max': 2, 'if': 3}
 # ! set the value of R for every new dataset, it is NOT set automatically ! #
-TERMINALS = {}                   # TERMINALS is a dictionary that maps class ids to their relevant features
-TOURNEY: typ.Final = 7           # TOURNEY is the tournament size
-ENTROPY_OF_S = 0                 # ENTROPY_OF_S is used for entropy calculation
-FEATURE_NUMBER = 0               # FEATURE_NUMBER is the number of features in the data set
-LABEL_NUMBER = 0                 # LABEL_NUMBER is the number of classes/labels in the data
-CLASS_IDS: typ.List[int] = []    # CLASS_IDS is a list of all the unique class ids
-INSTANCES_NUMBER = 0             # INSTANCES_NUMBER is  the number of instances in the training data
-M = 0                            # M is the number of constructed features
-POPULATION_SIZE = 0              # POPULATION_SIZE is the population size
+TERMINALS: typ.Dict[int, typ.List[int]] = {}  # TERMINALS is a dictionary that maps class ids to their relevant features
+TOURNEY: typ.Final = 7                        # TOURNEY is the tournament size
+ENTROPY_OF_S = 0                              # ENTROPY_OF_S is used for entropy calculation
+FEATURE_NUMBER = 0                            # FEATURE_NUMBER is the number of features in the data set
+LABEL_NUMBER = 0                              # LABEL_NUMBER is the number of classes/labels in the data
+CLASS_IDS: typ.List[int] = []                 # CLASS_IDS is a list of all the unique class ids
+INSTANCES_NUMBER = 0                          # INSTANCES_NUMBER is  the number of instances in the training data
+M = 0                                         # M is the number of constructed features
+POPULATION_SIZE = 0                           # POPULATION_SIZE is the population size
 CL_DICTION = typ.Dict[int, typ.Dict[int, typ.List[float]]]
-CLASS_DICTS: CL_DICTION = {}     # CLASS_DICTS is a list of dicts (indexed by classId) mapping attribute values to classes
+CLASS_DICTS: CL_DICTION = {}                  # CLASS_DICTS is a list of dicts (indexed by classId) mapping attribute values to classes
 # ++++++++ console formatting strings ++++++++ #
 HDR = '*' * 6
 SUCCESS = u' \u2713\n'
@@ -372,7 +368,7 @@ class Hypothesis:
     
     def __init__(self, features, size) -> None:
         self.features: typ.List[ConstructedFeature] = features  # a list of all the constructed features
-        self.size: int = size          # the number of nodes in all the cfs
+        self.size: int = size                                   # the number of nodes in all the cfs
 
     def getFitness(self) -> float:
     
@@ -745,16 +741,22 @@ def createInitialPopulation() -> Population:
             # if no error occurred log the value found
             log.debug(f'createHypothesis found a valid classId: {name}')
 
-            if random.choice([True, False]):
+            if random.choice([True, False]):  # *** use grow *** #
                 tree, size = __grow(TERMINALS[name])  # create tree
-                sanityCheckTree(tree)                      # ! testing purposes only!
-                log.error('Population Sanity Check Pass')  # ! if tree sanity check passes then the error is in the ConstructedFeature()
-                ftrs.append(ConstructedFeature(name, tree, size))
-            else:
+                sanityCheckTree(tree)       # ! testing purposes only!
+                # ! if tree sanity check passes then the tree is fine & error is in the ConstructedFeature()
+                cf = ConstructedFeature(name, tree, size)
+                sanityCheckCF(cf)           # ! testing purposes only!
+                # ! if tree sanity check passes then the constructed feature is fine & the error is somewhere else
+                ftrs.append(cf)
+            else:                              # *** use full *** #
                 tree, size = __full(TERMINALS[name])  # create tree
-                sanityCheckTree(tree)                      # ! testing purposes only!
-                log.error('Population Sanity Check Pass')  # ! if tree sanity check passes then the error is in the ConstructedFeature()
-                ftrs.append(ConstructedFeature(name, tree, size))
+                sanityCheckTree(tree)       # ! testing purposes only!
+                # ! if tree sanity check passes then the tree is fine & error is in the ConstructedFeature()
+                cf = ConstructedFeature(name, tree, size)
+                sanityCheckCF(cf)           # ! testing purposes only!
+                # ! if tree sanity check passes then the constructed feature is fine & the error is somewhere else
+                ftrs.append(cf)
 
             size += size
             
@@ -769,11 +771,11 @@ def createInitialPopulation() -> Population:
 
     # creat a number hypotheses equal to pop size
     for __ in trange(POPULATION_SIZE, desc="Creating Initial Hypotheses", unit="hyp"):
-        hypothesis.append(createHypothesis())
-
-    sanityCheckPop(hypothesis)  # ! testing purposes only!
+        hyp = createHypothesis()  # create a Hypothesis
+        sanityCheckHyp(hyp)       # ! testing purposes only!
+        hypothesis.append(hyp)    # add the new hypothesis to the list
     
-    log.debug('The createInitialHypothesis() method has finished & is returning')
+    sanityCheckPop(hypothesis)    # ! testing purposes only!
     
     return Population(hypothesis, 0)
 
@@ -785,36 +787,26 @@ def sanityCheckPop(hypothesis: typ.List[Hypothesis]):
         h.transform(rows)
     log.debug('Population Sanity Check Pass')
 
- 
+
+# ! testing purposes only!
+def sanityCheckHyp(hyp: Hypothesis):
+    log.debug('Starting Hypothesis Sanity Check...')
+    hyp.transform()
+    log.debug('Population Hypothesis Check Pass')
+
+
+# ! testing purposes only!
+def sanityCheckCF(cf: ConstructedFeature):
+    log.debug('Starting Constructed Feature Sanity Check...')
+    cf.transform(rows[0])
+    log.debug('Constructed Feature Sanity Check Passed')
+
+
 # ! testing purposes only!
 def sanityCheckTree(tree: Tree):
     log.debug('Starting Tree Sanity Check...')
-    try:
-        # ********* Check this node for a None value ********* #
-        if tree.data is None:  # if we have reached a None value in the tree
-            raise Exception('sanityCheckTree found a None value stored in the tree')
-    
-        # ********* Walk the Tree Looking for Nones ********* #
-        else:
-            # walk left
-            if tree.left is not None:          # if there is a left child,
-                sanityCheckTree(tree.left)     # walk down it & look for Nones
-        
-            # walk right
-            if tree.right is not None:         # if there is a right child,
-                sanityCheckTree(tree.right)    # walk down it & look for Nones
-        
-            # walk middle
-            if tree.middle is not None:        # if there is a middle child,
-                sanityCheckTree(tree.middle)   # walk down it & look for Nones
-    
-    except Exception as err:                   # if a None was found
-        lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-        log.error(f'{str(err)}, line = {lineNm}')
-        tqdm.write(f'ERROR: {str(err)}, line = {lineNm}')
-        sys.exit(-1)                           # exit on error; recovery not possible
-
-    return  # if we've reached this then we've hit the bottom & and are walking back up
+    tree.runTree(rows[0].attributes)
+    log.debug('Tree Sanity Check Completed')
 
 
 def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, Hypothesis]:
