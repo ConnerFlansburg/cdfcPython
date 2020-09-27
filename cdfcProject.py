@@ -655,6 +655,7 @@ def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
             relevant: typ.Dict[int, typ.List[int]] = {}                          # this will hold the relevant features found by terminals
             for classId in constants['CLASS_IDS']:                               # loop over all class ids and get the relevant features for each one
                 relevant[classId] = terminals(classId, constants)                # store the relevant features for a class using the classId as a key
+            sanityCheckDictionary(relevant)
             # ! terminals contains no None values if this completes
             data = (constants, relevant)                                         # data[0] = constants to be set, data[1] = TERMINALS
             pickles[r] = data
@@ -705,6 +706,21 @@ def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
     # *** Return Accuracy *** #
     return accuracy
 
+
+# ! for testing purposes only!
+def sanityCheckDictionary(d: typ.Dict[int, typ.List[int]]):
+    log.debug('Starting Dictionary Sanity Check...')
+    try:
+        if None in d.values():
+            raise Exception('ERROR: buildModel() created a relevant value dictionary that includes \'None\'')
+    except Exception as err:
+        lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+        msg = f'{str(err)}, line = {lineNm}'  # create the error/log message
+        log.error(msg)
+        tqdm.write(msg)
+        traceback.print_stack()
+        sys.exit(-1)  # exit on error; recovery not possible
+    log.debug('Dictionary Sanity Check Passed')
 
 def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> ModelList:
     # NOTE adding more models requires updating the Models type at top of file
@@ -761,7 +777,8 @@ def main() -> None:
 
     SYSOUT.write(f"{OVERWRITE} File {inPath.name} found ".ljust(57, '-') + SUCCESS)
 
-    useNormalize = messagebox.askyesno('CDFC - Transformations', 'Do you want to transform the data before using it?', parent=parent)  # Yes / No
+    # useNormalize = messagebox.askyesno('CDFC - Transformations', 'Do you want to transform the data before using it?', parent=parent)  # Yes / No
+    useNormalize = True  # use during debugging to make runs faster
     
     # *** Read the file into a numpy 2d array *** #
     SYSOUT.write(HDR + ' Reading in .csv file...')  # update user
