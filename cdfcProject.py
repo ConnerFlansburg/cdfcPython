@@ -722,6 +722,7 @@ def sanityCheckDictionary(d: typ.Dict[int, typ.List[int]]):
         sys.exit(-1)  # exit on error; recovery not possible
     log.debug('Dictionary Sanity Check Passed')
 
+
 def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> ModelList:
     # NOTE adding more models requires updating the Models type at top of file
     # hdr, overWrite, & success are just used to format string for the console
