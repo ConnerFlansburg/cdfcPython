@@ -15,9 +15,8 @@ from tqdm import tqdm
 from tqdm import trange
 
 # ! Next Steps
-# TODO look over createInitialPopulation & try to fix bug in run tree
+# TODO fix the exit code -1073741571 error in evolution (is it stack overflow?)
 
-# TODO write code for the if function in OPS
 # TODO add docstrings
 # TODO add testing functions
 
@@ -151,7 +150,7 @@ class Tree:
     def setRight(self, right):
         self.left = right
         
-    def getLeft(self):
+    def getLeft(self) -> "Tree":
         try:
             if self.left is None:
                 raise Exception('Tree tried to access a child that didn\'t exist')
@@ -163,7 +162,7 @@ class Tree:
             traceback.print_stack()
             sys.exit(-1)  # exit on error; recovery not possible
         
-    def getRight(self):
+    def getRight(self) -> "Tree":
         try:
             if self.right is None:
                 raise Exception('Tree tried to access a child that didn\'t exist')
@@ -175,7 +174,7 @@ class Tree:
             traceback.print_stack()
             sys.exit(-1)  # exit on error; recovery not possible
             
-    def getMiddle(self):
+    def getMiddle(self) -> "Tree":
         try:
             if self.middle is None:
                 raise Exception('Tree tried to access a child that didn\'t exist')
@@ -193,76 +192,60 @@ class Tree:
         return self.__runNode(featureValues)
 
     def __runNode(self, featureValues: typ.Dict[int, float]) -> typ.Union[int, float]:
-        
-        # BUG somehow +,-,*, and min() are being called on None type objects.
-        # !     The error is exists after initial pop generation, so it must be in there & not in evolution
 
         # + Try creating a unit test for this, grow, & full
         # if the node is an operation both of it's branches should have operations or terminals
         # either way calling __runNode() won't return a None
         log.debug('Attempting to run __runNode method...')
         try:
-            if self.data in OPS:  # if this tree's node is a valid operation, then execute it
-                # ! error gets into here so so data must be in OPS
-                log.debug('self.data was found in OPS...')
-
-                lft = self.getLeft().__runNode(featureValues)
-                rgt = self.getRight().__runNode(featureValues)
+            if self.data not in OPS:  # if the node isn't in OPS, then it should be a terminal
+    
+                # *************************** Error Checking *************************** #
+                if math.isnan(self.data):             # if the value stored is a NaN
+                    log.error(f'NaN stored in tree. Expect OPS value or number, got {self.data}')
+                    raise Exception(f'ERROR: NaN stored in tree. Expect OPS value or number, got {self.data}')
                 
-                # if one child is None, but not both
-                if (lft is None and rgt is not None) or (rgt is None and lft is not None):
+                if featureValues[self.data] is None:  # if the value stored is a None
+                    raise Exception('featureValues contained a None at index self.data')
+                # ********************************************************************** #
+                
+                return featureValues[self.data]  # if the terminal is valid, return it
+            
+            else:  # if this node is an operation, find which one & start recursion
+    
+                # *********************************** Error Checking ****************** #
+                if self.left is None and self.right is not None:    # if one child is None, but not both
                     raise Exception('runNode found a node in OPS with 1 \'None\' child')
-                if lft is None and rgt is None:  # if both children are None
-                    raise Exception('runNode found a node in OPS with 2 \'None\' children')
-
-                # find out which operation it is & return it's value
-                if self.data == 'add':
-                    vl = lft + rgt
-                    return vl
-        
-                elif self.data == 'subtract':
-                    vl = lft - rgt
-                    return vl
                 
-                elif self.data == 'if':
-                    if lft >= 0:
-                        vl = rgt
+                elif self.right is None and self.left is not None:  # if one child is None, but not both
+                    raise Exception('runNode found a node in OPS with 1 \'None\' child')
+                
+                if self.left is None and self.right is None:        # if both children are None
+                    raise Exception('runNode found a node in OPS with 2 \'None\' children')
+                
+                if self.data == 'if' and self.middle is None:       # if the OP is IF and it has no middle
+                    raise Exception('runNode found a node with a IF OP and no middle node')
+                # ********************************************************************** #
+                
+                # *************** Determine Which OP is Stored & Run Recursion *************** #
+                if self.data == 'add':         # if the OP was add
+                    vl = self.left.__runNode(featureValues) + self.right.__runNode(featureValues)
+                    return vl
+                elif self.data == 'subtract':  # if the OP was subtract
+                    vl = self.left.__runNode(featureValues) - self.right.__runNode(featureValues)
+                    return vl
+                elif self.data == 'times':     # if the OP was multiplication
+                    vl = self.left.__runNode(featureValues) * self.right.__runNode(featureValues)
+                    return vl
+                elif self.data == 'max':       # if the OP was max
+                    vl = max(self.left.__runNode(featureValues), self.right.__runNode(featureValues))
+                    return vl
+                elif self.data == 'if':        # if the OP was if
+                    if self.left.__runNode(featureValues) >= 0:
+                        vl = self.right.__runNode(featureValues)
                     else:
                         vl = self.getMiddle().__runNode(featureValues)
                     return vl
-    
-                elif self.data == 'times':
-                    vl = lft * rgt
-                    return vl
-                
-                elif self.data == 'min':
-                    vl = min(lft, rgt)
-                    return vl
-
-            # if the node is not an operation than it should be a terminal index. So using it on featureValues
-            # should return a float or an int (the value of some feature in an instance) not a None
-            # if the node is not an operation and is a number, then it should be a terminal index
-            # so check if it's a valid value. If so return the value
-            elif self.data in range(FEATURE_NUMBER):
-                log.debug(f'__runNode found the feature value {featureValues[self.data]} in a node')
-                
-                if featureValues[self.data] is None:
-                    raise Exception('featureValues contained a None at index self.data')
-                
-                return featureValues[self.data]
-            
-            # if the data stored is not in OPS, not in feature range, and is not a number raise an exception
-            elif math.isnan(self.data):
-                log.error(f'NaN stored in tree. Expect OPS value or number, got {self.data}')
-                raise Exception(f'ERROR: NaN stored in tree. Expect OPS value or number, got {self.data}')
-            # if the data stored is null, raise exception
-            elif not (self.data in range(FEATURE_NUMBER)):
-                msg = f'Data stored in tree is not a relevant feature index. Expect OPS value or number, got {self.data}'
-                log.error(msg)
-                raise Exception('ERROR: ' + msg)
-            else:  # if the values is not in OPS, not in feature range, is a number, and is not none throw exception
-                log.error(f'Value stored in tree is invalid. value = {self.data}')
-                raise Exception(f'ERROR: Value stored in tree is invalid. value = {self.data}')
             
         except IndexError:
             lineNm = sys.exc_info()[-1].tb_lineno    # print line number error occurred on
@@ -327,6 +310,8 @@ class ConstructedFeature:
         self.tree = tree                              # the root node of the constructed feature
         self.size = size                              # the individual size  # TODO set size
         self.relevantFeatures = TERMINALS[className]  # holds the indexes of the relevant features
+        # ! if tree sanity check passes then the constructed feature is fine & the error is somewhere else
+        # sanityCheckCF(self)  # ! testing purposes only!
 
     def getUsedFeatures(self) -> typ.List[int]:
     
@@ -377,7 +362,7 @@ class Hypothesis:
     maxInfoGain: typ.Union[float, int] = -1      # the max info gain in the hypothesis
     # + averageInfoGain & maxInfoGain must be low enough that they will always be overwritten + #
     
-    def __init__(self, features, size) -> None:
+    def __init__(self, features: typ.List[ConstructedFeature], size: int) -> None:
         self.features: typ.List[ConstructedFeature] = features  # a list of all the constructed features
         self.size: int = size                                   # the number of nodes in all the cfs
 
@@ -594,10 +579,11 @@ class Hypothesis:
         # so we should use rows (the provided training data)
         if data is None:
     
+            # TODO remove progress bar, it doesn't print right inside of another bar
             # create progress bar that loops over rows
-            rowBar = tqdm(rows, desc='Transforming as part of the distance calculation', ncols=BARCOLS)
+            # rowBar = tqdm(rows, desc='Transforming as part of the distance calculation', ncols=BARCOLS)
             
-            for r in rowBar:  # for each Instance
+            for r in rows:  # for each Instance
                 values = []   # this will hold the calculated values for all the constructed features
 
                 for f in self.features:            # transform the original input using each constructed feature
@@ -615,10 +601,11 @@ class Hypothesis:
         # if data is not None then we are predicting using an evolved model so we should use data
         # (this will be testing data from cdfcProject.py)
         else:
+    
+            # TODO remove progress bar, it doesn't print right inside of another bar
+            # bar = tqdm(data, desc='Transforming as part of evolution', ncols=BARCOLS)  # create progress bar
             
-            bar = tqdm(data, desc='Transforming as part of evolution', ncols=BARCOLS)  # create progress bar
-            
-            for d in bar:    # for each Instance
+            for d in data:    # for each Instance
                 values = []  # this will hold the calculated values for all the constructed features
                 
                 for f in self.features:            # transform the original input using each constructed feature
@@ -681,11 +668,12 @@ def __grow(relevantValues: typ.List[int], depth: int = 0) -> typ.Tuple[Tree, int
                 mdl, middleDepth = __grow(relevantValues, depth)   # grow the right terminal or operation tree
                 newTree = Tree(value, lft, rgt, mdl)               # create the new tree
                 totalDepth = leftDepth + rightDepth + middleDepth  # update total size
-            
+
+            # sanityCheckTree(newTree)    # ! testing purposes only!
+            # ! if tree sanity check passes then the tree is fine & error is in the ConstructedFeature()
             return newTree, totalDepth  # after the recursive calls have finished return the tree
 
 
-# BUG full is creating a Tree with OPs that do not have terminals
 def __full(relevantFeatures: typ.List[int], depth: int = 0) -> typ.Tuple[Tree, int]:
     # This function uses the full method to generate an initial population
     # the last thing returned should be a trees root node
@@ -713,13 +701,13 @@ def __full(relevantFeatures: typ.List[int], depth: int = 0) -> typ.Tuple[Tree, i
             mdl, middleDepth = __full(relevantFeatures, depth)  # grow the right terminal or operation tree
             newTree = Tree(value, lft, rgt, mdl)                # create the new tree
             totalDepth = leftDepth + rightDepth + middleDepth   # update total size
-    
+
+        # sanityCheckTree(newTree)    # ! testing purposes only!
         return newTree, totalDepth  # after the recursive calls have finished return the tree
 
 
 def createInitialPopulation() -> Population:
     
-    # TODO look for bug causing error in tree
     def createHypothesis() -> Hypothesis:
         # given a list of trees, create a hypothesis
         # NOTE this will make 1 tree for each feature, and 1 CF for each class
@@ -729,8 +717,9 @@ def createInitialPopulation() -> Population:
 
         ftrs: typ.List[ConstructedFeature] = []
         size = 0
-        
-        for nll in range(LABEL_NUMBER):  # ? is label number the correct constant?
+
+        # ? should this be LABEL_NUMBER or FEATURE_NUMBER
+        for nll in range(LABEL_NUMBER):
             # randomly decide if grow or full should be used.
             # Also randomly assign the class ID then remove that ID
             # so each ID may only be used once
@@ -751,26 +740,14 @@ def createInitialPopulation() -> Population:
                 log.error(str(err))
                 tqdm.write(f'ERROR: {str(err)}, line {lineNm}')
                 sys.exit(-1)                           # exit on error; recovery not possible
-            # ! DEBUG if we pass this point we know that name is valid
-            # if no error occurred log the value found
-            log.debug(f'createHypothesis found a valid classId: {name}')
+            # DEBUG if we pass this point we know that name is valid
 
-            if random.choice([True, False]):  # *** use grow *** #
-                tree, size = __grow(TERMINALS[name])  # create tree
-                sanityCheckTree(tree)       # ! testing purposes only!
-                # ! if tree sanity check passes then the tree is fine & error is in the ConstructedFeature()
-                cf = ConstructedFeature(name, tree, size)
-                sanityCheckCF(cf)           # ! testing purposes only!
-                # ! if tree sanity check passes then the constructed feature is fine & the error is somewhere else
-                ftrs.append(cf)
-            else:                              # *** use full *** #
-                tree, size = __full(TERMINALS[name])  # create tree
-                sanityCheckTree(tree)       # ! testing purposes only!
-                # ! if tree sanity check passes then the tree is fine & error is in the ConstructedFeature()
-                cf = ConstructedFeature(name, tree, size)
-                sanityCheckCF(cf)           # ! testing purposes only!
-                # ! if tree sanity check passes then the constructed feature is fine & the error is somewhere else
-                ftrs.append(cf)
+            if random.choice([True, False]):           # *** use grow *** #
+                tree, size = __grow(TERMINALS[name])   # create tree using grow
+            else:                                      # *** use full *** #
+                tree, size = __full(TERMINALS[name])   # create tree using full
+            cf = ConstructedFeature(name, tree, size)  # create constructed feature
+            ftrs.append(cf)                            # add the feature to the list of features
 
             size += size
             
@@ -786,14 +763,15 @@ def createInitialPopulation() -> Population:
     # creat a number hypotheses equal to pop size
     for __ in trange(POPULATION_SIZE, desc="Creating Initial Hypotheses", unit="hyp"):
         hyp = createHypothesis()  # create a Hypothesis
-        sanityCheckHyp(hyp)       # ! testing purposes only!
+        # sanityCheckHyp(hyp)       # ! testing purposes only!
         hypothesis.append(hyp)    # add the new hypothesis to the list
     
-    sanityCheckPop(hypothesis)    # ! testing purposes only!
+    # sanityCheckPop(hypothesis)    # ! testing purposes only!
     
     return Population(hypothesis, 0)
 
 
+# ********** Sanity Check Functions used for Debugging ********** #
 # ! testing purposes only!
 def sanityCheckPop(hypothesis: typ.List[Hypothesis]):
     log.debug('Starting Population Sanity Check...')
@@ -821,6 +799,7 @@ def sanityCheckTree(tree: Tree):
     log.debug('Starting Tree Sanity Check...')
     tree.runTree(rows[0].attributes)
     log.debug('Tree Sanity Check Passed')
+# *************************************************************** #
 
 
 def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, Hypothesis]:
@@ -859,7 +838,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
     # ******************* Evolution ******************* #
     newPopulation = Population([], population.generation+1)  # create a new population with no hypotheses
     
-    def getSubtree(ftr: Tree, terms: typ.List[int]) -> typ.Tuple[Tree, typ.Tuple[Tree, str]]:
+    def getSubtree(ftr: Tree, terms: typ.List[int]) -> typ.Tuple[Tree, typ.Tuple[Tree, Tree]]:
         # walk the tree & find a random subtree for feature
         # TODO calculate size during this first walk
 
@@ -868,10 +847,6 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         
             # make a random decision
             choice = random.choice(["left", "right", "stop"])
-        
-            # *** Error checking *** #
-            if ftr.data in terms and ftr.left is None and ftr.right is None:
-                raise Exception('getSubTree found a terminal node with children')
             
             if choice == "stop" or ftr.data in terms:
                 break  # if we chose stop or if we have encountered a terminal, break
@@ -897,7 +872,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
                 oldFeature = ftr
                 ftr = ftr.right  # if we chose right & right isn't None, go right
         
-        return ftr, (oldFeature, decide)  # return the subtree, and the parent tree
+        return ftr, (oldFeature, oldFeature)  # return the subtree, and the parent tree
     
     # while the new population has fewer hypotheses than the max pop size
     while (len(newPopulation.candidateHypotheses)-1) < POPULATION_SIZE:
@@ -910,13 +885,10 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             # parent is from a copy of population made by tournament, NOT original pop
             parent: Hypothesis = __tournament(population)  # get parent hypothesis using tournament
             
-            # get a random feature from the hypothesis, where M is the number of constructed features
-            featureIndex = random.choice(range(M))
-            
-            # get the indexes of the terminal values (for the feature)
-            terminal: typ.List[int] = parent.features[featureIndex].relevantFeatures
-            # get the tree (for the feature)
-            feature: Tree = parent.features[featureIndex].tree
+            rIndex: int = random.choice(range(len(parent.features)))     # get a random index
+            randomFeature: ConstructedFeature = parent.features[rIndex]  # use the random index to get a feature from the hypothesis
+            terminal: typ.List[int] = randomFeature.relevantFeatures     # get the indexes of the terminal values (for the feature)
+            feature: Tree = randomFeature.tree                           # get the tree (for the feature)
 
             # randomly select a subtree in feature
             while True:  # walk the tree & find a random subtree
@@ -926,7 +898,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
                 if decide == "choose" or feature.data in terminal:
                     break
                 
-                elif decide == "left":     # go left
+                elif decide == "left":   # go left
                     feature = feature.left
 
                 elif decide == "right":  # go right
@@ -941,9 +913,9 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             else:  # use full
                 t, size = __full(terminal)  # build the subtree
                 
-            cl = parent.features[featureIndex].className                     # get the className of the feature
-            parent.features[featureIndex] = ConstructedFeature(cl, t, size)  # replace the parent with the mutated child
-            newPopulation.candidateHypotheses.append(parent)                 # add the parent to the new pop
+            cl = randomFeature.className                                # get the className of the feature
+            parent.features[rIndex] = ConstructedFeature(cl, t, size)   # replace the parent with the mutated child
+            newPopulation.candidateHypotheses.append(parent)            # add the parent to the new pop
             # appending is needed because parent is a copy made by tournament NOT a reference from the original pop
         # ************* End of Mutation ************* #
 
@@ -960,20 +932,16 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             while parent1 is parent2:
                 parent2 = __tournament(population)
 
-            # get a random feature from each parent, where M is the number of constructed features
-            featureIndex: int = random.choice(range(M))
-
             # feature 1
-            # get the indexes of the terminal values (for the feature)
-            terminals1: typ.List[int] = parent1.features[featureIndex].relevantFeatures
-            # get the tree (for the feature)
-            feature1: Tree = parent1.features[featureIndex].tree
+            randomFeature: ConstructedFeature = random.choice(parent1.features)  # get a random feature from the parent
+            terminals1: typ.List[int] = randomFeature.relevantFeatures           # get the indexes of the terminal values (for the feature)
+            feature1: Tree = randomFeature.tree                                  # get the tree (for the feature)
             
+            # ? should I get a new random feature or make sure they have the same classId? I don't think so
             # feature 2
-            # get the indexes of the terminal values (for the feature)
-            terminals2: typ.List[int] = parent2.features[featureIndex].relevantFeatures
-            # get the tree (for the feature)
-            feature2: Tree = parent2.features[featureIndex].tree
+            randomFeature = random.choice(parent2.features)             # get a random feature from the parent
+            terminals2: typ.List[int] = randomFeature.relevantFeatures  # get the indexes of the terminal values (for the feature)
+            feature2: Tree = randomFeature.tree                         # get the tree (for the feature)
 
             # *************** Find the Two Sub-Trees **************** #
             subTree1, parentTree1 = getSubtree(feature1, terminals1)

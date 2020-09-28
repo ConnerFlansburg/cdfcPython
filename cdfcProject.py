@@ -655,7 +655,7 @@ def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
             relevant: typ.Dict[int, typ.List[int]] = {}                          # this will hold the relevant features found by terminals
             for classId in constants['CLASS_IDS']:                               # loop over all class ids and get the relevant features for each one
                 relevant[classId] = terminals(classId, constants)                # store the relevant features for a class using the classId as a key
-            sanityCheckDictionary(relevant)
+            # sanityCheckDictionary(relevant)
             # ! terminals contains no None values if this completes
             data = (constants, relevant)                                         # data[0] = constants to be set, data[1] = TERMINALS
             pickles[r] = data
