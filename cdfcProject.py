@@ -109,7 +109,8 @@ def parseFile(train: np.ndarray):
     
     # set global variables using the now transformed data
     # each line in train will be an instances
-    for line in tqdm(train, desc="Setting Global Variables", ncols=25):
+    SYSOUT.write(HDR + ' Setting global variables...')
+    for line in train:
         
         # parse the file
         name = line[0]
@@ -226,7 +227,8 @@ def parseFile(train: np.ndarray):
     except Exception as err:
         SYSOUT.write(str(err) + f'\n constants = {constants}, \n feature num = {FEATURE_NUMBER}, \n'
                                 f'class ids = {CLASS_IDS}, \n pop size = {POPULATION_SIZE}, \n')
-    
+
+    SYSOUT.write(OVERWRITE + ' Global variables set '.ljust(50, '-') + SUCCESS)
     return constants
 
 
@@ -643,7 +645,7 @@ def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
             scalar = None
     
         # ********** 3B Train the CDFC Model & Transform the Training Data using It ********** #
-        SYSOUT.write(HDR + ' Training CDFC ......')                              # print \tab * Training CDFC ....
+        SYSOUT.write('\n' + HDR + ' Training CDFC ......\n')                       # print \tab * Training CDFC ....
         SYSOUT.flush()
         
         if wasPickle:                                                            # if there was a saved data object

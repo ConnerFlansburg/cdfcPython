@@ -12,10 +12,11 @@ import traceback
 
 import numpy as np
 from tqdm import tqdm
-from tqdm import trange
+from alive_progress import alive_bar, config_handler
 
 # ! Next Steps
-# TODO fix the exit code -1073741571 error in evolution (is it stack overflow?)
+# TODO fix the exit code -1073741571 error in evolution
+#  + is it stack overflow? it occurs during the setSize function
 
 # TODO add docstrings
 # TODO add testing functions
@@ -73,20 +74,24 @@ class Instance:
                 raise Exception('Tried to create an Instance obj with a None feature value')
         except Exception as err:
             log.error(str(err))
-            tqdm.write(str(err))
+            print(str(err))
             traceback.print_stack()           # print stack trace so we know how None is reaching Instance
             sys.exit(-1)                      # exit on error; recovery not possible
 
+
+sys.setrecursionlimit(10000)
 
 rows: typ.List[Instance] = []  # this will store all of the records read in (the training dat) as a list of rows
 
 np.seterr(divide='ignore')  # suppress divide by zero warnings from numpy
 warnings.filterwarnings('ignore', message='invalid value encountered in true_divide')
 
+config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars')  # the global config for the loading bars
+
 # create the file path for the log file & configure the logger
 logPath = str(Path.cwd() / 'logs' / 'cdfc.log')
-# log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
-log.basicConfig(level=log.ERROR, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
+log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
+# log.basicConfig(level=log.ERROR, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
 
 profiler = cProfile.Profile()                       # create a profiler to profile cdfc during testing
 statsPath = str(Path.cwd() / 'logs' / 'stats.log')  # set the file path that the profiled info will be stored at
@@ -132,7 +137,7 @@ class Tree:
             lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
             msg = f'{str(err)}, line = {lineNm}'   # create the error/log message
             log.error(msg)                         # log the error
-            tqdm.write(msg)                        # print error to console
+            print(msg)                        # print error to console
             traceback.print_stack()                # print stack trace so we know how None is reaching tree
             sys.exit(-1)                           # exit on error; recovery not possible
 
@@ -158,7 +163,7 @@ class Tree:
                 return self.left
         except Exception as err:
             log.error(str(err))
-            tqdm.write(str(err))
+            print(str(err))
             traceback.print_stack()
             sys.exit(-1)  # exit on error; recovery not possible
         
@@ -170,7 +175,7 @@ class Tree:
                 return self.right
         except Exception as err:
             log.error(str(err))
-            tqdm.write(str(err))
+            print(str(err))
             traceback.print_stack()
             sys.exit(-1)  # exit on error; recovery not possible
             
@@ -182,7 +187,7 @@ class Tree:
                 return self.middle
         except Exception as err:
             log.error(str(err))
-            tqdm.write(str(err))
+            print(str(err))
             traceback.print_stack()
             sys.exit(-1)  # exit on error; recovery not possible
         
@@ -250,27 +255,31 @@ class Tree:
         except IndexError:
             lineNm = sys.exc_info()[-1].tb_lineno    # print line number error occurred on
             log.error(f'Index stored in tree was in range but did not exist. Value stored was:{self.data}, line = {lineNm}')
-            tqdm.write(f'ERROR: Index stored in tree was in range but did not exist. Value stored was:{self.data}, line = {lineNm}')
+            print(f'ERROR: Index stored in tree was in range but did not exist. Value stored was:{self.data}, line = {lineNm}')
             sys.exit(-1)  # exit on error; recovery not possible
         except Exception as err:
             lineNm = sys.exc_info()[-1].tb_lineno    # print line number error occurred on
-            tqdm.write(str(err) + f', line = {lineNm}')
+            print(str(err) + f', line = {lineNm}')
             traceback.print_stack()
             sys.exit(-1)  # exit on error; recovery not possible
 
     def setSize(self, counter) -> int:
-
+        # BUG this is what is causing the exit code error
         counter += 1  # increment the counter
 
         leftCount = 0
         rightCount = 0
+        
+        if self.data not in OPS:  # if this is a terminal node
+            return counter
 
-        if self.left:                               # if the left node is not null,
-            leftCount = self.left.setSize(counter)  # then call recursively
+        else:  # if this isn't a terminal walk the tree
+            if self.left:                                 # if the left node is not null,
+                leftCount = self.left.setSize(counter)    # then call recursively
 
-        if self.right:                                # if the right node is not null,
-            rightCount = self.right.setSize(counter)  # then call recursively
-
+            if self.right:                                # if the right node is not null,
+                rightCount = self.right.setSize(counter)  # then call recursively
+        
         # add the size of the left subtree to the right subtree to get the size
         # of everything below this node. Then return it up the recursive stack
         self.size = leftCount + rightCount
@@ -341,7 +350,7 @@ class ConstructedFeature:
         except Exception as err:
             lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
             log.error(f'The getUsedFeatures found no features (values list is empty), line number = {lineNm}')
-            tqdm.write(str(err) + f', line = {lineNm}')
+            print(str(err) + f', line = {lineNm}')
             sys.exit(-1)  # exit on error; recovery not possible
 
     def transform(self, instance: Instance) -> float:
@@ -350,7 +359,9 @@ class ConstructedFeature:
         return self.tree.runTree(featureValues)
 
     def setSize(self):
+        log.debug('Starting setSize function on Tree')
         self.size = self.tree.setSize(0)  # call getSize on the root of the tree
+        log.debug('Completed setSize function on Tree')
         return
 
 
@@ -388,7 +399,7 @@ class Hypothesis:
                     raise Exception(f'ERROR: In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
             except Exception as err:
                 lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-                tqdm.write(str(err) + f', line = {lineNm}')
+                print(str(err) + f', line = {lineNm}')
                 sys.exit(-1)  # recovery impossible, exit with an error
             # ******************************************************************** #
 
@@ -399,7 +410,7 @@ class Hypothesis:
             # + Vi & Vj are lists of the instances from the original data, that have been transformed
             # + by the hypothesis.
             try:
-                # TODO error is likely here
+
                 for i, j in zip(Vi, Vj):                    # zip Vi & Vj so that we can iterate in parallel
                     
                     # **************************************** Error Checking **************************************** #
@@ -419,17 +430,26 @@ class Hypothesis:
                     top: typ.Union[int, float] = min(i, j)  # get the top of the fraction
                     bottom: typ.Union[int, float] = i + j   # get the bottom of the fraction
                     minSum += top                           # the top of the fraction
+                    # ! addsum is zero a lot of the time
                     addSum += bottom                        # the bottom of the fraction
             
-                # BUG unsupported operand type(s) for *: 'float' and 'NoneType' -- possibly because of the error in tree
-                value = 1 - ((2*minSum) / addSum)           # capture the return value
+                if addSum == 0:  # BUG this attempts to divide by zero a lot; check that this is okay
+                    raise RuntimeWarning('ERROR: Czekanowski attempted to divide by zero')
+                else:
+                    value = 1 - ((2*minSum) / addSum)           # capture the return value
             
+            except RuntimeWarning as err:
+                log.error(str(err))
+                # lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+                # print(str(err) + f', line = {lineNm}')
+                value = 0                              # attempt recovery
+
             except Exception as err:
                 lineNm = sys.exc_info()[-1].tb_lineno       # print line number error occurred on
                 log.error(str(err))
-                tqdm.write(str(err) + f', line = {lineNm}')
+                print(str(err) + f', line = {lineNm}')
                 sys.exit(-1)                                # recovery impossible, exit with error
-            
+
             log.debug('Finished Czekanowski() method')
             
             return value
@@ -565,7 +585,6 @@ class Hypothesis:
         # ********* Finish Calculation ********* #
 
         log.debug('Finished getFitness() method')
-        
         return final
 
     # NOTE: this is the function used by cdfcProject
@@ -579,10 +598,6 @@ class Hypothesis:
         # so we should use rows (the provided training data)
         if data is None:
     
-            # TODO remove progress bar, it doesn't print right inside of another bar
-            # create progress bar that loops over rows
-            # rowBar = tqdm(rows, desc='Transforming as part of the distance calculation', ncols=BARCOLS)
-            
             for r in rows:  # for each Instance
                 values = []   # this will hold the calculated values for all the constructed features
 
@@ -601,11 +616,8 @@ class Hypothesis:
         # if data is not None then we are predicting using an evolved model so we should use data
         # (this will be testing data from cdfcProject.py)
         else:
-    
-            # TODO remove progress bar, it doesn't print right inside of another bar
-            # bar = tqdm(data, desc='Transforming as part of evolution', ncols=BARCOLS)  # create progress bar
             
-            for d in data:    # for each Instance
+            for d in data:   # for each Instance
                 values = []  # this will hold the calculated values for all the constructed features
                 
                 for f in self.features:            # transform the original input using each constructed feature
@@ -733,12 +745,12 @@ def createInitialPopulation() -> Population:
             except IndexError:                         # if classIds.pop() tried to pop an empty list, log error & exit
                 lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
                 log.error(f'Index error encountered in createInitialPopulation (popped from an empty list), line {lineNm}')
-                tqdm.write(f'ERROR: Index error encountered in createInitialPopulation (popped from an empty list), line {lineNm}')
+                print(f'ERROR: Index error encountered in createInitialPopulation (popped from an empty list), line {lineNm}')
                 sys.exit(-1)                           # exit on error; recovery not possible
             except Exception as err:                   # if class ids some how gave an invalid name
                 lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
                 log.error(str(err))
-                tqdm.write(f'ERROR: {str(err)}, line {lineNm}')
+                print(f'ERROR: {str(err)}, line {lineNm}')
                 sys.exit(-1)                           # exit on error; recovery not possible
             # DEBUG if we pass this point we know that name is valid
 
@@ -761,10 +773,12 @@ def createInitialPopulation() -> Population:
     hypothesis: typ.List[Hypothesis] = []
 
     # creat a number hypotheses equal to pop size
-    for __ in trange(POPULATION_SIZE, desc="Creating Initial Hypotheses", unit="hyp"):
-        hyp = createHypothesis()  # create a Hypothesis
-        # sanityCheckHyp(hyp)       # ! testing purposes only!
-        hypothesis.append(hyp)    # add the new hypothesis to the list
+    with alive_bar(POPULATION_SIZE, title="Creating Initial Hypotheses") as bar:  # declare your expected total
+        for __ in range(POPULATION_SIZE):  # iterate as usual
+            hyp = createHypothesis()       # create a Hypothesis
+            # sanityCheckHyp(hyp)          # ! testing purposes only!
+            hypothesis.append(hyp)         # add the new hypothesis to the list
+            bar()
     
     # sanityCheckPop(hypothesis)    # ! testing purposes only!
     
@@ -814,7 +828,9 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             randomIndex = random.choice(range(len(candidates)))   # get a random index value
             candidate: Hypothesis = candidates.pop(randomIndex)   # get the hypothesis at the random index
             # we pop here to avoid getting duplicates. The index uses candidates current size so it will be in range
+            log.debug('Making getFitness method call in Tournament')
             fitness = candidate.getFitness()                      # get that hypothesis's fitness score
+            log.debug('Finished getFitness method call in Tournament')
 
             if first is None:      # if first has not been set,
                 first = candidate  # then  set it
@@ -829,9 +845,10 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         except Exception as err:
             lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
             log.error(f'Tournament could not set first correctly, first = {first}, line number = {lineNm}')
-            tqdm.write(str(err) + f', line = {lineNm}')
+            print(str(err) + f', line = {lineNm}')
             sys.exit(-1)  # exit on error; recovery not possible
         
+        log.debug('Finished Tournament method')
         return first
         # ************ End of Tournament Selection ************* #
 
@@ -884,6 +901,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             
             # parent is from a copy of population made by tournament, NOT original pop
             parent: Hypothesis = __tournament(population)  # get parent hypothesis using tournament
+            log.debug('Finished Tournament method call in evolve')
             
             rIndex: int = random.choice(range(len(parent.features)))     # get a random index
             randomFeature: ConstructedFeature = parent.features[rIndex]  # use the random index to get a feature from the hypothesis
@@ -926,7 +944,6 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             # because of this they should not be viewed as references
             parent1: Hypothesis = __tournament(population)
             parent2: Hypothesis = __tournament(population)
-            
             #  check that each parent is unique
             # if they are the same they should reference the same object & so 'is' is used instead of ==
             while parent1 is parent2:
@@ -942,10 +959,9 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             randomFeature = random.choice(parent2.features)             # get a random feature from the parent
             terminals2: typ.List[int] = randomFeature.relevantFeatures  # get the indexes of the terminal values (for the feature)
             feature2: Tree = randomFeature.tree                         # get the tree (for the feature)
-
+            
             # *************** Find the Two Sub-Trees **************** #
             subTree1, parentTree1 = getSubtree(feature1, terminals1)
-
             subTree2, parentTree2 = getSubtree(feature2, terminals2)
             # ******************************************************* #
             
@@ -955,7 +971,6 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
                 parentTree1[0].left = subTree2   # then replace the left with subTree 2
             else:                                # if subTree 1 went right to find the subTree
                 parentTree1[0].right = subTree2  # then replace the right with subTree 2
-            
             # update the second parent tree
             if parentTree2[1] == 'left':         # if subTree 2 went left to find the subTree
                 parentTree2[0].left = subTree1   # then replace the left with subTree 1
@@ -965,20 +980,25 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
 
             # TODO change the size calculation so that we only walk the tree once
             # get the size of the new constructed features by walking the trees
+            log.debug('Crossover is attempting to set the size for the new parents')
+            # BUG this is what is causing the exit code error
             parent1.setSize()
             parent2.setSize()
-
+            log.debug('Crossover completed setting the size for the new parents')
+            
             # parent 1 & 2 are both hypotheses and should have been changed in place,
             # but they refer to a copy made in tournament so add them to the new pop
             newPopulation.candidateHypotheses.append(parent1)
             newPopulation.candidateHypotheses.append(parent2)
             # **************** End of Crossover **************** #
     
-            # handle elitism
-            newHypothFitness = newPopulation.candidateHypotheses[-1].getFitness()
-            if newHypothFitness > elite.getFitness():
-                elite = newPopulation.candidateHypotheses[-1]
-                
+        # handle elitism
+        newHypothFitness = newPopulation.candidateHypotheses[-1].getFitness()
+        if newHypothFitness > elite.getFitness():
+            elite = newPopulation.candidateHypotheses[-1]
+        log.debug('Starting getFitness call in Evolution as part of elitism')
+    
+    print('Evolution Done')
     return newPopulation, elite
 
 
@@ -1015,16 +1035,20 @@ def cdfc(dataIn) -> Hypothesis:
     # *********************** Run the Algorithm *********************** #
 
     currentPopulation = createInitialPopulation()     # run initialPop
+    SYSOUT.write(HDR + ' Initial population generated '.ljust(50, '-') + SUCCESS)
     # currentPopulation = createInitialPopulation()   # create initial population
     elite = currentPopulation.candidateHypotheses[0]  # init elitism
 
     # loop, evolving each generation. This is where most of the work is done
     log.debug('Starting generations stage...')
-    for __ in trange(GENERATIONS, desc="CDFC Generations", unit="gen"):
-        newPopulation, elite = evolve(currentPopulation, elite)  # generate a new population by evolving the old one
-        # update currentPopulation to hold the new population
-        # this is done in two steps to avoid potential namespace issues
-        currentPopulation = newPopulation
+    with alive_bar(GENERATIONS, title="Generations") as bar:  # declare your expected total
+        for __ in range(GENERATIONS):  # iterate as usual
+            newPopulation, elite = evolve(currentPopulation, elite)  # generate a new population by evolving the old one
+            # update currentPopulation to hold the new population
+            # this is done in two steps to avoid potential namespace issues
+            currentPopulation = newPopulation
+            bar()
+            
     log.debug('Finished evolution stage')
     SYSOUT.write(HDR + ' Final Generation Reached '.ljust(50, '-') + SUCCESS)  # update user
     # ***************************************************************** #
