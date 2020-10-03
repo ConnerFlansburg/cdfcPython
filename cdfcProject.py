@@ -54,8 +54,8 @@ logPath = str(Path.cwd() / 'logs' / 'cdfc.log')
 log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
 # ******************************************** Constants used for Writing ******************************************** #
 HDR = '*' * 6
-SUCCESS = u' \u2713\n'
-OVERWRITE = '\r' + HDR
+SUCCESS = u' \u2713\n'+'\033[0m'     # print the checkmark & reset text color
+OVERWRITE = '\r' + '\033[32m' + HDR  # overwrite previous text & set the text color to green
 SYSOUT = sys.stdout
 # ****************************************** Constants used by Type Hinting ****************************************** #
 K: typ.Final[int] = 10  # set the K for k fold cross validation
@@ -69,6 +69,9 @@ ScalarsIn = typ.Union[None, StandardScaler]
 # TODO get CDFC working & use it to reduce data
 # TODO add doc strings
 # TODO add more unit tests
+
+
+def printError(err): print("\033[91m {}\033[00m" .format(err))  # used for coloring error message red
 
 
 class Instance:
@@ -121,7 +124,7 @@ def parseFile(train: np.ndarray):
             if np.isnan(name):  # if it isn't a number
                 raise Exception(f'ERROR: Parser expected an integer, got a NaN of value:{line[0]}')
             elif not (type(name) is int):  # if it is a number, but not an integer
-                log.debug(f'Parser expected an integer class ID, got a float: {line[0]}')
+                # log.debug(f'Parser expected an integer class ID, got a float: {line[0]}')
                 name = int(name)  # caste to int
         except ValueError:  # if casting failed
             lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
@@ -396,7 +399,7 @@ def terminals(classId: int, constants) -> typ.List[int]:
                                    The list will have a length of FEATURE_NUMBER/2, and will
                                    hold the indexes of the features.
     """
-    log.debug('Starting terminals() method')
+    # log.debug('Starting terminals() method')
     
     FEATURE_NUMBER = constants['FEATURE_NUMBER']
     
@@ -588,6 +591,14 @@ def __fillBuckets(entries: np.ndarray) -> typ.List[typ.List[np.ndarray]]:
 
 
 def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
+    
+    # determine the type of model we are using for printing later
+    if type(model) == KNeighborsClassifier:
+        mType = 'KNN'
+    elif type(model) == GaussianNB:
+        mType = 'Naive Bayes'
+    else:
+        mType = 'Decision Tree'
 
     # *** Loop over our buckets K times, each time running creating a new hypothesis *** #
     oldR = 0                            # used to remember previous r in loop
@@ -602,6 +613,7 @@ def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
     try:
 
         if os.path.isfile(str(pth)):           # if the file does exist
+            print(f'{HDR} Reading in pickle file ......')
             with open(str(pth), 'rb') as fl:   # try to open the file
                 pickles = pickle.load(fl)      # load the file into pickles
             wasPickle = True                   # since we read in the file set to True
@@ -612,7 +624,7 @@ def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
     
     except (FileNotFoundError, IOError):       # if we encountered an error while reading
         lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-        tqdm.write(f'Pickle encountered an error while reading in the file, line = {lineNm}')
+        print(f'Pickle encountered an error while reading in the file, line = {lineNm}')
         wasPickle = False                      # since we don't know if we read in, set to false and
         pickles = {}                           # set pickles to empty to avoid data corruption errors
 
@@ -645,8 +657,8 @@ def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
             scalar = None
     
         # ********** 3B Train the CDFC Model & Transform the Training Data using It ********** #
-        SYSOUT.write('\n' + HDR + ' Training CDFC ......\n')                       # print \tab * Training CDFC ....
-        SYSOUT.flush()
+
+        SYSOUT.write(f"\nTraining CDFC for {mType}...\n")  # update user
         
         if wasPickle:                                                            # if there was a saved data object
             data = pickles[r]                                                    # read in from it
@@ -731,39 +743,26 @@ def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> ModelList:
     # accuracy is a float list, each value is the accuracy for a single run
     
     # ***** create a set of K buckets filled with our instances ***** #
-    SYSOUT.write("\nBuilding buckets...\n")  # update user
+    SYSOUT.write("\nBuilding buckets...")  # update user
     buckets = __fillBuckets(entries)  # using the parsed data, fill the k buckets (once for all models)
-    SYSOUT.write("Buckets built\n\n")  # update user
-
-    SYSOUT.write("\nBuilding models...\n")  # update user
+    SYSOUT.write(OVERWRITE + " Buckets built ".ljust(50, '-') + SUCCESS)  # update user
     
     # ************ Kth Nearest Neighbor Classifier ************ #
-    SYSOUT.write(HDR + ' KNN model starting ......')                        # print \tab * KNN model starting......
-    SYSOUT.flush()                                                          # since there's no newline push buffer to console
     knnAccuracy: typ.List[float] = __buildModel(buckets, KNeighborsClassifier(n_neighbors=3), useNormalize)  # build the model
-    SYSOUT.write(OVERWRITE+' KNN model completed '.ljust(50, '-')+SUCCESS)  # replace starting with complete
 
     # ************ Decision Tree Classifier ************ #
-    SYSOUT.write(HDR + ' Decision Tree model starting ......')              # print \tab * dt model starting......
-    SYSOUT.flush()                                                          # since there's no newline push buffer to console
     dtAccuracy: typ.List[float] = __buildModel(buckets, DecisionTreeClassifier(random_state=0), useNormalize)  # build the model
-    SYSOUT.write(OVERWRITE +                                                # replace starting with complete
-                 ' Decision Tree model built '.ljust(50, '-') + SUCCESS)
 
     # ************ Gaussian Classifier (Naive Bayes) ************ #
-    SYSOUT.write(HDR + ' Naive Bayes model starting ......')                # print \tab * nb model starting......
-    SYSOUT.flush()                                                          # since there's no newline push buffer to console
     nbAccuracy: typ.List[float] = __buildModel(buckets, GaussianNB(), useNormalize)       # build the model
-    SYSOUT.write(OVERWRITE +                                                # replace starting with complete
-                 ' Naive Bayes model built '.ljust(50, '-') + SUCCESS)
     
-    SYSOUT.write("Models built\n\n")  # update user
+    SYSOUT.write("Models run\n\n")  # update user
 
     return knnAccuracy, dtAccuracy, nbAccuracy
 
 
 def main() -> None:
-    SYSOUT.write(Figlet(font='larry3d').renderText('C D F C'))  # formatted start up message
+    SYSOUT.write(Figlet(font='larry3d').renderText('C D f C'))  # formatted start up message
     SYSOUT.write("Program Initialized Successfully\n")
     
     parent = tk.Tk()            # prevent root window caused by Tkinter
@@ -778,7 +777,7 @@ def main() -> None:
         sys.stderr.write(f"\n{HDR} Permission Denied, or No File was Selected\nExiting......")  # exit gracefully
         sys.exit("Could not access file/No file was selected")
 
-    SYSOUT.write(f"{OVERWRITE} File {inPath.name} found ".ljust(57, '-') + SUCCESS)
+    SYSOUT.write(f"{OVERWRITE} File {inPath.name} found ".ljust(60, '-') + SUCCESS)
 
     # useNormalize = messagebox.askyesno('CDFC - Transformations', 'Do you want to transform the data before using it?', parent=parent)  # Yes / No
     useNormalize = True  # use during debugging to make runs faster
@@ -787,7 +786,7 @@ def main() -> None:
     SYSOUT.write(HDR + ' Reading in .csv file...')  # update user
     entries = np.genfromtxt(inPath, delimiter=',', skip_header=1)  # + this line is used to read .csv files
     SYSOUT.write(OVERWRITE + ' .csv file read in successfully '.ljust(50, '-') + SUCCESS)  # update user
-    SYSOUT.write('\rFile Found & Loaded Successfully\n')  # update user
+    SYSOUT.write('\r\033[32mFile Found & Loaded Successfully\033[00m\n')                   # update user
     
     # *** Build the Models *** #
     modelsTuple = __runSciKitModels(entries, useNormalize)  # knnAccuracy, dtAccuracy, nbAccuracy

@@ -1,4 +1,4 @@
-import cProfile
+# import cProfile
 import collections as collect
 import copy
 import logging as log
@@ -15,10 +15,9 @@ from tqdm import tqdm
 from alive_progress import alive_bar, config_handler
 
 # ! Next Steps
-# TODO fix the exit code -1073741571 error in evolution
-#  + is it stack overflow? it occurs during the setSize function
-
+# TODO fix the error in crossover (it's swapping None values)
 # TODO add docstrings
+
 # TODO add testing functions
 
 # **************************** Constants/Globals **************************** #
@@ -48,10 +47,30 @@ CL_DICTION = typ.Dict[int, typ.Dict[int, typ.List[float]]]
 CLASS_DICTS: CL_DICTION = {}                  # CLASS_DICTS is a list of dicts (indexed by classId) mapping attribute values to classes
 # ++++++++ console formatting strings ++++++++ #
 HDR = '*' * 6
-SUCCESS = u' \u2713\n'
-OVERWRITE = '\r' + HDR
+SUCCESS = u' \u2713\n'+'\033[0m'     # print the checkmark & reset text color
+OVERWRITE = '\r' + '\033[32m' + HDR  # overwrite previous text & set the text color to green
 SYSOUT = sys.stdout
 # ++++++++++++++++++++++++++++++++++++++++++++ #
+# +++++++++++++++ configurations & file paths +++++++++++++++ #
+sys.setrecursionlimit(10000)                                 # set the recursion limit for the program
+
+np.seterr(divide='ignore')                                   # suppress divide by zero warnings from numpy
+suppressMessage = 'invalid value encountered in true_divide'  # suppress the divide by zero error from Python
+warnings.filterwarnings('ignore', message=suppressMessage)
+
+config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', title_length=0, length=13)  # the global config for the loading bars
+# config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', force_tty=True, title_length=0, length=10)  # the global config for the loading bars
+
+logPath = str(Path.cwd() / 'logs' / 'cdfc.log')              # create the file path for the log file & configure the logger
+log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
+# log.basicConfig(level=log.ERROR, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
+
+# profiler = cProfile.Profile()                               # create a profiler to profile cdfc during testing
+# statsPath = str(Path.cwd() / 'logs' / 'stats.log')          # set the file path that the profiled info will be stored at
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
+
+
+def printError(err): print("\033[91m {}\033[00m" .format(err))  # used for coloring error message red
 # ************************ End of Constants/Globals ************************ #
 
 # ********************** Namespaces/Structs & Objects ***********************
@@ -74,27 +93,12 @@ class Instance:
                 raise Exception('Tried to create an Instance obj with a None feature value')
         except Exception as err:
             log.error(str(err))
-            print(str(err))
+            printError(str(err))
             traceback.print_stack()           # print stack trace so we know how None is reaching Instance
             sys.exit(-1)                      # exit on error; recovery not possible
 
 
-sys.setrecursionlimit(10000)
-
 rows: typ.List[Instance] = []  # this will store all of the records read in (the training dat) as a list of rows
-
-np.seterr(divide='ignore')  # suppress divide by zero warnings from numpy
-warnings.filterwarnings('ignore', message='invalid value encountered in true_divide')
-
-config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars')  # the global config for the loading bars
-
-# create the file path for the log file & configure the logger
-logPath = str(Path.cwd() / 'logs' / 'cdfc.log')
-log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
-# log.basicConfig(level=log.ERROR, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
-
-profiler = cProfile.Profile()                       # create a profiler to profile cdfc during testing
-statsPath = str(Path.cwd() / 'logs' / 'stats.log')  # set the file path that the profiled info will be stored at
 
 
 class Tree:
@@ -117,7 +121,8 @@ class Tree:
     """
     
     def __init__(self, data: typ.Union[str, int], left: typ.Union[None, "Tree"] = None,
-                 right: typ.Union[None, "Tree"] = None, middle: typ.Union[None, "Tree"] = None,) -> None:
+                 right: typ.Union[None, "Tree"] = None, middle: typ.Union[None, "Tree"] = None,
+                 size: typ.Union[int, None] = None) -> None:
 
         # *********************** Error Checking *********************** #
         try:
@@ -137,7 +142,7 @@ class Tree:
             lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
             msg = f'{str(err)}, line = {lineNm}'   # create the error/log message
             log.error(msg)                         # log the error
-            print(msg)                        # print error to console
+            printError(msg)                        # print error to console
             traceback.print_stack()                # print stack trace so we know how None is reaching tree
             sys.exit(-1)                           # exit on error; recovery not possible
 
@@ -146,8 +151,10 @@ class Tree:
         self.left = left
         self.right = right
         self.middle = middle
-        self.size = None             # initialize size to 0 & then call setSize to set it
-        self.size = self.setSize(0)  # ? every time that we create a tree we call seSize, does this create too much overhead?
+        if size is not None:            # if size was passed use it rather than setSize()
+            self.size = size            # this will save us from having to walk the tree more time
+        else:                           # if size wasn't passed call setSize()
+            self.size = self.setSize()  # TODO check that this works with new setSize
         
     def setLeft(self, left):
         self.left = left
@@ -163,7 +170,7 @@ class Tree:
                 return self.left
         except Exception as err:
             log.error(str(err))
-            print(str(err))
+            printError(str(err))
             traceback.print_stack()
             sys.exit(-1)  # exit on error; recovery not possible
         
@@ -175,7 +182,7 @@ class Tree:
                 return self.right
         except Exception as err:
             log.error(str(err))
-            print(str(err))
+            printError(str(err))
             traceback.print_stack()
             sys.exit(-1)  # exit on error; recovery not possible
             
@@ -187,7 +194,7 @@ class Tree:
                 return self.middle
         except Exception as err:
             log.error(str(err))
-            print(str(err))
+            printError(str(err))
             traceback.print_stack()
             sys.exit(-1)  # exit on error; recovery not possible
         
@@ -201,13 +208,12 @@ class Tree:
         # + Try creating a unit test for this, grow, & full
         # if the node is an operation both of it's branches should have operations or terminals
         # either way calling __runNode() won't return a None
-        log.debug('Attempting to run __runNode method...')
         try:
             if self.data not in OPS:  # if the node isn't in OPS, then it should be a terminal
     
                 # *************************** Error Checking *************************** #
                 if math.isnan(self.data):             # if the value stored is a NaN
-                    log.error(f'NaN stored in tree. Expect OPS value or number, got {self.data}')
+                    log.error(f'NaN stored in tree. ExpectParser expected an integer class ID, got a float: 1.0 OPS value or number, got {self.data}')
                     raise Exception(f'ERROR: NaN stored in tree. Expect OPS value or number, got {self.data}')
                 
                 if featureValues[self.data] is None:  # if the value stored is a None
@@ -259,31 +265,54 @@ class Tree:
             sys.exit(-1)  # exit on error; recovery not possible
         except Exception as err:
             lineNm = sys.exc_info()[-1].tb_lineno    # print line number error occurred on
-            print(str(err) + f', line = {lineNm}')
+            printError(str(err) + f', line = {lineNm}')
             traceback.print_stack()
             sys.exit(-1)  # exit on error; recovery not possible
 
-    def setSize(self, counter) -> int:
-        # BUG this is what is causing the exit code error
-        counter += 1  # increment the counter
-
-        leftCount = 0
-        rightCount = 0
+    def setSize(self) -> int:
         
-        if self.data not in OPS:  # if this is a terminal node
-            return counter
-
-        else:  # if this isn't a terminal walk the tree
-            if self.left:                                 # if the left node is not null,
-                leftCount = self.left.setSize(counter)    # then call recursively
-
-            if self.right:                                # if the right node is not null,
-                rightCount = self.right.setSize(counter)  # then call recursively
+        if self.data not in OPS:               # if we have reached a terminal tree node
+            self.size = 1                      # set size to 1, because there are no children
         
-        # add the size of the left subtree to the right subtree to get the size
-        # of everything below this node. Then return it up the recursive stack
-        self.size = leftCount + rightCount
-        return self.size
+        else:                                  # if we haven't reached a terminal tree node yet,
+            
+            if NUM_TERMINALS[self.data] == 2:  # if the OP isn't an IF and only has 2 children
+                # add left & right branches to get everything below, then +1 for the current node
+                self.size = self.left.setSize() + self.right.setSize() + 1
+            
+            else:                              # if the OP is an IF and has a middle add it as well
+                # add left, right, & middle branches to get everything below, then +1 for the current node
+                self.size = self.left.setSize() + self.right.setSize() + self.middle.setSize() + 1
+        
+        return self.size                       # send the new size up the recursive "stack"
+
+    def updateSize(self, swapped: str) -> None:
+        # this is used to update the size of a tree after crossover
+        # ********************************** Error Checking ********************************** #
+        if swapped == 'left' and self.left is None:        # check that the swapped value is valid
+            raise Exception('Crossover failed to set the size of the new tree (left is None)')
+        elif swapped == 'right' and self.right is None:    # check that the swapped value is valid
+            raise Exception('Crossover failed to set the size of the new tree (right is None)')
+        elif swapped == 'middle' and self.middle is None:  # check that the swapped value is valid
+            raise Exception('Crossover failed to set the size of the new tree (middle is None)')
+        
+        if self.left is None:                              # if left is None, set to zero
+            lft = 0                                        # this is used as an alias so we can error check left
+        else:                                              # if left is not None get size
+            lft = self.left.size
+        
+        if self.right is None:                             # if right is None, set to zero
+            rgt = 0                                        # this is used as an alias so we can error check right
+        else:                                              # if right is not None get size
+            rgt = self.right.size
+
+        if self.middle is None:                            # if middle is None, set to zero
+            mdl = 0                                        # this is used as an alias so we can error check middle
+        else:                                              # if middle is not None get size
+            mdl = self.middle.size
+        # ************************************************************************************* #
+        self.size = 1 + lft + rgt + mdl                    # update the size of this tree
+        return
 
 
 class ConstructedFeature:
@@ -314,10 +343,10 @@ class ConstructedFeature:
     usedFeatures = None       # the relevant features the cf actually uses
     transformedValues = None  # the values data after they have been transformed by the tree
 
-    def __init__(self, className: int, tree: Tree, size: int = 0) -> None:
+    def __init__(self, className: int, tree: Tree, size: int) -> None:
         self.className = className                    # the name of the class this tree is meant to distinguish
         self.tree = tree                              # the root node of the constructed feature
-        self.size = size                              # the individual size  # TODO set size
+        self.size = size                              # the individual size (the size of the tree)
         self.relevantFeatures = TERMINALS[className]  # holds the indexes of the relevant features
         # ! if tree sanity check passes then the constructed feature is fine & the error is somewhere else
         # sanityCheckCF(self)  # ! testing purposes only!
@@ -350,19 +379,13 @@ class ConstructedFeature:
         except Exception as err:
             lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
             log.error(f'The getUsedFeatures found no features (values list is empty), line number = {lineNm}')
-            print(str(err) + f', line = {lineNm}')
+            printError(str(err) + f', line = {lineNm}')
             sys.exit(-1)  # exit on error; recovery not possible
 
     def transform(self, instance: Instance) -> float:
         # Send the tree a list of all the attribute values in a single instance
         featureValues: typ.Dict[int, float] = instance.attributes
         return self.tree.runTree(featureValues)
-
-    def setSize(self):
-        log.debug('Starting setSize function on Tree')
-        self.size = self.tree.setSize(0)  # call getSize on the root of the tree
-        log.debug('Completed setSize function on Tree')
-        return
 
 
 class Hypothesis:
@@ -379,10 +402,10 @@ class Hypothesis:
 
     def getFitness(self) -> float:
     
-        log.debug('Starting getFitness() method')
+        # log.debug('Starting getFitness() method')
         
         def __Czekanowski(Vi: typ.List[float], Vj: typ.List[float]) -> float:
-            log.debug('Starting Czekanowski() method')
+            # log.debug('Starting Czekanowski() method')
 
             # ************************** Error checking ************************** #
             # BUG Vi & Vj are [None, None]
@@ -399,7 +422,7 @@ class Hypothesis:
                     raise Exception(f'ERROR: In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
             except Exception as err:
                 lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-                print(str(err) + f', line = {lineNm}')
+                printError(str(err) + f', line = {lineNm}')
                 sys.exit(-1)  # recovery impossible, exit with an error
             # ******************************************************************** #
 
@@ -438,8 +461,8 @@ class Hypothesis:
                 else:
                     value = 1 - ((2*minSum) / addSum)           # capture the return value
             
-            except RuntimeWarning as err:
-                log.error(str(err))
+            except RuntimeWarning:
+                # log.error(str(err))
                 # lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
                 # print(str(err) + f', line = {lineNm}')
                 value = 0                              # attempt recovery
@@ -447,16 +470,16 @@ class Hypothesis:
             except Exception as err:
                 lineNm = sys.exc_info()[-1].tb_lineno       # print line number error occurred on
                 log.error(str(err))
-                print(str(err) + f', line = {lineNm}')
+                printError(str(err) + f', line = {lineNm}')
                 sys.exit(-1)                                # recovery impossible, exit with error
 
-            log.debug('Finished Czekanowski() method')
+            # log.debug('Finished Czekanowski() method')
             
             return value
 
         def Distance(values: typ.List[Instance]):
     
-            log.debug('Starting Distance() method')
+            # log.debug('Starting Distance() method')
             
             # NOTE these must be high/low enough that it is always reset
             # NOTE these will be replaced when higher/lower values are found, they will NOT be added to
@@ -488,13 +511,13 @@ class Hypothesis:
             Db *= (1 / len(values))  # multiply by 1/|S|
             Dw *= (1 / len(values))  # multiply by 1/|S|
 
-            log.debug('Finished Distance() method')
+            # log.debug('Finished Distance() method')
             
             return 1 / (1 + math.pow(math.e, -5*(Db - Dw)))
 
         def __entropy(partition: typ.List[Instance]) -> float:
     
-            log.debug('Starting entropy() method')
+            # log.debug('Starting entropy() method')
             
             p: typ.Dict[int, int] = {}   # p[classId] = number of instances in the class in the partition sv
             for i in partition:          # for instance i in a partition sv
@@ -510,13 +533,13 @@ class Hypothesis:
                 pi = p[c] / len(partition)
                 calc -= pi * math.log(pi, 2)
 
-            log.debug('Finished entropy() method')
+            # log.debug('Finished entropy() method')
 
             return calc
 
         def __conditionalEntropy(feature: ConstructedFeature) -> float:
     
-            log.debug('Starting conditionalEntropy() method')
+            # log.debug('Starting conditionalEntropy() method')
 
             # this is a feature struct that will be used to store feature values
             # with their indexes/IDs in CFs
@@ -547,7 +570,7 @@ class Hypothesis:
             for e in partition.keys():
                 s += (len(partition[e])/INSTANCES_NUMBER) * __entropy(partition[e])
 
-            log.debug('Finished conditionalEntropy() method')
+            # log.debug('Finished conditionalEntropy() method')
 
             return s  # s holds the conditional entropy value
 
@@ -584,13 +607,13 @@ class Hypothesis:
         final = term1 + term2 - term3
         # ********* Finish Calculation ********* #
 
-        log.debug('Finished getFitness() method')
+        # log.debug('Finished getFitness() method')
         return final
 
     # NOTE: this is the function used by cdfcProject
     def transform(self, data: typ.Union[None, np.array] = None) -> np.array:
     
-        log.debug('Starting transform() method')
+        # log.debug('Starting transform() method')
         
         transformed = []  # this will hold the transformed values
         
@@ -609,7 +632,7 @@ class Hypothesis:
                 vls = dict(zip(range(len(values)), values))  # create a dict of the values keyed by their index
                 transformed.append(Instance(r.className, vls))
 
-            log.debug('Finished transform() method')
+            # log.debug('Finished transform() method')
 
             return transformed  # return the list of all instances
 
@@ -628,13 +651,9 @@ class Hypothesis:
                 vls = dict(zip(range(len(values)), values))  # create a dict of the values keyed by their index
                 transformed.append(Instance(d.className, vls))
 
-            log.debug('Finished transform() method')
+            # log.debug('Finished transform() method')
 
             return transformed  # return the list of all instances
-
-    def setSize(self) -> None:
-        for i in self.features:
-            i.setSize()
 
 
 class Population:
@@ -645,7 +664,7 @@ class Population:
 # ***************** End of Namespaces/Structs & Objects ******************* #
 
 
-def __grow(relevantValues: typ.List[int], depth: int = 0) -> typ.Tuple[Tree, int]:
+def __grow(classId: int, depth: int = 0) -> typ.Tuple[Tree, int]:
     # This function uses the grow method to generate an initial population
     # the last thing returned should be a trees root node
     if int == 0:  # only print to log on first call
@@ -653,42 +672,45 @@ def __grow(relevantValues: typ.List[int], depth: int = 0) -> typ.Tuple[Tree, int
 
     depth += 1  # increase the depth by one
 
+    terminals = TERMINALS[classId]
     if depth == MAX_DEPTH:  # if we've reached the max depth add a random terminal value and return
-        return Tree(random.choice(relevantValues)), depth
+        return Tree(random.choice(terminals)), depth
     
-    else:
-        # unpack the list of terminals & operations, and then combine them
-        ls: typ.List[typ.Union[int, str]] = [*OPS[:], *relevantValues]
-
-        value: typ.Union[int, str] = random.choice(ls)   # get a random value from the combined list
-    
-        if value in relevantValues:     # if a terminal value was chosen
-            return Tree(value), depth   # create a new tree & return it
+    else:  # since we have not reached the max depth, decide to add a terminal or a operation
         
-        else:  # if the value was not a terminal value, then grow both children
-            
-            # change the below to an elif if more than 2/3 terminals are needed
-            if NUM_TERMINALS[value] == 2:                          # if the number of terminals needed is two
-                lft, leftDepth = __grow(relevantValues, depth)     # grow the left terminal or operation tree
-                rgt, rightDepth = __grow(relevantValues, depth)    # grow the right terminal or operation tree
-                newTree = Tree(value, lft, rgt)                    # create the new tree
-                totalDepth = leftDepth + rightDepth                # update total size
-                
-            else:                                                  # if the number of terminals needed is three
-                lft, leftDepth = __grow(relevantValues, depth)     # grow the left terminal or operation tree
-                rgt, rightDepth = __grow(relevantValues, depth)    # grow the right terminal or operation tree
-                mdl, middleDepth = __grow(relevantValues, depth)   # grow the right terminal or operation tree
-                newTree = Tree(value, lft, rgt, mdl)               # create the new tree
-                totalDepth = leftDepth + rightDepth + middleDepth  # update total size
+        termOrOp: str = random.choice(['OP', 'TERM'])  # randomly choose to add an OP or a terminal
+        
+        # *************************** A Terminal was Chosen *************************** #
+        if termOrOp == 'TERM':                                         # if we chose to add a terminal
+            value: int = random.choice(terminals)                      # pick a random terminal
+            return Tree(value), depth                                  # create a new tree & return it
+        
+        # *************************** A Operation was Chosen *************************** #
+        else:                                                          # if we chose to add an operation
+            value: str = random.choice(OPS)                            # pick a random Operation
+
+            if NUM_TERMINALS[value] == 2:                              # if the number of terminals needed is two
+                lft, leftDepth = __grow(classId, depth)                # grow the left terminal or operation tree
+                rgt, rightDepth = __grow(classId, depth)               # grow the right terminal or operation tree
+                totalDepth = leftDepth + rightDepth                    # update total size
+                newTree = Tree(value, lft, rgt, size=totalDepth)       # create the new tree
+
+            else:  # if the number of terminals needed is three
+                lft, leftDepth = __grow(classId, depth)                # grow the left terminal or operation tree
+                rgt, rightDepth = __grow(classId, depth)               # grow the right terminal or operation tree
+                mdl, middleDepth = __grow(classId, depth)              # grow the right terminal or operation tree
+                totalDepth = leftDepth + rightDepth + middleDepth      # update total size
+                newTree = Tree(value, lft, rgt, mdl, size=totalDepth)  # create the new tree
 
             # sanityCheckTree(newTree)    # ! testing purposes only!
             # ! if tree sanity check passes then the tree is fine & error is in the ConstructedFeature()
             return newTree, totalDepth  # after the recursive calls have finished return the tree
 
 
-def __full(relevantFeatures: typ.List[int], depth: int = 0) -> typ.Tuple[Tree, int]:
+def __full(classId: int, depth: int = 0) -> typ.Tuple[Tree, int]:
     # This function uses the full method to generate an initial population
     # the last thing returned should be a trees root node
+
     if int == 0:  # only print to log on first call
         log.debug('The __full method has been chosen to build a tree')
 
@@ -696,23 +718,23 @@ def __full(relevantFeatures: typ.List[int], depth: int = 0) -> typ.Tuple[Tree, i
 
     if depth == MAX_DEPTH:  # if we've reached the max depth add a random terminal value and return
         # this tree should store a terminal, so no children should be created
-        return Tree(random.choice(relevantFeatures)), depth
+        return Tree(random.choice(TERMINALS[classId])), depth
     
     else:  # if we haven't reached the max depth, we should create a tree with an OP
-        value = random.choice(OPS)                             # select a random operation
+        value = random.choice(OPS)                                 # select a random operation
         
-        if NUM_TERMINALS[value] == 2:                          # if the number of terminals needed is two
-            lft, leftDepth = __full(relevantFeatures, depth)   # grow the left terminal or operation tree
-            rgt, rightDepth = __full(relevantFeatures, depth)  # grow the right terminal or operation tree
-            newTree = Tree(value, lft, rgt)                    # create a new tree with Value (an operation) as it's data
-            totalDepth = leftDepth + rightDepth                # update total size
+        if NUM_TERMINALS[value] == 2:                              # if the number of terminals needed is two
+            lft, leftDepth = __full(classId, depth)                # grow the left terminal or operation tree
+            rgt, rightDepth = __full(classId, depth)               # grow the right terminal or operation tree
+            totalDepth = leftDepth + rightDepth                    # update total size
+            newTree = Tree(value, lft, rgt, size=totalDepth)       # create a new tree with Value (an operation) as it's data
 
-        else:                                                   # if the number of terminals needed is three
-            lft, leftDepth = __full(relevantFeatures, depth)    # grow the left terminal or operation tree
-            rgt, rightDepth = __full(relevantFeatures, depth)   # grow the right terminal or operation tree
-            mdl, middleDepth = __full(relevantFeatures, depth)  # grow the right terminal or operation tree
-            newTree = Tree(value, lft, rgt, mdl)                # create the new tree
-            totalDepth = leftDepth + rightDepth + middleDepth   # update total size
+        else:                                                      # if the number of terminals needed is three
+            lft, leftDepth = __full(classId, depth)                # grow the left terminal or operation tree
+            rgt, rightDepth = __full(classId, depth)               # grow the right terminal or operation tree
+            mdl, middleDepth = __full(classId, depth)              # grow the right terminal or operation tree
+            totalDepth = leftDepth + rightDepth + middleDepth      # update total size
+            newTree = Tree(value, lft, rgt, mdl, size=totalDepth)  # create the new tree
 
         # sanityCheckTree(newTree)    # ! testing purposes only!
         return newTree, totalDepth  # after the recursive calls have finished return the tree
@@ -750,14 +772,14 @@ def createInitialPopulation() -> Population:
             except Exception as err:                   # if class ids some how gave an invalid name
                 lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
                 log.error(str(err))
-                print(f'ERROR: {str(err)}, line {lineNm}')
+                printError(f'ERROR: {str(err)}, line {lineNm}')
                 sys.exit(-1)                           # exit on error; recovery not possible
             # DEBUG if we pass this point we know that name is valid
 
             if random.choice([True, False]):           # *** use grow *** #
-                tree, size = __grow(TERMINALS[name])   # create tree using grow
+                tree, size = __grow(name)   # create tree using grow
             else:                                      # *** use full *** #
-                tree, size = __full(TERMINALS[name])   # create tree using full
+                tree, size = __full(name)   # create tree using full
             cf = ConstructedFeature(name, tree, size)  # create constructed feature
             ftrs.append(cf)                            # add the feature to the list of features
 
@@ -773,7 +795,7 @@ def createInitialPopulation() -> Population:
     hypothesis: typ.List[Hypothesis] = []
 
     # creat a number hypotheses equal to pop size
-    with alive_bar(POPULATION_SIZE, title="Creating Initial Hypotheses") as bar:  # declare your expected total
+    with alive_bar(POPULATION_SIZE, title="Initial Hypotheses") as bar:  # declare your expected total
         for __ in range(POPULATION_SIZE):  # iterate as usual
             hyp = createHypothesis()       # create a Hypothesis
             # sanityCheckHyp(hyp)          # ! testing purposes only!
@@ -828,9 +850,9 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             randomIndex = random.choice(range(len(candidates)))   # get a random index value
             candidate: Hypothesis = candidates.pop(randomIndex)   # get the hypothesis at the random index
             # we pop here to avoid getting duplicates. The index uses candidates current size so it will be in range
-            log.debug('Making getFitness method call in Tournament')
+            # log.debug('Making getFitness method call in Tournament')
             fitness = candidate.getFitness()                      # get that hypothesis's fitness score
-            log.debug('Finished getFitness method call in Tournament')
+            # log.debug('Finished getFitness method call in Tournament')
 
             if first is None:      # if first has not been set,
                 first = candidate  # then  set it
@@ -842,30 +864,48 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         try:
             if first is None:
                 raise Exception(f'ERROR: Tournament could not set first correctly, first = {first}')
-        except Exception as err:
-            lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-            log.error(f'Tournament could not set first correctly, first = {first}, line number = {lineNm}')
-            print(str(err) + f', line = {lineNm}')
+        except Exception as err2:
+            lineNm2 = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+            log.error(f'Tournament could not set first correctly, first = {first}, line number = {lineNm2}')
+            print(str(err2) + f', line = {lineNm2}')
             sys.exit(-1)  # exit on error; recovery not possible
         
-        log.debug('Finished Tournament method')
+        # log.debug('Finished Tournament method')
+        bar.text('found parent')  # ! for debugging
         return first
         # ************ End of Tournament Selection ************* #
 
     # ******************* Evolution ******************* #
-    newPopulation = Population([], population.generation+1)  # create a new population with no hypotheses
+    # create a new population with no hypotheses (made here crossover & mutate can access it)
+    newPopulation = Population([], population.generation+1)
     
-    def getSubtree(ftr: Tree, terms: typ.List[int]) -> typ.Tuple[Tree, typ.Tuple[Tree, Tree]]:
+    def getSubtree(ftr: Tree, terms: typ.List[int]) -> typ.Tuple[Tree, Tree, str]:
         # walk the tree & find a random subtree for feature
-        # TODO calculate size during this first walk
-
-        oldFeature: Tree = ftr
+        # TODO change logic so ftr & parentFtr are different
+        lastChoice: typ.Union[str, None] = None
+        choice: typ.Union[str, None] = None
+        parentFtr: typ.Union[Tree, None] = None
+        isFirstLoop: bool = True
         while True:
-        
-            # make a random decision
-            choice = random.choice(["left", "right", "stop"])
             
-            if choice == "stop" or ftr.data in terms:
+            if not isFirstLoop:      # if it's not the 1st loop,
+                lastChoice = choice  # save the previous choice
+
+            # ************ Make a Random Choice ************ #
+            listOfChoices = ['left', 'right', 'middle', 'stop']  # default list of choices. Reset this on every iteration
+            if ftr.data == 'if':                                 # if the operation stored in the current node is an if
+                listOfChoices.append('middle')                   # add 'middle' to the list of choices
+            if ftr.left is None:                                 # if there is no left child
+                listOfChoices.remove('left')                     # then remove 'left' so we don't go down it
+            if ftr.right is None:                                # if there is no right child
+                listOfChoices.remove('right')                    # then remove 'right' so we don't go down it
+            if isFirstLoop:                                      # if it's the first iteration
+                listOfChoices.remove('stop')                     # remove the 'stop' option (this prevents randomly build a subtree of size 1)
+            choice = random.choice(listOfChoices)                # make the random choice using the built list
+            
+            # ********* Check if We Should Stop Walking the Tree ********* #
+            if choice == "stop" or ftr.data in terms:  # ! this is the only valid way of breaking, since all OPs should have children
+                # ! this is the issue. For some reason the first ftr is often a terminal (a tree of size 1)
                 break  # if we chose stop or if we have encountered a terminal, break
                 
             elif choice == "left" and ftr.left is None:
@@ -873,132 +913,204 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         
             elif choice == "right" and ftr.right is None:
                 break  # if choose to go right but there isn't a right, break
-        
-            # NOTE: the code below is used to prevent a singular terminal node from being a valid subtree
-            # elif choice == "left" and ftr.left.data in terms:
-            #     break  # if we try to go left, but left is a terminal, break
-        
-            # elif choice == "right" and ftr.right.data in terms:
-            #     break  # if we try to go right, but right is a terminal, break
-        
+                
+            elif choice == "middle" and ftr.middle is None:
+                break  # if choose to go middle but there isn't a middle, break
+
+            # *************** Continue Walking the Tree *************** #
             elif choice == "left" and ftr.left is not None:
-                oldFeature = ftr  # ? will this be overwritten on next step?
-                ftr = ftr.left  # if we chose left & left isn't None, go left
+                parentFtr = ftr   # save the old feature
+                ftr = ftr.left    # if we chose left & left isn't None, go left
         
             elif choice == "right" and ftr.right is not None:
-                oldFeature = ftr
-                ftr = ftr.right  # if we chose right & right isn't None, go right
+                parentFtr = ftr   # save the old feature
+                ftr = ftr.right   # if we chose right & right isn't None, go right
+
+            elif choice == "middle" and ftr.middle is not None:
+                parentFtr = ftr   # save the old feature
+                ftr = ftr.middle  # if we chose middle & middle isn't None, go middle
+            
+            isFirstLoop = False   # update isFirstLoop bool since the 1st loop is over
         
-        return ftr, (oldFeature, oldFeature)  # return the subtree, and the parent tree
-    
-    # while the new population has fewer hypotheses than the max pop size
-    while (len(newPopulation.candidateHypotheses)-1) < POPULATION_SIZE:
+        # + we have now found a sub-trees & have exited the loop + #
+        # ************************** Error Checking ************************** #
+        # BUG the is is being hit. ParentFtr = ftr because we often exit on the 1st loop. While this is recoverable,
+        # !   this may cause errors done the line. It's also showing that we have terminals with children
+        # !   may not happen every time, but does happen a few times
+        try:
+            
+            if isFirstLoop:          # this will trigger if the tree passed is only 1 node
+                lastChoice = 'stop'  # attempt recovery setting the ftr (a terminal) to the parent
+                raise Warning(f'Warning: getSubTree exited on first loop, data was {ftr.data}, and choice was {choice}')
+            
+            if ftr is parentFtr:  # before returning check that ftr & parentFtr are different object
+                raise Exception(f'Error in getSubTree method, feature ({ftr.data}) '
+                                f'and parent ({parentFtr.data}) are the same')
         
-        probability = random.uniform(0, 1)  # get a random number between 0 & 1
+        except Warning as wrn:                             # catch the warning caused by exiting on the first loop
+            lineNm2 = sys.exc_info()[-1].tb_lineno         # get the line number of the warning
+            log.error(str(wrn))                            # log the warning
+            printError(str(wrn) + f', line = {lineNm2}')   # print the warning
         
-        # **************** Mutate **************** #
-        if probability < MUTATION_RATE:  # if probability is less than mutation rate, mutate
-            
-            # parent is from a copy of population made by tournament, NOT original pop
-            parent: Hypothesis = __tournament(population)  # get parent hypothesis using tournament
-            log.debug('Finished Tournament method call in evolve')
-            
-            rIndex: int = random.choice(range(len(parent.features)))     # get a random index
-            randomFeature: ConstructedFeature = parent.features[rIndex]  # use the random index to get a feature from the hypothesis
-            terminal: typ.List[int] = randomFeature.relevantFeatures     # get the indexes of the terminal values (for the feature)
-            feature: Tree = randomFeature.tree                           # get the tree (for the feature)
-
-            # randomly select a subtree in feature
-            while True:  # walk the tree & find a random subtree
-                
-                decide = random.choice(["left", "right", "choose"])  # make a random decision
-
-                if decide == "choose" or feature.data in terminal:
-                    break
-                
-                elif decide == "left":   # go left
-                    feature = feature.left
-
-                elif decide == "right":  # go right
-                    feature = feature.right
-                    
-            decideGrow = random.choice([True, False])  # randomly decide which method to use to construct the new tree
-            
-            # randomly generate subtree
-            if decideGrow:  # use grow
-                t, size = __grow(terminal)  # build the subtree
-
-            else:  # use full
-                t, size = __full(terminal)  # build the subtree
-                
-            cl = randomFeature.className                                # get the className of the feature
-            parent.features[rIndex] = ConstructedFeature(cl, t, size)   # replace the parent with the mutated child
-            newPopulation.candidateHypotheses.append(parent)            # add the parent to the new pop
-            # appending is needed because parent is a copy made by tournament NOT a reference from the original pop
-        # ************* End of Mutation ************* #
-
-        # **************** Crossover **************** #
-        else:
-            
-            # parent1 & parent2 are from a copy of population made by tournament, NOT original pop
-            # because of this they should not be viewed as references
-            parent1: Hypothesis = __tournament(population)
-            parent2: Hypothesis = __tournament(population)
-            #  check that each parent is unique
-            # if they are the same they should reference the same object & so 'is' is used instead of ==
-            while parent1 is parent2:
-                parent2 = __tournament(population)
-
-            # feature 1
-            randomFeature: ConstructedFeature = random.choice(parent1.features)  # get a random feature from the parent
-            terminals1: typ.List[int] = randomFeature.relevantFeatures           # get the indexes of the terminal values (for the feature)
-            feature1: Tree = randomFeature.tree                                  # get the tree (for the feature)
-            
-            # ? should I get a new random feature or make sure they have the same classId? I don't think so
-            # feature 2
-            randomFeature = random.choice(parent2.features)             # get a random feature from the parent
-            terminals2: typ.List[int] = randomFeature.relevantFeatures  # get the indexes of the terminal values (for the feature)
-            feature2: Tree = randomFeature.tree                         # get the tree (for the feature)
-            
-            # *************** Find the Two Sub-Trees **************** #
-            subTree1, parentTree1 = getSubtree(feature1, terminals1)
-            subTree2, parentTree2 = getSubtree(feature2, terminals2)
-            # ******************************************************* #
-            
-            # ************************** swap the two subtrees ************************** #
-            # update the first parent tree
-            if parentTree1[1] == 'left':         # if subTree 1 went left to find the subTree
-                parentTree1[0].left = subTree2   # then replace the left with subTree 2
-            else:                                # if subTree 1 went right to find the subTree
-                parentTree1[0].right = subTree2  # then replace the right with subTree 2
-            # update the second parent tree
-            if parentTree2[1] == 'left':         # if subTree 2 went left to find the subTree
-                parentTree2[0].left = subTree1   # then replace the left with subTree 1
-            else:                                # if subTree 2 went right to find the subTree
-                parentTree2[0].right = subTree1  # then replace the right with subTree 1
-            # **************************************************************************** #
-
-            # TODO change the size calculation so that we only walk the tree once
-            # get the size of the new constructed features by walking the trees
-            log.debug('Crossover is attempting to set the size for the new parents')
-            # BUG this is what is causing the exit code error
-            parent1.setSize()
-            parent2.setSize()
-            log.debug('Crossover completed setting the size for the new parents')
-            
-            # parent 1 & 2 are both hypotheses and should have been changed in place,
-            # but they refer to a copy made in tournament so add them to the new pop
-            newPopulation.candidateHypotheses.append(parent1)
-            newPopulation.candidateHypotheses.append(parent2)
-            # **************** End of Crossover **************** #
+        except Exception as err2:                          # catch the exception caused by parent = ftr
+            lineNm2 = sys.exc_info()[-1].tb_lineno         # print line number error occurred on
+            log.error(str(err2))                           # log the error
+            printError(str(err2) + f', line = {lineNm2}')  # print the error
+            sys.exit(-1)  # exit on error; recovery not possible
+        # ********************************************************************* #
+        
+        return ftr, parentFtr, lastChoice  # return the subtree, and the parent tree
     
-        # handle elitism
-        newHypothFitness = newPopulation.candidateHypotheses[-1].getFitness()
-        if newHypothFitness > elite.getFitness():
-            elite = newPopulation.candidateHypotheses[-1]
-        log.debug('Starting getFitness call in Evolution as part of elitism')
+    def mutate():
+        # parent is from a copy of population made by tournament, NOT original pop
+        parent: Hypothesis = __tournament(population)  # get parent hypothesis using tournament
+        # log.debug('Finished Tournament method call in evolve')
     
-    print('Evolution Done')
+        rIndex: int = random.choice(range(len(parent.features)))  # get a random index
+        randomFeature: ConstructedFeature = parent.features[
+            rIndex]  # use the random index to get a feature from the hypothesis
+        classId: int = randomFeature.className  # get the indexes of the terminal values (for the feature)
+        feature: Tree = randomFeature.tree  # get the tree (for the feature)
+    
+        # randomly select a subtree in feature
+        while True:  # walk the tree & find a random subtree
+            # BUG handle middle case on IF OP
+            decide = random.choice(["left", "right", "choose"])  # make a random decision
+        
+            if decide == "choose" or feature.data in TERMINALS[classId]:
+                break
+        
+            elif decide == "left":  # go left
+                feature = feature.left
+        
+            elif decide == "right":  # go right
+                feature = feature.right
+    
+        decideGrow = random.choice([True, False])  # randomly decide which method to use to construct the new tree
+    
+        # randomly generate subtree
+        if decideGrow:  # use grow
+            t, size = __grow(classId)  # build the subtree
+    
+        else:  # use full
+            t, size = __full(classId)  # build the subtree
+    
+        cl = randomFeature.className  # get the className of the feature
+        parent.features[rIndex] = ConstructedFeature(cl, t, size)  # replace the parent with the mutated child
+        newPopulation.candidateHypotheses.append(parent)  # add the parent to the new pop
+        # appending is needed because parent is a copy made by tournament NOT a reference from the original pop
+    
+    def crossover():
+        # parent1 & parent2 are from a copy of population made by tournament, NOT original pop
+        # because of this they should not be viewed as references
+        parent1: Hypothesis = __tournament(population)
+        parent2: Hypothesis = __tournament(population)
+        #  check that each parent is unique
+        # if they are the same they should reference the same object & so 'is' is used instead of ==
+        while parent1 is parent2:
+            parent2 = __tournament(population)
+    
+        # feature 1
+        randomFeature: ConstructedFeature = random.choice(parent1.features)  # get a random feature from the parent
+        terminals1: typ.List[
+            int] = randomFeature.relevantFeatures  # get the indexes of the terminal values (for the feature)
+        feature1: Tree = randomFeature.tree  # get the tree (for the feature)
+    
+        # ? should I get a new random feature or make sure they have the same classId? I don't think so
+        # feature 2
+        randomFeature = random.choice(parent2.features)  # get a random feature from the parent
+        terminals2: typ.List[
+            int] = randomFeature.relevantFeatures  # get the indexes of the terminal values (for the feature)
+        feature2: Tree = randomFeature.tree  # get the tree (for the feature)
+    
+        # *************** Find the Two Sub-Trees **************** #
+        subTree1, parentTree1, choice1 = getSubtree(feature1, terminals1)
+        subTree2, parentTree2, choice2 = getSubtree(feature2, terminals2)
+        # ******************************************************* #
+    
+        # ************************ error checking before swap ************************ #
+        try:
+            if choice1 == 'left' and parentTree1.left is None:
+                raise Exception('Crossover tried to swap the left child of parentTree1, but left is None')
+            if choice1 == 'right' and parentTree1.right is None:
+                raise Exception('Crossover tried to swap the right child of parentTree1, but right is None')
+            if choice1 == 'middle' and parentTree1.middle is None:
+                raise Exception('Crossover tried to swap the right child of parentTree1, but middle is None')
+            if choice2 == 'left' and parentTree2.left is None:
+                raise Exception('Crossover tried to swap the left child of parentTree2, but left is None')
+            if choice2 == 'right' and parentTree2.right is None:
+                raise Exception('Crossover tried to swap the right child of parentTree2, but right is None')
+            if choice2 == 'middle' and parentTree2.right is None:
+                raise Exception('Crossover tried to swap the right child of parentTree2, but middle is None')
+        except Exception as err:  # if we tried to swap with a None
+            lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+            msg = f'{str(err)}, line = {lineNm}'  # create the error/log message
+            log.error(msg)  # log the error
+            printError(msg)  # print error to console
+            sys.exit(-1)  # exit on error; recovery not possible
+        # **************************************************************************** #
+    
+        # ************************** swap the two subtrees ************************** #
+        # update the first parent tree
+        if choice1 == 'left':  # if subTree 1 went left to find the subTree
+            parentTree1.left = subTree2  # then replace the left with subTree 2
+        elif choice1 == 'right':  # if subTree 1 went right to find the subTree
+            parentTree1.right = subTree2  # then replace the right with subTree 2
+        elif choice1 == 'middle':  # if subTree 1 went right to find the subTree
+            parentTree1.middle = subTree2  # then replace the right with subTree 2
+        elif choice1 == 'stop':  # if subTree 1 is only a single node
+            parentTree1 = subTree2  # then swap the current trees
+        # update the second parent tree
+        if choice2 == 'left':  # if subTree 2 went left to find the subTree
+            parentTree2.left = subTree1  # then replace the left with subTree 1
+        elif choice2 == 'right':  # if subTree 2 went right to find the subTree
+            parentTree2.right = subTree1  # then replace the right with subTree 1
+        elif choice2 == 'middle':  # if subTree 2 went right to find the subTree
+            parentTree2.middle = subTree1  # then replace the right with subTree 1
+        elif choice2 == 'stop':  # if subTree 2 is only a single node
+            parentTree2 = subTree1  # then swap the current trees
+        # **************************************************************************** #
+    
+        # get the size of the new constructed features by walking the trees
+        log.debug('Crossover is attempting to set the size for the new parents')
+        parentTree1.updateSize(choice1)
+        parentTree2.updateSize(choice2)
+    
+        log.debug('Crossover completed setting the size for the new parents')
+    
+        # parent 1 & 2 are both hypotheses and should have been changed in place,
+        # but they refer to a copy made in tournament so add them to the new pop
+        newPopulation.candidateHypotheses.append(parent1)
+        newPopulation.candidateHypotheses.append(parent2)
+
+    # each iteration evolves 1 new candidate hypothesis, and we want to do this until
+    # range(newPopulation.candidateHypotheses) = POPULATION_SIZE so loop over pop size
+    with alive_bar(POPULATION_SIZE, title="Evolving") as bar:  # declare your expected total
+        for pop in range(POPULATION_SIZE):
+            # bar.text(f'evolving {pop}/{POPULATION_SIZE}...')
+            probability = random.uniform(0, 1)  # get a random number between 0 & 1
+        
+            # ***************** Mutate ***************** #
+            if probability < MUTATION_RATE:  # if probability is less than mutation rate, mutate
+                bar.text('mutating...')
+                mutate()
+                bar()  # update bar now that a candidate is finished
+            # ************* End of Mutation ************* #
+
+            # **************** Crossover **************** #
+            else:
+                bar.text('crossing...')
+                crossover()
+                bar()  # update bar now that a candidate is finished
+            # ************* End of Crossover ************* #
+            
+            # ************** handle elitism ************** #
+            # check that if latest hypothesis has a higher fitness than our current elite
+            newHypothFitness = newPopulation.candidateHypotheses[-1].getFitness()
+            if newHypothFitness > elite.getFitness():
+                elite = newPopulation.candidateHypotheses[-1]
+            
+        print('Evolution Done')
     return newPopulation, elite
 
 
@@ -1035,21 +1147,20 @@ def cdfc(dataIn) -> Hypothesis:
     # *********************** Run the Algorithm *********************** #
 
     currentPopulation = createInitialPopulation()     # run initialPop
-    SYSOUT.write(HDR + ' Initial population generated '.ljust(50, '-') + SUCCESS)
+    # SYSOUT.write(HDR + ' Initial population generated '.ljust(50, '-') + SUCCESS)
     # currentPopulation = createInitialPopulation()   # create initial population
     elite = currentPopulation.candidateHypotheses[0]  # init elitism
 
     # loop, evolving each generation. This is where most of the work is done
-    log.debug('Starting generations stage...')
-    with alive_bar(GENERATIONS, title="Generations") as bar:  # declare your expected total
-        for __ in range(GENERATIONS):  # iterate as usual
-            newPopulation, elite = evolve(currentPopulation, elite)  # generate a new population by evolving the old one
-            # update currentPopulation to hold the new population
-            # this is done in two steps to avoid potential namespace issues
-            currentPopulation = newPopulation
-            bar()
-            
-    log.debug('Finished evolution stage')
+    SYSOUT.write('\nStarting generations stage...\n')  # update user
+    
+    for gen in range(GENERATIONS):  # iterate as usual
+        print(f'{HDR} Starting Generation {gen}/{GENERATIONS}')
+        newPopulation, elite = evolve(currentPopulation, elite)  # generate a new population by evolving the old one
+        # update currentPopulation to hold the new population
+        # this is done in two steps to avoid potential namespace issues
+        currentPopulation = newPopulation
+
     SYSOUT.write(HDR + ' Final Generation Reached '.ljust(50, '-') + SUCCESS)  # update user
     # ***************************************************************** #
 
