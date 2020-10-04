@@ -15,7 +15,7 @@ from tqdm import tqdm
 from alive_progress import alive_bar, config_handler
 
 # ! Next Steps
-# TODO fix the error in crossover (it's swapping None values)
+# TODO fiz the error in getSubtree()
 # TODO add docstrings
 
 # TODO add testing functions
@@ -154,7 +154,7 @@ class Tree:
         if size is not None:            # if size was passed use it rather than setSize()
             self.size = size            # this will save us from having to walk the tree more time
         else:                           # if size wasn't passed call setSize()
-            self.size = self.setSize()  # TODO check that this works with new setSize
+            self.size = self.setSize()
         
     def setLeft(self, left):
         self.left = left
@@ -881,7 +881,6 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
     
     def getSubtree(ftr: Tree, terms: typ.List[int]) -> typ.Tuple[Tree, Tree, str]:
         # walk the tree & find a random subtree for feature
-        # TODO change logic so ftr & parentFtr are different
         lastChoice: typ.Union[str, None] = None
         choice: typ.Union[str, None] = None
         parentFtr: typ.Union[Tree, None] = None
