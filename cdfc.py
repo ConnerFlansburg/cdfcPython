@@ -1,4 +1,3 @@
-# import cProfile
 import collections as collect
 import copy
 import logging as log
@@ -58,7 +57,7 @@ np.seterr(divide='ignore')                                   # suppress divide b
 suppressMessage = 'invalid value encountered in true_divide'  # suppress the divide by zero error from Python
 warnings.filterwarnings('ignore', message=suppressMessage)
 
-config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', title_length=0, length=13)  # the global config for the loading bars
+config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', title_length=0, length=20)  # the global config for the loading bars
 # config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', force_tty=True, title_length=0, length=10)  # the global config for the loading bars
 
 logPath = str(Path.cwd() / 'logs' / 'cdfc.log')              # create the file path for the log file & configure the logger
@@ -70,6 +69,7 @@ log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w', format='%(level
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
 
+# noinspection PyMissingOrEmptyDocstring
 def printError(err): print("\033[91m {}\033[00m" .format(err))  # used for coloring error message red
 # ************************ End of Constants/Globals ************************ #
 
@@ -77,8 +77,16 @@ def printError(err): print("\033[91m {}\033[00m" .format(err))  # used for color
 
 
 class Instance:
+    """Instance is an instance, or row, within our data set. It represents a single
+       record of whatever we are measuring. This replaces the earlier row struct.
+       
+    Variables:
+        className (int): The class id of the class that the record is in (this class ids start at 0).
+        attribute ({key: int, value: float}): This dictionary stores the features values in the
+                                                  instance, keyed by index (these start at 0)
+        vList ([float]): The list of the values stored in the dictionary (used to speed up iteration)
+    """
     # This class replace the older collect.namedtuple('Instance', ['className', 'values']) named tuple
-    # NOTE: a row IS an instance
     
     def __init__(self, className: int, values: typ.Dict[int, float]):
         # this stores the name of the class that the instance is in
@@ -106,18 +114,21 @@ class Tree:
        constructed feature
 
     Variables:
-        left: The left child of the tree. This will be a tree object.
-
-        right: The right child of the tree. This will be a tree object.
-
-        data: This will be either a terminal character or a function name.
+        left: Left child of the tree. This will be a tree object.
+        right: Right child of the tree. This will be a tree object.
+        data: Will either be a terminal character or a function name.
 
     Methods:
-        runTree: This is used to walk the tree until we reach a terminal
-                 character. After we do it should return that character along
-                 with a construct set of functions that should be operated on
-                 that terminal character. These functions should be store in
-                 the 'data' variable & be stored in as string function names.
+        setLeft: Setter for left.
+        setRight: Setter for right.
+        setMiddle: Setter for middle.
+        getLeft: Getter for left.
+        getRight: Getter for right.
+        getMiddle: Getter for middle.
+        runTree: Wrapper function for __runNode, and is used to transform data using the tree.
+        __runNode: Helper function for runTree.
+        setSize: (Re)Computes the size of a tree by walking it.
+        updateSize: Updates the size of the tree after Crossover.
     """
     
     def __init__(self, data: typ.Union[str, int], left: typ.Union[None, "Tree"] = None,
@@ -157,12 +168,19 @@ class Tree:
             self.size = self.setSize()
         
     def setLeft(self, left):
+        """Sets the left child of a tree."""
         self.left = left
         
     def setRight(self, right):
+        """Sets the right child of a tree."""
         self.left = right
         
+    def setMiddle(self, middle):
+        """Sets the middle child of a tree."""
+        self.middle = middle
+        
     def getLeft(self) -> "Tree":
+        """Gets the left child of a tree."""
         try:
             if self.left is None:
                 raise Exception('Tree tried to access a child that didn\'t exist')
@@ -175,6 +193,7 @@ class Tree:
             sys.exit(-1)  # exit on error; recovery not possible
         
     def getRight(self) -> "Tree":
+        """Gets the right child of a tree."""
         try:
             if self.right is None:
                 raise Exception('Tree tried to access a child that didn\'t exist')
@@ -187,6 +206,7 @@ class Tree:
             sys.exit(-1)  # exit on error; recovery not possible
             
     def getMiddle(self) -> "Tree":
+        """Gets the middle child of a tree."""
         try:
             if self.middle is None:
                 raise Exception('Tree tried to access a child that didn\'t exist')
@@ -201,9 +221,29 @@ class Tree:
     # running a tree should return a single value
     # featureValues -- the values of the relevant features keyed by their index in the original data
     def runTree(self, featureValues: typ.Dict[int, float]) -> float:
+        """runTree is a wrapper for runNode & is used to transform provided data
+           by walking the decision tree
+
+        Parameters:
+            featureValues ({key: int, value: float}): The dictionary mapping feature ids to
+                                                      their values (in the current instance).
+        
+        Returns:
+            (float): The final value that the decision tree creates given the provided data.
+        """
         return self.__runNode(featureValues)
 
     def __runNode(self, featureValues: typ.Dict[int, float]) -> typ.Union[int, float]:
+        """runTree is a wrapper for runNode & is used to transform provided data
+           by walking the decision tree
+
+                Parameters:
+                    featureValues ({key: int, value: float}): The dictionary mapping feature ids to
+                                                              their values (in the current instance).
+
+                Returns:
+                    (float): The value of a terminal, or the value of a terminal after an operation has occurred.
+        """
 
         # + Try creating a unit test for this, grow, & full
         # if the node is an operation both of it's branches should have operations or terminals
@@ -270,6 +310,13 @@ class Tree:
             sys.exit(-1)  # exit on error; recovery not possible
 
     def setSize(self) -> int:
+        """setSize computes the size (number of nodes) in the tree by recursively walking through it. This is done
+           when a new tree is created & when we need to update the size of a tree, but do not have any way of
+           knowing what's changed. This sets the size value of every node so sub-trees should have correct size values.
+
+            Returns:
+                (int): Size of the tree up to the current node.
+        """
         
         if self.data not in OPS:               # if we have reached a terminal tree node
             self.size = 1                      # set size to 1, because there are no children
@@ -287,7 +334,17 @@ class Tree:
         return self.size                       # send the new size up the recursive "stack"
 
     def updateSize(self, swapped: str) -> None:
-        # this is used to update the size of a tree after crossover
+        """updateSize computes the size (number of nodes) in the tree by getting the size of each child, adding 1,
+           and then overwriting the original size. This is done after crossover to avoid having to walk the tree
+           everytime. This doesn't change the size value of any other node so sub-trees should still have their
+           correct size values.
+
+            Parameters:
+                swapped (str): Tells us which child is being replaced so we can check that it exists.
+
+            Returns:
+                (int): Size of the tree up to the current node.
+        """
         # ********************************** Error Checking ********************************** #
         if swapped == 'left' and self.left is None:        # check that the swapped value is valid
             raise Exception('Crossover failed to set the size of the new tree (left is None)')
@@ -321,28 +378,16 @@ class ConstructedFeature:
        with additional information about the feature.
 
     Variables:
-        tree: This is the constructed features binary decision tree.
-
-        className: The name/id of the class that the feature is meant to
-                   distinguish.
-
-        infoGain: The info gain of the feature.
-
-        relevantFeatures: The list of terminal characters relevant to the
-                          feature's class.
-
-        transformedValues: The values of the original data after they have
-                           been transformed by the decision tree.
+        className (int): Class id of the class that the feature is meant to distinguish.
+        tree (Tree): Constructed feature's binary decision tree.
+        size (int): Number of nodes in the tree
+        relevantFeatures ([int]): List of terminal characters relevant to the feature's class.
 
     Methods:
-        transform:  This takes the original data & transforms it using the
-                    feature's decision tree.
+        getUsedFeature: Gets the features used by the constructed feature.
+        transform: Takes the original data & transforms it using the feature's decision tree.
     """
-
-    infoGain = None           # the info gain for this feature
-    usedFeatures = None       # the relevant features the cf actually uses
-    transformedValues = None  # the values data after they have been transformed by the tree
-
+    
     def __init__(self, className: int, tree: Tree, size: int) -> None:
         self.className = className                    # the name of the class this tree is meant to distinguish
         self.tree = tree                              # the root node of the constructed feature
@@ -352,6 +397,7 @@ class ConstructedFeature:
         # sanityCheckCF(self)  # ! testing purposes only!
 
     def getUsedFeatures(self) -> typ.List[int]:
+        """Gets the features used by the constructed feature, and returns their index"""
     
         # will hold the indexes found at each terminal node
         values = []  # type: typ.List[int]
@@ -383,6 +429,8 @@ class ConstructedFeature:
             sys.exit(-1)  # exit on error; recovery not possible
 
     def transform(self, instance: Instance) -> float:
+        """Takes an instance, transforms it using the decision tree, and return the value computed."""
+        
         # Send the tree a list of all the attribute values in a single instance
         featureValues: typ.Dict[int, float] = instance.attributes
         return self.tree.runTree(featureValues)
@@ -657,6 +705,13 @@ class Hypothesis:
 
 
 class Population:
+    """Population is a list of Hypothesis, and a generation number.
+    
+        Variables:
+            candidateHypotheses ([Hypothesis]): list of hypotheses
+            generationNumber (int): current generation number.
+    """
+    
     # this will be the population of hypotheses. This is largely just a namespace
     def __init__(self, candidates: typ.List[Hypothesis], generationNumber: int) -> None:
         self.candidateHypotheses = candidates  # a list of all the candidate hypotheses
@@ -885,24 +940,29 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         choice: typ.Union[str, None] = None
         parentFtr: typ.Union[Tree, None] = None
         isFirstLoop: bool = True
+
         while True:
             
             if not isFirstLoop:      # if it's not the 1st loop,
                 lastChoice = choice  # save the previous choice
 
             # ************ Make a Random Choice ************ #
-            listOfChoices = ['left', 'right', 'middle', 'stop']  # default list of choices. Reset this on every iteration
-            if ftr.data == 'if':                                 # if the operation stored in the current node is an if
-                listOfChoices.append('middle')                   # add 'middle' to the list of choices
-            if ftr.left is None:                                 # if there is no left child
-                listOfChoices.remove('left')                     # then remove 'left' so we don't go down it
-            if ftr.right is None:                                # if there is no right child
-                listOfChoices.remove('right')                    # then remove 'right' so we don't go down it
-            if isFirstLoop:                                      # if it's the first iteration
-                listOfChoices.remove('stop')                     # remove the 'stop' option (this prevents randomly build a subtree of size 1)
-            choice = random.choice(listOfChoices)                # make the random choice using the built list
+            # ! listOfChoices has 2-3 options that walk farther & 1 that stops. Does this make the
+            # !   random choice biased towards walking? Meaning that we'll get terminals more often?
+            # !   Should walking & stopping be equally likely? Should they be their own list/choice?
+            listOfChoices = ['left', 'right', 'stop']  # default list of choices. Reset this on every iteration
+            if ftr.data == 'if':                       # if the operation stored in the current node is an if
+                listOfChoices.append('middle')         # add 'middle' to the list of choices
+            if ftr.left is None:                       # if there is no left child
+                listOfChoices.remove('left')           # then remove 'left' so we don't go down it
+            if ftr.right is None:                      # if there is no right child
+                listOfChoices.remove('right')          # then remove 'right' so we don't go down it
+            if isFirstLoop:                            # if it's the first iteration
+                listOfChoices.remove('stop')           # remove the 'stop' option (this prevents randomly build a subtree of size 1)
+            choice = random.choice(listOfChoices)      # make the random choice using the built list
             
             # ********* Check if We Should Stop Walking the Tree ********* #
+            # ! Whenever we break here ftr will be a terminal
             if choice == "stop" or ftr.data in terms:  # ! this is the only valid way of breaking, since all OPs should have children
                 # ! this is the issue. For some reason the first ftr is often a terminal (a tree of size 1)
                 break  # if we chose stop or if we have encountered a terminal, break
@@ -918,27 +978,30 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
 
             # *************** Continue Walking the Tree *************** #
             elif choice == "left" and ftr.left is not None:
-                parentFtr = ftr   # save the old feature
-                ftr = ftr.left    # if we chose left & left isn't None, go left
+                parentFtr = ftr      # save the old feature
+                ftr = ftr.left       # if we chose left & left isn't None, go left
+                continue             # skip all the other else cases (redundant)
         
             elif choice == "right" and ftr.right is not None:
-                parentFtr = ftr   # save the old feature
-                ftr = ftr.right   # if we chose right & right isn't None, go right
+                parentFtr = ftr      # save the old feature
+                ftr = ftr.right      # if we chose right & right isn't None, go right
+                continue             # skip all the other else cases (redundant)
 
             elif choice == "middle" and ftr.middle is not None:
-                parentFtr = ftr   # save the old feature
-                ftr = ftr.middle  # if we chose middle & middle isn't None, go middle
+                parentFtr = ftr      # save the old feature
+                ftr = ftr.middle     # if we chose middle & middle isn't None, go middle
+                continue             # skip all the other else cases (redundant)
             
-            isFirstLoop = False   # update isFirstLoop bool since the 1st loop is over
+            isFirstLoop = False      # update isFirstLoop bool since the 1st loop is over
         
         # + we have now found a sub-trees & have exited the loop + #
         # ************************** Error Checking ************************** #
-        # BUG the is is being hit. ParentFtr = ftr because we often exit on the 1st loop. While this is recoverable,
+        # BUG this is being hit. ParentFtr = ftr because we often exit on the 1st loop. While this is recoverable,
         # !   this may cause errors done the line. It's also showing that we have terminals with children
         # !   may not happen every time, but does happen a few times
         try:
             
-            if isFirstLoop:          # this will trigger if the tree passed is only 1 node
+            if isFirstLoop is True:  # this will trigger if the tree passed is only 1 node
                 lastChoice = 'stop'  # attempt recovery setting the ftr (a terminal) to the parent
                 raise Warning(f'Warning: getSubTree exited on first loop, data was {ftr.data}, and choice was {choice}')
             
@@ -1028,7 +1091,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         # ******************************************************* #
     
         # ************************ error checking before swap ************************ #
-        try:
+        try:  # ! these will always trigger if we left on a terminal
             if choice1 == 'left' and parentTree1.left is None:
                 raise Exception('Crossover tried to swap the left child of parentTree1, but left is None')
             if choice1 == 'right' and parentTree1.right is None:
@@ -1086,7 +1149,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
     # range(newPopulation.candidateHypotheses) = POPULATION_SIZE so loop over pop size
     with alive_bar(POPULATION_SIZE, title="Evolving") as bar:  # declare your expected total
         for pop in range(POPULATION_SIZE):
-            # bar.text(f'evolving {pop}/{POPULATION_SIZE}...')
+            # bar.text(f' evolving {pop}/{POPULATION_SIZE}...')
             probability = random.uniform(0, 1)  # get a random number between 0 & 1
         
             # ***************** Mutate ***************** #
