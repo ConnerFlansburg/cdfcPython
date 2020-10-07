@@ -1,3 +1,11 @@
+"""
+cdfc.py creates, and evolves a genetic program using Class Dependent Feature Select.
+
+Authors/Contributors: Dr. Dimitrios Diochnos, Conner Flansburg
+
+Github Repo: https://github.com/brom94/cdfcPython.git
+"""
+
 import collections as collect
 import copy
 import logging as log
@@ -437,6 +445,23 @@ class ConstructedFeature:
 
 
 class Hypothesis:
+    """Hypothesis is a single hypothesis (a GP individual), and will contain a list of constructed features. It
+       should have the same number of constructed features for every class id, and should have at least one for
+       each class id.
+       
+        Variables:
+            features ([ConstructedFeature]): List of the constructed features for this hypothesis.
+            size (int): Sum of the constructed feature's sizes.
+            fitness (int or float): Calculated fitness score.
+            distance (int or float): Calculated distance value.
+            averageInfoGain (int or float): Average of every features info gain.
+            maxInfoGain (int or float): Largest info gain for any feature.
+            
+        Methods:
+            getFitness: Get the fitness score of the Hypothesis
+            transform: Transforms a dataset using the trees in the constructed features.
+
+    """
     # a single hypothesis(a GP individual)
     fitness: typ.Union[None, int, float] = None  # the fitness score
     distance: typ.Union[float, int] = 0          # the distance function score
@@ -449,10 +474,12 @@ class Hypothesis:
         self.size: int = size                                   # the number of nodes in all the cfs
 
     def getFitness(self) -> float:
+        """getFitness uses several helper functions to calculate the fitness of a Hypothesis"""
     
         # log.debug('Starting getFitness() method')
         
         def __Czekanowski(Vi: typ.List[float], Vj: typ.List[float]) -> float:
+            
             # log.debug('Starting Czekanowski() method')
 
             # ************************** Error checking ************************** #
@@ -658,8 +685,16 @@ class Hypothesis:
         # log.debug('Finished getFitness() method')
         return final
 
-    # NOTE: this is the function used by cdfcProject
     def transform(self, data: typ.Union[None, np.array] = None) -> np.array:
+        """transform transforms a dataset using the trees in the constructed features. This an entry point into cdfc.py
+           used by cdfcProject.py.
+        
+            Parameter:
+                data (np.array): A dataset that's been converted into a numpy array.
+            
+            Return:
+                transformed (np.array): A new dataset, created by transforming the original one.
+        """
     
         # log.debug('Starting transform() method')
         
@@ -720,6 +755,7 @@ class Population:
 
 
 def __grow(classId: int, depth: int = 0) -> typ.Tuple[Tree, int]:
+    
     # This function uses the grow method to generate an initial population
     # the last thing returned should be a trees root node
     if int == 0:  # only print to log on first call
@@ -763,6 +799,7 @@ def __grow(classId: int, depth: int = 0) -> typ.Tuple[Tree, int]:
 
 
 def __full(classId: int, depth: int = 0) -> typ.Tuple[Tree, int]:
+    
     # This function uses the full method to generate an initial population
     # the last thing returned should be a trees root node
 
@@ -796,6 +833,7 @@ def __full(classId: int, depth: int = 0) -> typ.Tuple[Tree, int]:
 
 
 def createInitialPopulation() -> Population:
+    """Creates the initial population by calling createHypothesis() the needed number of times"""
     
     def createHypothesis() -> Hypothesis:
         # given a list of trees, create a hypothesis
@@ -865,6 +903,7 @@ def createInitialPopulation() -> Population:
 # ********** Sanity Check Functions used for Debugging ********** #
 # ! testing purposes only!
 def sanityCheckPop(hypothesis: typ.List[Hypothesis]):
+    """Used in debugging to check a Population"""
     log.debug('Starting Population Sanity Check...')
     for h in hypothesis:
         h.transform(rows)
@@ -873,6 +912,7 @@ def sanityCheckPop(hypothesis: typ.List[Hypothesis]):
 
 # ! testing purposes only!
 def sanityCheckHyp(hyp: Hypothesis):
+    """Used in debugging to check a Hypothesis"""
     log.debug('Starting Hypothesis Sanity Check...')
     hyp.transform()
     log.debug('Population Hypothesis Check Passed')
@@ -880,6 +920,7 @@ def sanityCheckHyp(hyp: Hypothesis):
 
 # ! testing purposes only!
 def sanityCheckCF(cf: ConstructedFeature):
+    """Used in debugging to checka Constructed Feature"""
     log.debug('Starting Constructed Feature Sanity Check...')
     cf.transform(rows[0])
     log.debug('Constructed Feature Sanity Check Passed')
@@ -887,6 +928,7 @@ def sanityCheckCF(cf: ConstructedFeature):
 
 # ! testing purposes only!
 def sanityCheckTree(tree: Tree):
+    """Used in debugging to check a Tree"""
     log.debug('Starting Tree Sanity Check...')
     tree.runTree(rows[0].attributes)
     log.debug('Tree Sanity Check Passed')
@@ -1024,6 +1066,8 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         return ftr, parentFtr, lastChoice  # return the subtree, and the parent tree
     
     def mutate():
+        """Performs the mutation operation on a tree"""
+
         # parent is from a copy of population made by tournament, NOT original pop
         parent: Hypothesis = __tournament(population)  # get parent hypothesis using tournament
         # log.debug('Finished Tournament method call in evolve')
@@ -1063,6 +1107,8 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         # appending is needed because parent is a copy made by tournament NOT a reference from the original pop
     
     def crossover():
+        """Performs the crossover operation on two trees"""
+
         # parent1 & parent2 are from a copy of population made by tournament, NOT original pop
         # because of this they should not be viewed as references
         parent1: Hypothesis = __tournament(population)
@@ -1177,10 +1223,19 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
 
 
 def cdfc(dataIn) -> Hypothesis:
-    # Class Dependent Feature Construction
+    """cdfc is the 'main' of cdfc.py. It is called by cdfcProject which passes dataIn.
+       It then creates an initial population & evolves several hypotheses. After going
+       through a set amount ofr generations it returns a Hypothesis object.
+       
+       Parameters:
+           dataIn (tuple): Index 0 contains the values of the global constants that cdfc needs,
+                           and index 1 contains the TERMINALS dictionary.
+           
+       Return:
+           bestHypothesis: Hypothesis with the highest fitness score.
+    """
 
     values = dataIn[0]
-    terminals = dataIn[1]
     
     # makes sure we're using global variables
     global FEATURE_NUMBER
@@ -1204,7 +1259,7 @@ def cdfc(dataIn) -> Hypothesis:
     rows = values['rows']
     ENTROPY_OF_S = values['ENTROPY_OF_S']
     CLASS_DICTS = values['CLASS_DICTS']
-    TERMINALS = terminals
+    TERMINALS = dataIn[1]
     
     # *********************** Run the Algorithm *********************** #
 
