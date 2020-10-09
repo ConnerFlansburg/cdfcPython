@@ -94,8 +94,7 @@ class Instance:
                                                   instance, keyed by index (these start at 0)
         vList ([float]): The list of the values stored in the dictionary (used to speed up iteration)
     """
-    # This class replace the older collect.namedtuple('Instance', ['className', 'values']) named tuple
-    
+
     def __init__(self, className: int, values: typ.Dict[int, float]):
         # this stores the name of the class that the instance is in
         self.className: int = className
@@ -175,6 +174,12 @@ class Tree:
         else:                           # if size wasn't passed call setSize()
             self.size = self.setSize()
         
+    def overwrite(self, new: "Tree"):
+        """Overwrites the current tree, and returns a new"""
+        self.data = new.data
+        self.left = new.getLeft()
+        self.right = new.getRight()
+        
     def setLeft(self, left):
         """Sets the left child of a tree."""
         self.left = left
@@ -225,6 +230,42 @@ class Tree:
             printError(str(err))
             traceback.print_stack()
             sys.exit(-1)  # exit on error; recovery not possible
+            
+    def getRandomNode(self, terms: typ.List[int]) -> "Tree":
+        # ! make sure this code is working & correct
+        """Recursively searches for a random sub-tree, and should return a reference to it (not a value).
+           This is used by mutate.
+
+                    Parameter:
+                        ftr (Tree): Current node of the tree.
+                        terms ([int]): List of terminal indexes.
+
+                    Returns:
+                        node (Tree): Node pointer found.
+                """
+        # ************ Make a Random Choice ************ #
+        listOfChoices = ['left', 'right', 'stop']   # default list of choices. Reset this on every iteration
+        if self.data == 'if':                       # if the operation stored in the current node is an if
+            listOfChoices.append('middle')          # add 'middle' to the list of choices
+        if self.left is None:                       # if there is no left child
+            listOfChoices.remove('left')            # then remove 'left' so we don't go down it
+        if self.right is None:                      # if there is no right child
+            listOfChoices.remove('right')           # then remove 'right' so we don't go down it
+        choice: str = random.choice(listOfChoices)  # make the random choice using the built list
+        
+        # ********* Check if We Should Stop Walking the Tree ********* #
+        if choice == "stop" or self.data in terms:
+            return self  # if we chose stop or if we have encountered a terminal, return self
+        
+        # *************** Continue Walking the Tree *************** #
+        elif choice == "left" and self.left is not None:
+            return self.left.getRandomNode(terms)  # if we chose left & left isn't None, go left
+        
+        elif choice == "right" and self.right is not None:
+            return self.right.getRandomNode(terms)  # if we chose right & right isn't None, go right
+        
+        elif choice == "middle" and self.middle is not None:
+            return self.middle.getRandomNode(terms)  # if we chose middle & middle isn't None, go middle
         
     # running a tree should return a single value
     # featureValues -- the values of the relevant features keyed by their index in the original data
@@ -337,6 +378,7 @@ class Tree:
             
             else:                              # if the OP is an IF and has a middle add it as well
                 # add left, right, & middle branches to get everything below, then +1 for the current node
+                # BUG this is hitting None types
                 self.size = self.left.setSize() + self.right.setSize() + self.middle.setSize() + 1
         
         return self.size                       # send the new size up the recursive "stack"
@@ -414,8 +456,10 @@ class ConstructedFeature:
         def __walk(node: Tree) -> None:
             # if this tree's node is a valid operation, keep walking done the tree
             if node.data in OPS:
-                __walk(node.left)   # walk down the left branch
-                __walk(node.right)  # walk down the right branch
+                __walk(node.getLeft())   # walk down the left branch
+                __walk(node.getRight())  # walk down the right branch
+                if NUM_TERMINALS[node.data] == 3:  # if the node contains an if
+                    __walk(node.getMiddle())       # walk the middle node as well
                 return              # now that I have walked down both branches return
         
             # if the node is not an operation, then it is a terminal index so add it to value
@@ -424,6 +468,7 @@ class ConstructedFeature:
                 return
 
         __walk(self.tree)  # walk the tree starting with the CF's root node
+        log.debug("__walk completed successfully!!")
         
         try:
             if not values:  # if values is empty
@@ -553,6 +598,7 @@ class Hypothesis:
             return value
 
         def Distance(values: typ.List[Instance]):
+            """"Distance calculates the distance value of the Hypothesis"""
     
             # log.debug('Starting Distance() method')
             
@@ -591,7 +637,8 @@ class Hypothesis:
             return 1 / (1 + math.pow(math.e, -5*(Db - Dw)))
 
         def __entropy(partition: typ.List[Instance]) -> float:
-    
+            """Calculates the entropy of a Hypothesis"""
+            
             # log.debug('Starting entropy() method')
             
             p: typ.Dict[int, int] = {}   # p[classId] = number of instances in the class in the partition sv
@@ -613,6 +660,7 @@ class Hypothesis:
             return calc
 
         def __conditionalEntropy(feature: ConstructedFeature) -> float:
+            """Calculates the entropy of a Hypothesis"""
     
             # log.debug('Starting conditionalEntropy() method')
 
@@ -836,6 +884,7 @@ def createInitialPopulation() -> Population:
     """Creates the initial population by calling createHypothesis() the needed number of times"""
     
     def createHypothesis() -> Hypothesis:
+        """Helper function that creates a single hypothesis"""
         # given a list of trees, create a hypothesis
         # NOTE this will make 1 tree for each feature, and 1 CF for each class
 
@@ -936,6 +985,19 @@ def sanityCheckTree(tree: Tree):
 
 
 def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, Hypothesis]:
+    """evolve is used by CDFC during the evolution step to create the next generation of the algorithm.
+       This is done by randomly choosing between mutation & crossover based on the mutation rate.
+    
+        Parameter:
+            population (Population): Population to be evolved.
+            elite (Hypothesis): Highest scoring Hypothesis created so far.
+            
+        Functions:
+            tournament: Finds Constructed Features to be mutated/crossover-ed.
+            getSubTree: Helper method for crossover that finds subtrees.
+            mutate: Performs the mutation operation.
+            crossover: Performs the crossover operation.
+    """
 
     def __tournament(p: Population) -> Hypothesis:
         # used by evolve to selection the parents
@@ -977,6 +1039,18 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
     newPopulation = Population([], population.generation+1)
     
     def getSubtree(ftr: Tree, terms: typ.List[int]) -> typ.Tuple[Tree, Tree, str]:
+        """Finds a sub-tree for crossover.
+        
+            Parameter:
+                ftr (Tree): Current node of the tree.
+                terms ([int]): List of terminal indexes.
+            
+            Returns:
+                ftr (Tree): Sub-tree found.
+                parentFtr (Tree): Parent of the sub-tree found.
+                lastChoice (str): Last choice that was made while walking the tree.
+        """
+        # ! is ftr a pointer? I am overwriting instead of walking?
         # walk the tree & find a random subtree for feature
         lastChoice: typ.Union[str, None] = None
         choice: typ.Union[str, None] = None
@@ -987,54 +1061,64 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             
             if not isFirstLoop:      # if it's not the 1st loop,
                 lastChoice = choice  # save the previous choice
+            
+            # check is data is None or in terms, & if so break
+            # NOTE: if we don't break here then data is in OPS
+            if ftr.data is None or ftr.data in terms:
+                break
+            if (ftr.data not in terms) and (ftr.data not in OPS):
+                # if the stored data isn't an OP or a terminal, raise an exception
+                raise Exception("getSubTree found an invalid value stored in tree node")
 
             # ************ Make a Random Choice ************ #
             # ! listOfChoices has 2-3 options that walk farther & 1 that stops. Does this make the
             # !   random choice biased towards walking? Meaning that we'll get terminals more often?
             # !   Should walking & stopping be equally likely? Should they be their own list/choice?
             listOfChoices = ['left', 'right', 'stop']  # default list of choices. Reset this on every iteration
-            if ftr.data == 'if':                       # if the operation stored in the current node is an if
+            if NUM_TERMINALS[ftr.data] == 3:           # if the operation stored in the current node is an if
                 listOfChoices.append('middle')         # add 'middle' to the list of choices
-            if ftr.left is None:                       # if there is no left child
+            if ftr.getLeft() is None:                  # if there is no left child
                 listOfChoices.remove('left')           # then remove 'left' so we don't go down it
-            if ftr.right is None:                      # if there is no right child
+            if ftr.getRight() is None:                 # if there is no right child
                 listOfChoices.remove('right')          # then remove 'right' so we don't go down it
             if isFirstLoop:                            # if it's the first iteration
                 listOfChoices.remove('stop')           # remove the 'stop' option (this prevents randomly build a subtree of size 1)
+            # ! This is causing errors because listOfChoices is empty. This could only happen if we are on the root node & it has no children. A tree of size 1
             choice = random.choice(listOfChoices)      # make the random choice using the built list
             
             # ********* Check if We Should Stop Walking the Tree ********* #
             # ! Whenever we break here ftr will be a terminal
-            if choice == "stop" or ftr.data in terms:  # ! this is the only valid way of breaking, since all OPs should have children
+            if choice == "stop":
+                # ! this is the only valid way of breaking, since all OPs should have children
                 # ! this is the issue. For some reason the first ftr is often a terminal (a tree of size 1)
                 break  # if we chose stop or if we have encountered a terminal, break
                 
-            elif choice == "left" and ftr.left is None:
+            elif choice == "left" and ftr.getLeft() is None:
                 break  # if choose to go left but there isn't a left, break
         
-            elif choice == "right" and ftr.right is None:
+            elif choice == "right" and ftr.getRight() is None:
                 break  # if choose to go right but there isn't a right, break
                 
-            elif choice == "middle" and ftr.middle is None:
+            elif choice == "middle" and ftr.getMiddle() is None:
                 break  # if choose to go middle but there isn't a middle, break
 
             # *************** Continue Walking the Tree *************** #
-            elif choice == "left" and ftr.left is not None:
+            elif choice == "left" and ftr.getLeft() is not None:
                 parentFtr = ftr      # save the old feature
-                ftr = ftr.left       # if we chose left & left isn't None, go left
+                ftr = ftr.getLeft()  # if we chose left & left isn't None, go left
                 continue             # skip all the other else cases (redundant)
         
-            elif choice == "right" and ftr.right is not None:
-                parentFtr = ftr      # save the old feature
-                ftr = ftr.right      # if we chose right & right isn't None, go right
-                continue             # skip all the other else cases (redundant)
+            elif choice == "right" and ftr.getRight() is not None:
+                parentFtr = ftr       # save the old feature
+                ftr = ftr.getRight()  # if we chose right & right isn't None, go right
+                continue              # skip all the other else cases (redundant)
 
-            elif choice == "middle" and ftr.middle is not None:
-                parentFtr = ftr      # save the old feature
-                ftr = ftr.middle     # if we chose middle & middle isn't None, go middle
-                continue             # skip all the other else cases (redundant)
+            elif choice == "middle" and ftr.getMiddle() is not None:
+                parentFtr = ftr        # save the old feature
+                ftr = ftr.getMiddle()  # if we chose middle & middle isn't None, go middle
+                continue               # skip all the other else cases (redundant)
             
-            isFirstLoop = False      # update isFirstLoop bool since the 1st loop is over
+            isFirstLoop = False        # update isFirstLoop bool since the 1st loop is over
         
         # + we have now found a sub-trees & have exited the loop + #
         # ************************** Error Checking ************************** #
@@ -1068,41 +1152,27 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
     def mutate():
         """Performs the mutation operation on a tree"""
 
-        # parent is from a copy of population made by tournament, NOT original pop
-        parent: Hypothesis = __tournament(population)  # get parent hypothesis using tournament
-        # log.debug('Finished Tournament method call in evolve')
-    
-        rIndex: int = random.choice(range(len(parent.features)))  # get a random index
-        randomFeature: ConstructedFeature = parent.features[
-            rIndex]  # use the random index to get a feature from the hypothesis
-        classId: int = randomFeature.className  # get the indexes of the terminal values (for the feature)
-        feature: Tree = randomFeature.tree  # get the tree (for the feature)
-    
-        # randomly select a subtree in feature
-        while True:  # walk the tree & find a random subtree
-            # BUG handle middle case on IF OP
-            decide = random.choice(["left", "right", "choose"])  # make a random decision
+        # ******************* Fetch Values Needed ******************* #
+        # NOTE: parent is from a copy of population made by tournament, NOT original pop
+        parent: Hypothesis = __tournament(population)                # get parent Hypothesis using tournament
+        randIndex: int = random.choice(range(len(parent.features)))  # get a random index
+        randCF: ConstructedFeature = parent.features[randIndex]      # get a random Constructed Feature
+        terminals = randCF.relevantFeatures                          # save the indexes of the relevant features
+        node = randCF.tree.getRandomNode(terminals)                  # get a random node reference in the CF's tree
+
+        # ************************* Mutate ************************* #
+        # TODO check new code here
+        # randomly decide which method to use to construct the new tree (grow or full)
+        if random.choice(['Grow', 'Full']) == 'Grow':     # * Grow * #
+            newTree, size = __grow(randCF.className)      # if grow, then grow a new tree
+        else:                                             # * Full * #
+            newTree, size = __full(randCF.className)      # if full, then use full
+        node.overwrite(newTree)                           # overwrite the node in place
+        # ? Since node is a reference, it is already in the tree randCF.tree
+        randCF.tree.setSize()  # TODO optimize this so we aren't walking the tree again
         
-            if decide == "choose" or feature.data in TERMINALS[classId]:
-                break
-        
-            elif decide == "left":  # go left
-                feature = feature.left
-        
-            elif decide == "right":  # go right
-                feature = feature.right
-    
-        decideGrow = random.choice([True, False])  # randomly decide which method to use to construct the new tree
-    
-        # randomly generate subtree
-        if decideGrow:  # use grow
-            t, size = __grow(classId)  # build the subtree
-    
-        else:  # use full
-            t, size = __full(classId)  # build the subtree
-    
-        cl = randomFeature.className  # get the className of the feature
-        parent.features[rIndex] = ConstructedFeature(cl, t, size)  # replace the parent with the mutated child
+        cl = randCF.className                             # get the className of the feature
+        parent.features[randIndex] = ConstructedFeature(cl, randCF.tree, randCF.tree.size)  # overwrite old CF with the new one
         newPopulation.candidateHypotheses.append(parent)  # add the parent to the new pop
         # appending is needed because parent is a copy made by tournament NOT a reference from the original pop
     
@@ -1138,17 +1208,17 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
     
         # ************************ error checking before swap ************************ #
         try:  # ! these will always trigger if we left on a terminal
-            if choice1 == 'left' and parentTree1.left is None:
+            if choice1 == 'left' and parentTree1.getLeft() is None:
                 raise Exception('Crossover tried to swap the left child of parentTree1, but left is None')
-            if choice1 == 'right' and parentTree1.right is None:
+            if choice1 == 'right' and parentTree1.getRight() is None:
                 raise Exception('Crossover tried to swap the right child of parentTree1, but right is None')
-            if choice1 == 'middle' and parentTree1.middle is None:
+            if choice1 == 'middle' and parentTree1.getMiddle() is None:
                 raise Exception('Crossover tried to swap the right child of parentTree1, but middle is None')
-            if choice2 == 'left' and parentTree2.left is None:
+            if choice2 == 'left' and parentTree2.getLeft() is None:
                 raise Exception('Crossover tried to swap the left child of parentTree2, but left is None')
-            if choice2 == 'right' and parentTree2.right is None:
+            if choice2 == 'right' and parentTree2.getRight() is None:
                 raise Exception('Crossover tried to swap the right child of parentTree2, but right is None')
-            if choice2 == 'middle' and parentTree2.right is None:
+            if choice2 == 'middle' and parentTree2.getMiddle() is None:
                 raise Exception('Crossover tried to swap the right child of parentTree2, but middle is None')
         except Exception as err:  # if we tried to swap with a None
             lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
@@ -1160,23 +1230,23 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
     
         # ************************** swap the two subtrees ************************** #
         # update the first parent tree
-        if choice1 == 'left':  # if subTree 1 went left to find the subTree
-            parentTree1.left = subTree2  # then replace the left with subTree 2
-        elif choice1 == 'right':  # if subTree 1 went right to find the subTree
-            parentTree1.right = subTree2  # then replace the right with subTree 2
-        elif choice1 == 'middle':  # if subTree 1 went right to find the subTree
-            parentTree1.middle = subTree2  # then replace the right with subTree 2
-        elif choice1 == 'stop':  # if subTree 1 is only a single node
-            parentTree1 = subTree2  # then swap the current trees
+        if choice1 == 'left':                # if subTree 1 went left to find the subTree
+            parentTree1.setLeft(subTree2)    # then replace the left with subTree 2
+        elif choice1 == 'right':             # if subTree 1 went right to find the subTree
+            parentTree1.setRight(subTree2)   # then replace the right with subTree 2
+        elif choice1 == 'middle':            # if subTree 1 went right to find the subTree
+            parentTree1.setMiddle(subTree2)  # then replace the right with subTree 2
+        elif choice1 == 'stop':              # if subTree 1 is only a single node
+            parentTree1.overwrite(subTree2)  # then swap the current trees
         # update the second parent tree
-        if choice2 == 'left':  # if subTree 2 went left to find the subTree
-            parentTree2.left = subTree1  # then replace the left with subTree 1
-        elif choice2 == 'right':  # if subTree 2 went right to find the subTree
-            parentTree2.right = subTree1  # then replace the right with subTree 1
-        elif choice2 == 'middle':  # if subTree 2 went right to find the subTree
-            parentTree2.middle = subTree1  # then replace the right with subTree 1
-        elif choice2 == 'stop':  # if subTree 2 is only a single node
-            parentTree2 = subTree1  # then swap the current trees
+        if choice2 == 'left':                # if subTree 2 went left to find the subTree
+            parentTree2.setLeft(subTree1)    # then replace the left with subTree 1
+        elif choice2 == 'right':             # if subTree 2 went right to find the subTree
+            parentTree2.setRight(subTree1)   # then replace the right with subTree 1
+        elif choice2 == 'middle':            # if subTree 2 went right to find the subTree
+            parentTree2.setMiddle(subTree1)  # then replace the right with subTree 1
+        elif choice2 == 'stop':              # if subTree 2 is only a single node
+            parentTree2.overwrite(subTree1)  # then swap the current trees
         # **************************************************************************** #
     
         # get the size of the new constructed features by walking the trees
