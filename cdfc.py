@@ -164,7 +164,7 @@ class Tree(treelib.Tree):
                     if m is None:                                     # if getting middle key failed
                         raise AssertionError('Getting middle key failed')  # throw exception
                     
-            except KeyError as err1:
+            except KeyError:
                 lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
                 log.error(f'CheckTree raised a KeyError, on line {lineNm}')  # log the error
                 printError(f'CheckTree raised a KeyError, keys = {list(dct.keys())}, on line {lineNm}')  # print message
@@ -952,7 +952,7 @@ def createInitialPopulation() -> Population:
         size = 0
 
         # ? should this be LABEL_NUMBER or FEATURE_NUMBER
-        for ___ in CLASS_IDS:  # create a CF for each class
+        for _ in CLASS_IDS:  # create a CF for each class
             # randomly decide if grow or full should be used.
             # Also randomly assign the class ID then remove that ID
             # so each ID may only be used once
@@ -1178,7 +1178,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
 
         node2: Node = tree2.getRandomNode()           # get a random node
         branch2, p2 = tree2.getBranch(node2)          # get the branch string
-        subTree2: Tree = tree2.remove_subtree(node2)  # get a sub-tree with node1 as root
+        subTree2: Tree = tree2.remove_subtree(node2)  # get a sub-tree with node2 as root
         # ******************************************************* #
     
         # ************************** swap the two subtrees ************************** #
