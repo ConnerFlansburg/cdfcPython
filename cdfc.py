@@ -288,7 +288,7 @@ class Tree(treelib.Tree):
         """Returns the trees root & prevent root from being overwritten"""
         return self.get_node(self.root)
     
-    def getRandomNode(self) -> Node:
+    def getRandomNode(self) -> Node:  # BUG is the problem here?
         """Get a random node obj from the tree."""
         n = random.choice(self.all_nodes())      # pick a random node
         while n is self.getRoot():               # if we picked the root,
@@ -1174,7 +1174,8 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         # *************** Find the Two Sub-Trees **************** #
         node1: Node = tree1.getRandomNode()           # get a random node
         branch1, p1 = tree1.getBranch(node1)          # get the branch string
-        subTree1: Tree = tree1.remove_subtree(node1)  # get a sub-tree with node1 as root
+        # Bug node1 is not in tree
+        subTree1: Tree = tree1.remove_subtree()  # get a sub-tree with node1 as root
 
         node2: Node = tree2.getRandomNode()           # get a random node
         branch2, p2 = tree2.getBranch(node2)          # get the branch string
