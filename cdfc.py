@@ -16,15 +16,17 @@ import typing as typ
 import warnings
 from pathlib import Path
 import traceback
+import treelib
+from treelib import Node as Node
 
 import numpy as np
 from tqdm import tqdm
 from alive_progress import alive_bar, config_handler
 
 # ! Next Steps
-# TODO fiz the error in getSubtree()
-# TODO add docstrings
+# TODO fix runNode error
 
+# TODO check copyright on imported packages
 # TODO add testing functions
 
 # **************************** Constants/Globals **************************** #
@@ -116,7 +118,7 @@ class Instance:
 rows: typ.List[Instance] = []  # this will store all of the records read in (the training dat) as a list of rows
 
 
-class Tree:
+class Tree(treelib.Tree):
     """Tree is a binary tree data structure that is used to represent a
        constructed feature
 
@@ -126,300 +128,224 @@ class Tree:
         data: Will either be a terminal character or a function name.
 
     Methods:
-        setLeft: Setter for left.
-        setRight: Setter for right.
-        setMiddle: Setter for middle.
+        addLeft: Creates a left child.
+        addRight: Creates a right child.
+        addMiddle: Creates a middle child.
+        getDepth: Gets the depth of a node.
+        getRoot: Gets the root of the tree.
+        getRandomNode: Gets a random node from the tree.
         getLeft: Getter for left.
         getRight: Getter for right.
         getMiddle: Getter for middle.
         runTree: Wrapper function for __runNode, and is used to transform data using the tree.
         __runNode: Helper function for runTree.
-        setSize: (Re)Computes the size of a tree by walking it.
-        updateSize: Updates the size of the tree after Crossover.
     """
+    # typing alias for tree nodes. They will either have a terminal index (int) or an OP (str)
+    TREE_DATA = typ.Union[int, str]
+    # used to get children quickly Dict[key=parentId, value=Dict[key=branch, value=childId]]
+    BRANCHES: typ.Dict[int, typ.Dict[str, str]] = {}
     
-    def __init__(self, data: typ.Union[str, int], left: typ.Union[None, "Tree"] = None,
-                 right: typ.Union[None, "Tree"] = None, middle: typ.Union[None, "Tree"] = None,
-                 size: typ.Union[int, None] = None) -> None:
-
-        # *********************** Error Checking *********************** #
-        try:
-            
-            if data is None:  # check that we aren't storing a none in data, if we are throw exception
-                raise Exception('ERROR: Tree constructor tried to add a \'None\' to a tree as data')
-            
-            if data in OPS:   # check that we are not creating an OP with too few terminals
-                if left is None or right is None:    # if left or right are not terminals, raise exception
-                    raise Exception("ERROR: Tree constructor tried to create a terminal Tree node using an operation and 1 None")
-                if left is None and right is None:   # if left & right are not terminals, raise exception
-                    raise Exception("ERROR: Tree constructor tried to create a terminal Tree node using an operation and 2 Nones")
-                if data == 'if' and middle is None:  # if we are using the if OP with no middle, raise exception
-                    raise Exception("ERROR: Tree constructor tried to create an IF transformation with too few children")
+    def sendToStdOut(self) -> None:
+        """Used to print a Tree."""
+        self.show()  # ascii
+        # self.show('ascii-ex')   # ascii-ex FAILS
+        # self.show('ascii-exr')  # ascii-exr FAILS
+        # self.show('ascii-em')   # ascii-em FAILS
+        # self.show('ascii-emv')  # ascii-emv FAILS
+        # self.show('ascii-emh')  # ascii-emh FAILS
+        out = Path.cwd() / 'logs' / 'tree.txt'  # create the file path
+        self.save2file(out)
         
-        except Exception as err:
-            lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-            msg = f'{str(err)}, line = {lineNm}'   # create the error/log message
-            log.error(msg)                         # log the error
-            printError(msg)                        # print error to console
-            traceback.print_stack()                # print stack trace so we know how None is reaching tree
-            sys.exit(-1)                           # exit on error; recovery not possible
-
-        # ************************ If data isn't null, we can build the tree ************************ #
-        self.data: typ.Union[int, str] = data    # must either be a function or a terminal (if a terminal it should be it's index)
-        self.left = left
-        self.right = right
-        self.middle = middle
-        if size is not None:            # if size was passed use it rather than setSize()
-            self.size = size            # this will save us from having to walk the tree more time
-        else:                           # if size wasn't passed call setSize()
-            self.size = self.setSize()
-        
-    def overwrite(self, new: "Tree"):
-        """Overwrites the current tree, and returns a new"""
-        self.data = new.data
-        self.left = new.getLeft()
-        self.right = new.getRight()
-        
-    def setLeft(self, left):
+    def addLeft(self, parent: Node, data: TREE_DATA) -> Node:
         """Sets the left child of a tree."""
-        self.left = left
         
-    def setRight(self, right):
+        # create the node & add it to the tree
+        new: Node = self.create_node(tag=data, parent=parent.identifier, data=data)
+
+        # update dictionary used by getLeft(), getRight(), & getMiddle()
+        # store new Node ID at ParentId, 'left' (overwriting any old values)
+        self.BRANCHES[parent.identifier] = {'left': new.identifier}
+        
+        return new
+    
+    def addRight(self, parent: Node, data: TREE_DATA) -> Node:
         """Sets the right child of a tree."""
-        self.left = right
         
-    def setMiddle(self, middle):
+        # create the node & add it to the tree
+        new: Node = self.create_node(tag=data, parent=parent.identifier, data=data)
+        
+        # update dictionary used by getLeft(), getRight(), & getMiddle()
+        # store new Node ID at ParentId, 'left' (overwriting any old values)
+        self.BRANCHES[parent.identifier] = {'right': new.identifier}
+        # self.BRANCHES[parent.identifier]['right'] = new.identifier
+        
+        return new
+    
+    def addMiddle(self, parent: Node, data: TREE_DATA) -> Node:
         """Sets the middle child of a tree."""
-        self.middle = middle
         
-    def getLeft(self) -> "Tree":
+        # create the node & add it to the tree
+        new: Node = self.create_node(tag=data, parent=parent.identifier, data=data)
+        
+        # update dictionary used by getLeft(), getRight(), & getMiddle()
+        # store new Node ID at ParentId, 'left' (overwriting any old values)
+        self.BRANCHES[parent.identifier] = {'middle': new.identifier}
+        # self.BRANCHES[parent.identifier]['middle'] = new.identifier
+        
+        return new
+    
+    def addSubTree(self, parent: Node, branch: str, subtree: "Tree"):
+        """Adds a subtree as a child of parent. This will also update the
+           BRANCHES dictionary & should overwrite any old values."""
+        
+        # add the subtree to the original tree as a child of parent
+        self.paste(parent.identifier, subtree, deep=True)           # ? should deep be true or false?
+        children: typ.List[str] = self.children(parent.identifier)  # get all of parent's children
+        
+        for cid in children:                                        # loop over all the child ids
+            if cid in self.BRANCHES[parent.identifier]:             # if the dictionary has the child id
+                continue                                            # continue
+            else:                                                   # if the child Id is not in the dictionary
+                self.BRANCHES[parent.identifier][branch] = cid      # add the new id to the dictionary
+                return
+        raise Exception('addSubtree could not find a missing child ID in BRANCHES')
+
+    def getDepth(self, node: Node) -> int:
+        """Given a node, return the node's depth"""
+        return self.depth(node)
+    
+    def getRoot(self) -> Node:
+        """Returns the trees root & prevent root from being overwritten"""
+        return self.get_node(self.root)
+    
+    def getRandomNode(self) -> Node:
+        """Get a random node obj from the tree."""
+        n = random.choice(self.all_nodes())      # pick a random node
+        while n is self.getRoot():               # if we picked the root,
+            n = random.choice(self.all_nodes())  # pick again
+        return n
+    
+    def getLeft(self, parent: Node) -> typ.Optional[Node]:
         """Gets the left child of a tree."""
-        try:
-            if self.left is None:
-                raise Exception('Tree tried to access a child that didn\'t exist')
-            else:
-                return self.left
-        except Exception as err:
-            log.error(str(err))
-            printError(str(err))
-            traceback.print_stack()
-            sys.exit(-1)  # exit on error; recovery not possible
+        nid: str = self.BRANCHES[parent.identifier]['left']  # get the nodes Id
+        return self.get_node(nid)                            # get the node & return
         
-    def getRight(self) -> "Tree":
+    def getRight(self, parent: Node) -> typ.Optional[Node]:
         """Gets the right child of a tree."""
-        try:
-            if self.right is None:
-                raise Exception('Tree tried to access a child that didn\'t exist')
-            else:
-                return self.right
-        except Exception as err:
-            log.error(str(err))
-            printError(str(err))
-            traceback.print_stack()
-            sys.exit(-1)  # exit on error; recovery not possible
-            
-    def getMiddle(self) -> "Tree":
+        nid: str = self.BRANCHES[parent.identifier]['right']  # get the nodes Id
+        return self.get_node(nid)                             # get the node & return
+    
+    def getMiddle(self, parent: Node) -> typ.Optional[Node]:
         """Gets the middle child of a tree."""
-        try:
-            if self.middle is None:
-                raise Exception('Tree tried to access a child that didn\'t exist')
-            else:
-                return self.middle
-        except Exception as err:
-            log.error(str(err))
-            printError(str(err))
-            traceback.print_stack()
-            sys.exit(-1)  # exit on error; recovery not possible
-            
-    def getRandomNode(self, terms: typ.List[int]) -> "Tree":
-        # ! make sure this code is working & correct
-        """Recursively searches for a random sub-tree, and should return a reference to it (not a value).
-           This is used by mutate.
+        nid: str = self.BRANCHES[parent.identifier]['middle']  # get the nodes Id
+        return self.get_node(nid)                              # get the node & return
+    
+    def getBranch(self, child: Node) -> typ.Tuple[str, Node]:
+        """Given a child, this returns what branch of it's parent it was on."""
+        parent: Node = self.parent(child.identifier)                     # get the parents Id
+        children: typ.Dict[str, str] = self.BRANCHES[parent.identifier]  # get all of the parents children
+        
+        for branch in children.keys():                                        # loop over all children
+            if self.BRANCHES[parent.identifier][branch] == child.identifier:  # if this branch maps to the child
+                return branch, parent                                         # return the branch
+        raise Exception('getBranch was not able to find a connection between the child & parent')
 
-                    Parameter:
-                        ftr (Tree): Current node of the tree.
-                        terms ([int]): List of terminal indexes.
-
-                    Returns:
-                        node (Tree): Node pointer found.
-                """
-        # ************ Make a Random Choice ************ #
-        listOfChoices = ['left', 'right', 'stop']   # default list of choices. Reset this on every iteration
-        if self.data == 'if':                       # if the operation stored in the current node is an if
-            listOfChoices.append('middle')          # add 'middle' to the list of choices
-        if self.left is None:                       # if there is no left child
-            listOfChoices.remove('left')            # then remove 'left' so we don't go down it
-        if self.right is None:                      # if there is no right child
-            listOfChoices.remove('right')           # then remove 'right' so we don't go down it
-        choice: str = random.choice(listOfChoices)  # make the random choice using the built list
-        
-        # ********* Check if We Should Stop Walking the Tree ********* #
-        if choice == "stop" or self.data in terms:
-            return self  # if we chose stop or if we have encountered a terminal, return self
-        
-        # *************** Continue Walking the Tree *************** #
-        elif choice == "left" and self.left is not None:
-            return self.left.getRandomNode(terms)  # if we chose left & left isn't None, go left
-        
-        elif choice == "right" and self.right is not None:
-            return self.right.getRandomNode(terms)  # if we chose right & right isn't None, go right
-        
-        elif choice == "middle" and self.middle is not None:
-            return self.middle.getRandomNode(terms)  # if we chose middle & middle isn't None, go middle
-        
     # running a tree should return a single value
     # featureValues -- the values of the relevant features keyed by their index in the original data
-    def runTree(self, featureValues: typ.Dict[int, float]) -> float:
+    def runTree(self, featureValues: typ.Dict[int, float], classId: int) -> float:
         """runTree is a wrapper for runNode & is used to transform provided data
            by walking the decision tree
 
         Parameters:
             featureValues ({key: int, value: float}): The dictionary mapping feature ids to
                                                       their values (in the current instance).
-        
+            classId (int): Class ID the tree is meant to classify.
+
         Returns:
             (float): The final value that the decision tree creates given the provided data.
         """
-        return self.__runNode(featureValues)
 
-    def __runNode(self, featureValues: typ.Dict[int, float]) -> typ.Union[int, float]:
+        return self.__runNode(featureValues, self.getRoot(), classId)
+    
+    def __runNode(self, featureValues: typ.Dict[int, float], node: Node, classId: int) -> typ.Union[int, float]:
         """runTree is a wrapper for runNode & is used to transform provided data
            by walking the decision tree
 
-                Parameters:
-                    featureValues ({key: int, value: float}): The dictionary mapping feature ids to
-                                                              their values (in the current instance).
+        Parameters:
+            featureValues ({key: int, value: float}): The dictionary mapping feature ids to
+                                                      their values (in the current instance).
 
-                Returns:
-                    (float): The value of a terminal, or the value of a terminal after an operation has occurred.
+        Returns:
+            (float): The value of a terminal, or the value computed by one or more operations.
         """
 
-        # + Try creating a unit test for this, grow, & full
-        # if the node is an operation both of it's branches should have operations or terminals
-        # either way calling __runNode() won't return a None
         try:
-            if self.data not in OPS:  # if the node isn't in OPS, then it should be a terminal
-    
+            if node.data in OPS:  # if the node is an OP
+                left: Node = self.getLeft(node)    # get the left child (all OPS wil have a left)
+                right: Node = self.getRight(node)  # get the right child (all OPS wil have a right)
                 # *************************** Error Checking *************************** #
-                if math.isnan(self.data):             # if the value stored is a NaN
-                    log.error(f'NaN stored in tree. ExpectParser expected an integer class ID, got a float: 1.0 OPS value or number, got {self.data}')
-                    raise Exception(f'ERROR: NaN stored in tree. Expect OPS value or number, got {self.data}')
-                
-                if featureValues[self.data] is None:  # if the value stored is a None
-                    raise Exception('featureValues contained a None at index self.data')
-                # ********************************************************************** #
-                
-                return featureValues[self.data]  # if the terminal is valid, return it
-            
-            else:  # if this node is an operation, find which one & start recursion
-    
-                # *********************************** Error Checking ****************** #
-                if self.left is None and self.right is not None:    # if one child is None, but not both
-                    raise Exception('runNode found a node in OPS with 1 \'None\' child')
-                
-                elif self.right is None and self.left is not None:  # if one child is None, but not both
-                    raise Exception('runNode found a node in OPS with 1 \'None\' child')
-                
-                if self.left is None and self.right is None:        # if both children are None
-                    raise Exception('runNode found a node in OPS with 2 \'None\' children')
-                
-                if self.data == 'if' and self.middle is None:       # if the OP is IF and it has no middle
-                    raise Exception('runNode found a node with a IF OP and no middle node')
-                # ********************************************************************** #
-                
-                # *************** Determine Which OP is Stored & Run Recursion *************** #
-                if self.data == 'add':         # if the OP was add
-                    vl = self.left.__runNode(featureValues) + self.right.__runNode(featureValues)
+                lftNone: bool = left is None                              # is left None?
+                rgtNone: bool = right is None                             # is right None?
+                xor: bool = (lftNone and not rgtNone) or (not lftNone and rgtNone)  # exclusive or
+                if xor:                                             # if one child is None, but not both
+                    raise AssertionError('runNode found a node in OPS with 1 \'None\' child')
+                if lftNone and rgtNone:                             # if both children are None
+                    raise AssertionError('runNode found a node in OPS with 2 \'None\' children')
+                if node.data == 'if' and self.getMiddle(node) is None:  # if the OP is IF and it has no middle
+                    raise AssertionError('runNode found a node with a IF OP and no middle node')
+
+                # ************ Determine Which OP is Stored & Run Recursion ************ #
+                if node.data == 'add':                                      # if the OP was add
+                    vl = (self.__runNode(featureValues, left, classId) +    # left + right
+                          self.__runNode(featureValues, right, classId))
                     return vl
-                elif self.data == 'subtract':  # if the OP was subtract
-                    vl = self.left.__runNode(featureValues) - self.right.__runNode(featureValues)
+                
+                elif node.data == 'subtract':                                # if the OP was subtract
+                    vl = (self.__runNode(featureValues, left, classId) -     # left - right
+                          self.__runNode(featureValues, right, classId))
                     return vl
-                elif self.data == 'times':     # if the OP was multiplication
-                    vl = self.left.__runNode(featureValues) * self.right.__runNode(featureValues)
+                
+                elif node.data == 'times':                                   # if the OP was multiplication
+                    vl = (self.__runNode(featureValues, left, classId) *     # left * right
+                          self.__runNode(featureValues, right, classId))
                     return vl
-                elif self.data == 'max':       # if the OP was max
-                    vl = max(self.left.__runNode(featureValues), self.right.__runNode(featureValues))
+                
+                elif node.data == 'max':                                     # if the OP was max
+                    vl = max(self.__runNode(featureValues, left, classId),   # max(left, right)
+                             self.__runNode(featureValues, right, classId))
                     return vl
-                elif self.data == 'if':        # if the OP was if
-                    if self.left.__runNode(featureValues) >= 0:
-                        vl = self.right.__runNode(featureValues)
-                    else:
-                        vl = self.getMiddle().__runNode(featureValues)
+                
+                elif node.data == 'if':                                      # if the OP was if
+                    if self.__runNode(featureValues, left, classId) >= 0:    # if the left value is positive,
+                        vl = self.__runNode(featureValues, right, classId)   # return the right node
+                    else:                                                    # if the left value is negative,
+                        middle: Node = self.getMiddle(node)          # get the middle child
+                        vl = self.__runNode(featureValues, middle, classId)  # return the middle node
                     return vl
-            
-        except IndexError:
-            lineNm = sys.exc_info()[-1].tb_lineno    # print line number error occurred on
-            log.error(f'Index stored in tree was in range but did not exist. Value stored was:{self.data}, line = {lineNm}')
-            print(f'ERROR: Index stored in tree was in range but did not exist. Value stored was:{self.data}, line = {lineNm}')
-            sys.exit(-1)  # exit on error; recovery not possible
-        except Exception as err:
-            lineNm = sys.exc_info()[-1].tb_lineno    # print line number error occurred on
-            printError(str(err) + f', line = {lineNm}')
-            traceback.print_stack()
-            sys.exit(-1)  # exit on error; recovery not possible
+                # ********************************************************************* #
 
-    def setSize(self) -> int:
-        """setSize computes the size (number of nodes) in the tree by recursively walking through it. This is done
-           when a new tree is created & when we need to update the size of a tree, but do not have any way of
-           knowing what's changed. This sets the size value of every node so sub-trees should have correct size values.
+            elif node.data in TERMINALS[classId]:     # if the node is a terminal
+                # *************************** Error Checking *************************** #
+                if math.isnan(node.data):             # if the value stored is a NaN
+                    msg: str = f'NaN stored in tree. Expected a class ID, OPS value, or number, got {node.data}'
+                    raise TypeError(f'ERROR: {msg}')  # raise TypeError
 
-            Returns:
-                (int): Size of the tree up to the current node.
-        """
+                if featureValues[node.data] is None:  # if the value stored is a None
+                    raise TypeError(f'featureValues contained a None at index {node.data}')
+                # ************************ Return Terminal Value ************************ #
+                return featureValues[self.data]       # if the terminal is valid, return it
+                # *********************************************************************** #
+                
+            else:                                     # if the node is not a terminal or a OP
+                raise TypeError(f'runNode could not parse data in tree, data ={node.data}')
         
-        if self.data not in OPS:               # if we have reached a terminal tree node
-            self.size = 1                      # set size to 1, because there are no children
-        
-        else:                                  # if we haven't reached a terminal tree node yet,
-            
-            if NUM_TERMINALS[self.data] == 2:  # if the OP isn't an IF and only has 2 children
-                # add left & right branches to get everything below, then +1 for the current node
-                self.size = self.left.setSize() + self.right.setSize() + 1
-            
-            else:                              # if the OP is an IF and has a middle add it as well
-                # add left, right, & middle branches to get everything below, then +1 for the current node
-                # BUG this is hitting None types
-                self.size = self.left.setSize() + self.right.setSize() + self.middle.setSize() + 1
-        
-        return self.size                       # send the new size up the recursive "stack"
-
-    def updateSize(self, swapped: str) -> None:
-        """updateSize computes the size (number of nodes) in the tree by getting the size of each child, adding 1,
-           and then overwriting the original size. This is done after crossover to avoid having to walk the tree
-           everytime. This doesn't change the size value of any other node so sub-trees should still have their
-           correct size values.
-
-            Parameters:
-                swapped (str): Tells us which child is being replaced so we can check that it exists.
-
-            Returns:
-                (int): Size of the tree up to the current node.
-        """
-        # ********************************** Error Checking ********************************** #
-        if swapped == 'left' and self.left is None:        # check that the swapped value is valid
-            raise Exception('Crossover failed to set the size of the new tree (left is None)')
-        elif swapped == 'right' and self.right is None:    # check that the swapped value is valid
-            raise Exception('Crossover failed to set the size of the new tree (right is None)')
-        elif swapped == 'middle' and self.middle is None:  # check that the swapped value is valid
-            raise Exception('Crossover failed to set the size of the new tree (middle is None)')
-        
-        if self.left is None:                              # if left is None, set to zero
-            lft = 0                                        # this is used as an alias so we can error check left
-        else:                                              # if left is not None get size
-            lft = self.left.size
-        
-        if self.right is None:                             # if right is None, set to zero
-            rgt = 0                                        # this is used as an alias so we can error check right
-        else:                                              # if right is not None get size
-            rgt = self.right.size
-
-        if self.middle is None:                            # if middle is None, set to zero
-            mdl = 0                                        # this is used as an alias so we can error check middle
-        else:                                              # if middle is not None get size
-            mdl = self.middle.size
-        # ************************************************************************************* #
-        self.size = 1 + lft + rgt + mdl                    # update the size of this tree
-        return
+        # ! This error is getting hit
+        except Exception as err:                         # catch any exceptions
+            lineNm = sys.exc_info()[-1].tb_lineno        # get the line number of error
+            log.error(f'{str(err)}, line = {lineNm}')    # log the error
+            printError(f'{str(err)}, line = {lineNm}')   # print message
+            traceback.print_stack()                      # print stack trace
+            sys.exit(-1)                                 # exit on error; recovery not possible
 
 
 class ConstructedFeature:
@@ -434,59 +360,27 @@ class ConstructedFeature:
         relevantFeatures ([int]): List of terminal characters relevant to the feature's class.
 
     Methods:
-        getUsedFeature: Gets the features used by the constructed feature.
         transform: Takes the original data & transforms it using the feature's decision tree.
     """
-    
-    def __init__(self, className: int, tree: Tree, size: int) -> None:
+
+    def __init__(self, className: int, tree: Tree) -> None:
         self.className = className                    # the name of the class this tree is meant to distinguish
         self.tree = tree                              # the root node of the constructed feature
-        self.size = size                              # the individual size (the size of the tree)
+        self.size = tree.size                         # the individual size (the size of the tree)
         self.relevantFeatures = TERMINALS[className]  # holds the indexes of the relevant features
         # ! if tree sanity check passes then the constructed feature is fine & the error is somewhere else
-        # sanityCheckCF(self)  # ! testing purposes only!
-
-    def getUsedFeatures(self) -> typ.List[int]:
-        """Gets the features used by the constructed feature, and returns their index"""
+        sanityCheckCF(self)  # ! testing purposes only!
     
-        # will hold the indexes found at each terminal node
-        values = []  # type: typ.List[int]
-        # ? do I need to be passing values instead of just using them?
-        
-        def __walk(node: Tree) -> None:
-            # if this tree's node is a valid operation, keep walking done the tree
-            if node.data in OPS:
-                __walk(node.getLeft())   # walk down the left branch
-                __walk(node.getRight())  # walk down the right branch
-                if NUM_TERMINALS[node.data] == 3:  # if the node contains an if
-                    __walk(node.getMiddle())       # walk the middle node as well
-                return              # now that I have walked down both branches return
-        
-            # if the node is not an operation, then it is a terminal index so add it to value
-            else:
-                values.append(node.data)
-                return
-
-        __walk(self.tree)  # walk the tree starting with the CF's root node
-        log.debug("__walk completed successfully!!")
-        
-        try:
-            if not values:  # if values is empty
-                
-                raise Exception('ERROR: The getUsedFeatures found no features (values list is empty)')
-            return values      # values should now hold the indexes of the tree's terminals
-        except Exception as err:
-            lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-            log.error(f'The getUsedFeatures found no features (values list is empty), line number = {lineNm}')
-            printError(str(err) + f', line = {lineNm}')
-            sys.exit(-1)  # exit on error; recovery not possible
+    '''def __str__(self):
+        """Used to print a Constructed Feature."""
+        print(f'Class ID: {self.className}, \n{self.tree}')'''
 
     def transform(self, instance: Instance) -> float:
         """Takes an instance, transforms it using the decision tree, and return the value computed."""
         
         # Send the tree a list of all the attribute values in a single instance
         featureValues: typ.Dict[int, float] = instance.attributes
-        return self.tree.runTree(featureValues)
+        return self.tree.runTree(featureValues, self.className)
 
 
 class Hypothesis:
@@ -507,16 +401,26 @@ class Hypothesis:
             transform: Transforms a dataset using the trees in the constructed features.
 
     """
-    # a single hypothesis(a GP individual)
+
     fitness: typ.Union[None, int, float] = None  # the fitness score
     distance: typ.Union[float, int] = 0          # the distance function score
     averageInfoGain: typ.Union[float, int] = -1  # the average info gain of the hypothesis
     maxInfoGain: typ.Union[float, int] = -1      # the max info gain in the hypothesis
+    idsToFeatures: typ.Dict[int, ConstructedFeature] = {}  # key all the CFs by their class ids
     # + averageInfoGain & maxInfoGain must be low enough that they will always be overwritten + #
     
     def __init__(self, features: typ.List[ConstructedFeature], size: int) -> None:
-        self.features: typ.List[ConstructedFeature] = features  # a list of all the constructed features
-        self.size: int = size                                   # the number of nodes in all the cfs
+        self.features: typ.List[ConstructedFeature] = features      # a list of all the constructed features
+        self.size: int = size                                       # the number of nodes in all the cfs
+        self.idsToFeatures: typ.Dict[int, ConstructedFeature] = {}  # key all the CFs by their class ids
+        for feature in features:
+            k = feature.className
+            self.idsToFeatures[k] = feature
+
+    '''def __str__(self):
+        """Used to print a Hypothesis."""
+        for ft in self.features:  # loop over every constructed feature
+            print(f'{ft}\n')      # and print every constructed feature'''
 
     def getFitness(self) -> float:
         """getFitness uses several helper functions to calculate the fitness of a Hypothesis"""
@@ -671,10 +575,10 @@ class Hypothesis:
             # key = CF(Values), Entry = instance in training data
             partition: typ.Dict[float, typ.List[Instance]] = {}
             
-            s = 0                             # used to sum CF's conditional entropy
-            used = feature.getUsedFeatures()  # get the indexes of the used features
-            v = []                            # this will hold the used features ids & values
-            for i in rows:                    # loop over all instances
+            s = 0                                # used to sum CF's conditional entropy
+            used = TERMINALS[feature.className]  # get the indexes of the used features
+            v = []                               # this will hold the used features ids & values
+            for i in rows:                       # loop over all instances
 
                 # get CF(v) for this instance (i is a Instance struct which is what transform needs)
                 cfv = feature.transform(i)  # needs the values for an instance
@@ -752,7 +656,7 @@ class Hypothesis:
         # so we should use rows (the provided training data)
         if data is None:
     
-            for r in rows:  # for each Instance
+            for r in rows:    # for each Instance
                 values = []   # this will hold the calculated values for all the constructed features
 
                 for f in self.features:            # transform the original input using each constructed feature
@@ -788,96 +692,147 @@ class Hypothesis:
 
 
 class Population:
-    """Population is a list of Hypothesis, and a generation number.
+    """Population is a list of Hypothesis, and a generation number. It is largely
+       just a namespace.
     
         Variables:
             candidateHypotheses ([Hypothesis]): list of hypotheses
             generationNumber (int): current generation number.
     """
-    
-    # this will be the population of hypotheses. This is largely just a namespace
+
     def __init__(self, candidates: typ.List[Hypothesis], generationNumber: int) -> None:
         self.candidateHypotheses = candidates  # a list of all the candidate hypotheses
         self.generation = generationNumber     # this is the number of this generation
+        
+    '''def __str__(self):
+        """Used to print a population"""
+        print(f'Generation: {self.generation}\n')  # print the generation number
+        for hy in self.candidateHypotheses:        # loop over every hypothesis
+            print(f'{hy}\n')                       # and print each hypothesis'''
 # ***************** End of Namespaces/Structs & Objects ******************* #
 
 
-def __grow(classId: int, depth: int = 0) -> typ.Tuple[Tree, int]:
+def __grow(classId: int, node: Node, tree: Tree) -> Node:
+    """Grow creates a tree or sub-tree starting at the Node node, and using the Grow method.
+       If node is a root Node, grow will build a tree, otherwise grow will build a sub-tree
+       starting at node. Grow assumes that node's data has already been set & makes all
+       changes in place.
+
+       NOTE: During testing whatever calls grow should use this sanity check after building
+             it to check for errors: sanityCheckTree(newTree)
+    """
     
-    # This function uses the grow method to generate an initial population
-    # the last thing returned should be a trees root node
-    if int == 0:  # only print to log on first call
-        log.debug('The __grow method has been chosen to build a tree')
-
-    depth += 1  # increase the depth by one
-
-    terminals = TERMINALS[classId]
-    if depth == MAX_DEPTH:  # if we've reached the max depth add a random terminal value and return
-        return Tree(random.choice(terminals)), depth
+    coin = random.choice(['OP', 'TERM']) == 'TERM'  # flip a coin & decide OP or TERM
     
-    else:  # since we have not reached the max depth, decide to add a terminal or a operation
+    # *************************** A Terminal was Chosen *************************** #
+    # NOTE: check depth-1 because we will create children
+    if coin == 'TERM' or (tree.getDepth(node) == MAX_DEPTH - 1):  # if we need to add terminals
+
+        # pick the needed amount of OPs
+        terms: typ.List[int] = random.choices(TERMINALS[classId], k=NUM_TERMINALS[node.data])
         
-        termOrOp: str = random.choice(['OP', 'TERM'])  # randomly choose to add an OP or a terminal
+        if NUM_TERMINALS[node.data] == 2:                  # if the OP needs 2 children
+            tree.addLeft(parent=node, data=terms.pop(0))   # create a new left node & add it
+            tree.addRight(parent=node, data=terms.pop(0))  # create a new left node & add it
+            
+            return tree.getRoot()                          # return the root node of the tree
         
-        # *************************** A Terminal was Chosen *************************** #
-        if termOrOp == 'TERM':                                         # if we chose to add a terminal
-            value: int = random.choice(terminals)                      # pick a random terminal
-            return Tree(value), depth                                  # create a new tree & return it
+        elif NUM_TERMINALS[node.data] == 3:                 # if the OP needs 2 children
+            tree.addLeft(parent=node, data=terms.pop(0))    # create a new left node & add it
+            tree.addRight(parent=node, data=terms.pop(0))   # create a new right node & add it
+            tree.addMiddle(parent=node, data=terms.pop(0))  # create a new middle node & add it
+            
+            return tree.getRoot()                           # return the root node of the tree
         
-        # *************************** A Operation was Chosen *************************** #
-        else:                                                          # if we chose to add an operation
-            value: str = random.choice(OPS)                            # pick a random Operation
-
-            if NUM_TERMINALS[value] == 2:                              # if the number of terminals needed is two
-                lft, leftDepth = __grow(classId, depth)                # grow the left terminal or operation tree
-                rgt, rightDepth = __grow(classId, depth)               # grow the right terminal or operation tree
-                totalDepth = leftDepth + rightDepth                    # update total size
-                newTree = Tree(value, lft, rgt, size=totalDepth)       # create the new tree
-
-            else:  # if the number of terminals needed is three
-                lft, leftDepth = __grow(classId, depth)                # grow the left terminal or operation tree
-                rgt, rightDepth = __grow(classId, depth)               # grow the right terminal or operation tree
-                mdl, middleDepth = __grow(classId, depth)              # grow the right terminal or operation tree
-                totalDepth = leftDepth + rightDepth + middleDepth      # update total size
-                newTree = Tree(value, lft, rgt, mdl, size=totalDepth)  # create the new tree
-
-            # sanityCheckTree(newTree)    # ! testing purposes only!
-            # ! if tree sanity check passes then the tree is fine & error is in the ConstructedFeature()
-            return newTree, totalDepth  # after the recursive calls have finished return the tree
-
-
-def __full(classId: int, depth: int = 0) -> typ.Tuple[Tree, int]:
+        else:                                               # if NUM_TERMINALS was not 2 or 3
+            raise IndexError("Grow could not find the number of terminals need")
     
-    # This function uses the full method to generate an initial population
-    # the last thing returned should be a trees root node
-
-    if int == 0:  # only print to log on first call
-        log.debug('The __full method has been chosen to build a tree')
-
-    depth += 1  # increase the depth by one
-
-    if depth == MAX_DEPTH:  # if we've reached the max depth add a random terminal value and return
-        # this tree should store a terminal, so no children should be created
-        return Tree(random.choice(TERMINALS[classId])), depth
-    
-    else:  # if we haven't reached the max depth, we should create a tree with an OP
-        value = random.choice(OPS)                                 # select a random operation
+    # *************************** A Operation was Chosen *************************** #
+    else:  # if we chose to add an operation
         
-        if NUM_TERMINALS[value] == 2:                              # if the number of terminals needed is two
-            lft, leftDepth = __full(classId, depth)                # grow the left terminal or operation tree
-            rgt, rightDepth = __full(classId, depth)               # grow the right terminal or operation tree
-            totalDepth = leftDepth + rightDepth                    # update total size
-            newTree = Tree(value, lft, rgt, size=totalDepth)       # create a new tree with Value (an operation) as it's data
+        if NUM_TERMINALS[node.data] == 2:                              # if the number of terminals needed by node is two
+            ops: typ.List[str] = random.choices(OPS, k=2)              # pick the needed amount of OPs
+            
+            left: Node = tree.addLeft(parent=node, data=ops.pop(0))    # add the new left node
+            right: Node = tree.addRight(parent=node, data=ops.pop(0))  # add the new right node
+            
+            __grow(classId, left, tree)                                # call grow on left to set it's children
+            __grow(classId, right, tree)                               # call grow on right to set it's children
+            return tree.getRoot()                                      # return the root node of the tree
+        
+        elif NUM_TERMINALS[node.data] == 3:                              # if the number of terminals needed by node is three
+            ops: typ.List[str] = random.choices(OPS, k=3)                # pick the needed amount of OPs
+            
+            left: Node = tree.addLeft(parent=node, data=ops.pop(0))      # create & add the new left node to the tree
+            right: Node = tree.addRight(parent=node, data=ops.pop(0))    # create & add the new right node to the tree
+            middle: Node = tree.addMiddle(parent=node, data=ops.pop(0))  # create & add the new left node to the tree
+            
+            __grow(classId, left, tree)                                  # call grow on left to set it's children
+            __grow(classId, right, tree)                                 # call grow on right to set it's children
+            __grow(classId, middle, tree)                                # call grow on middle to set it's children
+            return tree.getRoot()                                        # return the root node of the tree
+        
+        else:  # if NUM_TERMINALS was not 1 or 2
+            raise IndexError("Grow could not find the number of terminals need")
 
-        else:                                                      # if the number of terminals needed is three
-            lft, leftDepth = __full(classId, depth)                # grow the left terminal or operation tree
-            rgt, rightDepth = __full(classId, depth)               # grow the right terminal or operation tree
-            mdl, middleDepth = __full(classId, depth)              # grow the right terminal or operation tree
-            totalDepth = leftDepth + rightDepth + middleDepth      # update total size
-            newTree = Tree(value, lft, rgt, mdl, size=totalDepth)  # create the new tree
 
-        # sanityCheckTree(newTree)    # ! testing purposes only!
-        return newTree, totalDepth  # after the recursive calls have finished return the tree
+def __full(classId: int, node: Node, tree: Tree):
+    """Full creates a tree or sub-tree starting at the Node node, and using the Full method.
+       If node is a root Node, full will build a tree, otherwise full will build a sub-tree
+       starting at node. Full assumes that node's data has already been set & makes all
+       changes in place.
+      
+       NOTE: During testing whatever calls full should use this sanity check after building
+             it to check for errors: sanityCheckTree(newTree)
+    """
+    
+    # *************************** Max Depth Reached *************************** #
+    if tree.getDepth(node) == MAX_DEPTH - 1:
+        
+        # pick the needed amount of OPs
+        terms: typ.List[int] = random.choices(TERMINALS[classId], k=NUM_TERMINALS[node.data])
+        
+        if NUM_TERMINALS[node.data] == 2:      # if the OP needs 2 children
+            tree.addLeft(parent=node, data=terms.pop(0))   # create a new left node & add it
+            tree.addRight(parent=node, data=terms.pop(0))  # create a right left node & add it
+            return tree.getRoot()              # return the root node of the tree
+        
+        elif NUM_TERMINALS[node.data] == 3:     # if the OP needs 2 children
+            tree.addLeft(parent=node, data=terms.pop(0))    # create a new left node & add it
+            tree.addRight(parent=node, data=terms.pop(0))   # create a new right node & add it
+            tree.addMiddle(parent=node, data=terms.pop(0))  # create a new middle node & add it
+            return tree.getRoot()               # return the root node of the tree
+        
+        else:  # if NUM_TERMINALS was not 1 or 2
+            raise IndexError("Grow could not find the number of terminals need")
+    
+    # *************************** If Not at Max Depth *************************** #
+    else:  # if we haven't reached the max depth, add operations
+        
+        if NUM_TERMINALS[node.data] == 2:                              # if the number of terminals needed by node is two
+            ops: typ.List[str] = random.choices(OPS, k=2)              # pick the needed amount of OPs
+
+            left: Node = tree.addLeft(parent=node, data=ops.pop(0))    # add the new left node
+            right: Node = tree.addRight(parent=node, data=ops.pop(0))  # add the new right node
+            
+            __full(classId, left, tree)                                # call grow on left to set it's children
+            __full(classId, right, tree)                               # call grow on right to set it's children
+            return tree.getRoot()                                      # return the root node of the tree
+        
+        elif NUM_TERMINALS[node.data] == 3:                              # if the number of terminals needed by node is three
+            ops: typ.List[str] = random.choices(OPS, k=3)                # pick the needed amount of OPs
+            
+            left: Node = tree.addLeft(parent=node, data=ops.pop(0))      # create & add the new left node to the tree
+            right: Node = tree.addRight(parent=node, data=ops.pop(0))    # create & add the new right node to the tree
+            middle: Node = tree.addMiddle(parent=node, data=ops.pop(0))  # create & add the new left node to the tree
+            
+            __full(classId, left, tree)                                   # call grow on left to set it's children
+            __full(classId, right, tree)                                  # call grow on right to set it's children
+            __full(classId, middle, tree)                                 # call grow on middle to set it's children
+            return tree.getRoot()                                         # return the root node of the tree
+        
+        else:  # if NUM_TERMINALS was not 1 or 2
+            raise IndexError("Grow could not find the number of terminals need")
 
 
 def createInitialPopulation() -> Population:
@@ -889,21 +844,19 @@ def createInitialPopulation() -> Population:
         # NOTE this will make 1 tree for each feature, and 1 CF for each class
 
         classIds: typ.List[int] = copy.copy(CLASS_IDS)  # create a copy of all the unique class ids
-        random.shuffle(classIds)                        # shuffle the class ids so their order is random
 
         ftrs: typ.List[ConstructedFeature] = []
         size = 0
 
         # ? should this be LABEL_NUMBER or FEATURE_NUMBER
-        for nll in range(LABEL_NUMBER):
+        for ___ in CLASS_IDS:  # create a CF for each class
             # randomly decide if grow or full should be used.
             # Also randomly assign the class ID then remove that ID
             # so each ID may only be used once
             
             try:
-                name = classIds.pop(0)  # get a random id
-                
-                if name not in CLASS_IDS:
+                name = classIds.pop(0)     # get a random id
+                if name not in CLASS_IDS:  # make sure name is a valid class id
                     raise Exception(f'createHypothesis got an invalid name ({name}) from classIds')
             
             except IndexError:                         # if classIds.pop() tried to pop an empty list, log error & exit
@@ -917,13 +870,26 @@ def createInitialPopulation() -> Population:
                 printError(f'ERROR: {str(err)}, line {lineNm}')
                 sys.exit(-1)                           # exit on error; recovery not possible
             # DEBUG if we pass this point we know that name is valid
-
-            if random.choice([True, False]):           # *** use grow *** #
-                tree, size = __grow(name)   # create tree using grow
-            else:                                      # *** use full *** #
-                tree, size = __full(name)   # create tree using full
-            cf = ConstructedFeature(name, tree, size)  # create constructed feature
-            ftrs.append(cf)                            # add the feature to the list of features
+            
+            tree = Tree()                                          # create an empty tree
+            root = tree.create_node(tag='root', data=random.choice(OPS))  # create a root node for the tree
+            
+            # !!!!!!!!!!!!!!!!!!!!! Used for Testing Only !!!!!!!!!!!!!!!!!!!!! #
+            if not (root.is_root()):  # + This does pass so root doesn't have parents
+                raise Exception('Root is not tree root')
+            if root is not tree.getRoot():
+                raise Exception('Root is not equal to tree root')
+            # __grow(name, root, tree)    # create tree using grow
+            __full(name, root, tree)    # create tree using full
+            tree.sendToStdOut()                          # print the tree
+            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
+            
+            '''if random.choice([True, False]):         # *** use grow *** #
+                __grow(name, tree.getRoot(), tree)   # create tree using grow
+            else:                                    # *** use full *** #
+                __full(name, tree.getRoot(), tree)   # create tree using full'''
+            cf = ConstructedFeature(name, tree)                   # create constructed feature
+            ftrs.append(cf)                                       # add the feature to the list of features
 
             size += size
             
@@ -940,12 +906,11 @@ def createInitialPopulation() -> Population:
     with alive_bar(POPULATION_SIZE, title="Initial Hypotheses") as bar:  # declare your expected total
         for __ in range(POPULATION_SIZE):  # iterate as usual
             hyp = createHypothesis()       # create a Hypothesis
-            # sanityCheckHyp(hyp)          # ! testing purposes only!
+            sanityCheckHyp(hyp)            # ! testing purposes only!
             hypothesis.append(hyp)         # add the new hypothesis to the list
             bar()
     
-    # sanityCheckPop(hypothesis)    # ! testing purposes only!
-    
+    sanityCheckPop(hypothesis)  # ! testing purposes only!
     return Population(hypothesis, 0)
 
 
@@ -969,17 +934,17 @@ def sanityCheckHyp(hyp: Hypothesis):
 
 # ! testing purposes only!
 def sanityCheckCF(cf: ConstructedFeature):
-    """Used in debugging to checka Constructed Feature"""
+    """Used in debugging to check a Constructed Feature"""
     log.debug('Starting Constructed Feature Sanity Check...')
     cf.transform(rows[0])
     log.debug('Constructed Feature Sanity Check Passed')
 
 
 # ! testing purposes only!
-def sanityCheckTree(tree: Tree):
+def sanityCheckTree(tree: Tree, classId):
     """Used in debugging to check a Tree"""
     log.debug('Starting Tree Sanity Check...')
-    tree.runTree(rows[0].attributes)
+    tree.runTree(rows[0].attributes, classId)
     log.debug('Tree Sanity Check Passed')
 # *************************************************************** #
 
@@ -994,13 +959,13 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             
         Functions:
             tournament: Finds Constructed Features to be mutated/crossover-ed.
-            getSubTree: Helper method for crossover that finds subtrees.
             mutate: Performs the mutation operation.
             crossover: Performs the crossover operation.
     """
 
     def __tournament(p: Population) -> Hypothesis:
-        # used by evolve to selection the parents
+        """Used by evolution to selection the parent(s)"""
+
         # **************** Tournament Selection **************** #
         candidates: typ.List[Hypothesis] = copy.deepcopy(p.candidateHypotheses)  # copy to avoid overwriting
         first = None  # the tournament winner
@@ -1026,8 +991,8 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         except Exception as err2:
             lineNm2 = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
             log.error(f'Tournament could not set first correctly, first = {first}, line number = {lineNm2}')
-            print(str(err2) + f', line = {lineNm2}')
-            sys.exit(-1)  # exit on error; recovery not possible
+            print(f'{str(err2)}, line = {lineNm2}')
+            sys.exit(-1)                            # exit on error; recovery not possible
         
         # log.debug('Finished Tournament method')
         bar.text('found parent')  # ! for debugging
@@ -1037,224 +1002,94 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
     # ******************* Evolution ******************* #
     # create a new population with no hypotheses (made here crossover & mutate can access it)
     newPopulation = Population([], population.generation+1)
-    
-    def getSubtree(ftr: Tree, terms: typ.List[int]) -> typ.Tuple[Tree, Tree, str]:
-        """Finds a sub-tree for crossover.
-        
-            Parameter:
-                ftr (Tree): Current node of the tree.
-                terms ([int]): List of terminal indexes.
-            
-            Returns:
-                ftr (Tree): Sub-tree found.
-                parentFtr (Tree): Parent of the sub-tree found.
-                lastChoice (str): Last choice that was made while walking the tree.
-        """
-        # ! is ftr a pointer? I am overwriting instead of walking?
-        # walk the tree & find a random subtree for feature
-        lastChoice: typ.Union[str, None] = None
-        choice: typ.Union[str, None] = None
-        parentFtr: typ.Union[Tree, None] = None
-        isFirstLoop: bool = True
 
-        while True:
-            
-            if not isFirstLoop:      # if it's not the 1st loop,
-                lastChoice = choice  # save the previous choice
-            
-            # check is data is None or in terms, & if so break
-            # NOTE: if we don't break here then data is in OPS
-            if ftr.data is None or ftr.data in terms:
-                break
-            if (ftr.data not in terms) and (ftr.data not in OPS):
-                # if the stored data isn't an OP or a terminal, raise an exception
-                raise Exception("getSubTree found an invalid value stored in tree node")
-
-            # ************ Make a Random Choice ************ #
-            # ! listOfChoices has 2-3 options that walk farther & 1 that stops. Does this make the
-            # !   random choice biased towards walking? Meaning that we'll get terminals more often?
-            # !   Should walking & stopping be equally likely? Should they be their own list/choice?
-            listOfChoices = ['left', 'right', 'stop']  # default list of choices. Reset this on every iteration
-            if NUM_TERMINALS[ftr.data] == 3:           # if the operation stored in the current node is an if
-                listOfChoices.append('middle')         # add 'middle' to the list of choices
-            if ftr.getLeft() is None:                  # if there is no left child
-                listOfChoices.remove('left')           # then remove 'left' so we don't go down it
-            if ftr.getRight() is None:                 # if there is no right child
-                listOfChoices.remove('right')          # then remove 'right' so we don't go down it
-            if isFirstLoop:                            # if it's the first iteration
-                listOfChoices.remove('stop')           # remove the 'stop' option (this prevents randomly build a subtree of size 1)
-            # ! This is causing errors because listOfChoices is empty. This could only happen if we are on the root node & it has no children. A tree of size 1
-            choice = random.choice(listOfChoices)      # make the random choice using the built list
-            
-            # ********* Check if We Should Stop Walking the Tree ********* #
-            # ! Whenever we break here ftr will be a terminal
-            if choice == "stop":
-                # ! this is the only valid way of breaking, since all OPs should have children
-                # ! this is the issue. For some reason the first ftr is often a terminal (a tree of size 1)
-                break  # if we chose stop or if we have encountered a terminal, break
-                
-            elif choice == "left" and ftr.getLeft() is None:
-                break  # if choose to go left but there isn't a left, break
-        
-            elif choice == "right" and ftr.getRight() is None:
-                break  # if choose to go right but there isn't a right, break
-                
-            elif choice == "middle" and ftr.getMiddle() is None:
-                break  # if choose to go middle but there isn't a middle, break
-
-            # *************** Continue Walking the Tree *************** #
-            elif choice == "left" and ftr.getLeft() is not None:
-                parentFtr = ftr      # save the old feature
-                ftr = ftr.getLeft()  # if we chose left & left isn't None, go left
-                continue             # skip all the other else cases (redundant)
-        
-            elif choice == "right" and ftr.getRight() is not None:
-                parentFtr = ftr       # save the old feature
-                ftr = ftr.getRight()  # if we chose right & right isn't None, go right
-                continue              # skip all the other else cases (redundant)
-
-            elif choice == "middle" and ftr.getMiddle() is not None:
-                parentFtr = ftr        # save the old feature
-                ftr = ftr.getMiddle()  # if we chose middle & middle isn't None, go middle
-                continue               # skip all the other else cases (redundant)
-            
-            isFirstLoop = False        # update isFirstLoop bool since the 1st loop is over
-        
-        # + we have now found a sub-trees & have exited the loop + #
-        # ************************** Error Checking ************************** #
-        # BUG this is being hit. ParentFtr = ftr because we often exit on the 1st loop. While this is recoverable,
-        # !   this may cause errors done the line. It's also showing that we have terminals with children
-        # !   may not happen every time, but does happen a few times
-        try:
-            
-            if isFirstLoop is True:  # this will trigger if the tree passed is only 1 node
-                lastChoice = 'stop'  # attempt recovery setting the ftr (a terminal) to the parent
-                raise Warning(f'Warning: getSubTree exited on first loop, data was {ftr.data}, and choice was {choice}')
-            
-            if ftr is parentFtr:  # before returning check that ftr & parentFtr are different object
-                raise Exception(f'Error in getSubTree method, feature ({ftr.data}) '
-                                f'and parent ({parentFtr.data}) are the same')
-        
-        except Warning as wrn:                             # catch the warning caused by exiting on the first loop
-            lineNm2 = sys.exc_info()[-1].tb_lineno         # get the line number of the warning
-            log.error(str(wrn))                            # log the warning
-            printError(str(wrn) + f', line = {lineNm2}')   # print the warning
-        
-        except Exception as err2:                          # catch the exception caused by parent = ftr
-            lineNm2 = sys.exc_info()[-1].tb_lineno         # print line number error occurred on
-            log.error(str(err2))                           # log the error
-            printError(str(err2) + f', line = {lineNm2}')  # print the error
-            sys.exit(-1)  # exit on error; recovery not possible
-        # ********************************************************************* #
-        
-        return ftr, parentFtr, lastChoice  # return the subtree, and the parent tree
-    
     def mutate():
-        """Performs the mutation operation on a tree"""
-
+        """Finds a random node and builds a new sub-tree starting at it. Currently mutate
+           uses the same grow & full methods as the initial population generation without
+           an offset. This means that mutate trees will still obey the max depth rule.
+        """
+        
         # ******************* Fetch Values Needed ******************* #
-        # NOTE: parent is from a copy of population made by tournament, NOT original pop
-        parent: Hypothesis = __tournament(population)                # get parent Hypothesis using tournament
+        parent: Hypothesis = __tournament(population)                # get copy of a parent Hypothesis using tournament
         randIndex: int = random.choice(range(len(parent.features)))  # get a random index
         randCF: ConstructedFeature = parent.features[randIndex]      # get a random Constructed Feature
         terminals = randCF.relevantFeatures                          # save the indexes of the relevant features
-        node = randCF.tree.getRandomNode(terminals)                  # get a random node reference in the CF's tree
-
-        # ************************* Mutate ************************* #
-        # TODO check new code here
-        # randomly decide which method to use to construct the new tree (grow or full)
-        if random.choice(['Grow', 'Full']) == 'Grow':     # * Grow * #
-            newTree, size = __grow(randCF.className)      # if grow, then grow a new tree
-        else:                                             # * Full * #
-            newTree, size = __full(randCF.className)      # if full, then use full
-        node.overwrite(newTree)                           # overwrite the node in place
-        # ? Since node is a reference, it is already in the tree randCF.tree
-        randCF.tree.setSize()  # TODO optimize this so we aren't walking the tree again
+        tree: Tree = randCF.tree                                     # get the tree from the CF
+        node: Node = randCF.tree.getRandomNode()                     # get a random node from the CF's tree
+        # *********************************************************** #
         
-        cl = randCF.className                             # get the className of the feature
-        parent.features[randIndex] = ConstructedFeature(cl, randCF.tree, randCF.tree.size)  # overwrite old CF with the new one
-        newPopulation.candidateHypotheses.append(parent)  # add the parent to the new pop
-        # appending is needed because parent is a copy made by tournament NOT a reference from the original pop
+        # ************* Remove the Children of the Node ************* #
+        children: typ.List[Node] = tree.children(node.identifier)   # get all the children
+        [tree.remove_node(child.identifier) for child in children]  # delete all the children
+        # *********************************************************** #
+    
+        # ************************* Mutate ************************* #
+        if random.choice(['OPS', 'TERM']) == 'TERM' or tree.depth(node.identifier) == MAX_DEPTH:
+            node.data = random.choice(terminals)  # if we are at max depth or choose TERM,
+    
+        else:  # if we choose to add an OP
+            node.data = random.choice(OPS)  # give the node a random OP
+        
+            # randomly decide which method to use to construct the new tree (grow or full)
+            if random.choice(['Grow', 'Full']) == 'Grow':  # * Grow * #
+                __grow(randCF.className, node, tree)       # tree is changed in place starting with node
+            else:                                          # * Full * #
+                __full(randCF.className, node, tree)       # tree is changed in place starting with node
+        # *********************************************************** #
+        
+        # overwrite old CF with the new one
+        parent.features[randIndex] = ConstructedFeature(randCF.className, randCF.tree)
+        # add the mutated parent to the new pop (appending is needed because parent is a copy NOT a reference)
+        newPopulation.candidateHypotheses.append(parent)
     
     def crossover():
         """Performs the crossover operation on two trees"""
 
-        # parent1 & parent2 are from a copy of population made by tournament, NOT original pop
-        # because of this they should not be viewed as references
-        parent1: Hypothesis = __tournament(population)
-        parent2: Hypothesis = __tournament(population)
+        # * Find Random Parents * #
+        parent1: Hypothesis = __tournament(population)  # parent1 & parent2 are from a copy of population made by tournament, NOT original pop
+        parent2: Hypothesis = __tournament(population)  # because of this they should not be viewed as references
+        
         #  check that each parent is unique
         # if they are the same they should reference the same object & so 'is' is used instead of ==
         while parent1 is parent2:
             parent2 = __tournament(population)
-    
-        # feature 1
-        randomFeature: ConstructedFeature = random.choice(parent1.features)  # get a random feature from the parent
-        terminals1: typ.List[
-            int] = randomFeature.relevantFeatures  # get the indexes of the terminal values (for the feature)
-        feature1: Tree = randomFeature.tree  # get the tree (for the feature)
-    
-        # ? should I get a new random feature or make sure they have the same classId? I don't think so
-        # feature 2
-        randomFeature = random.choice(parent2.features)  # get a random feature from the parent
-        terminals2: typ.List[
-            int] = randomFeature.relevantFeatures  # get the indexes of the terminal values (for the feature)
-        feature2: Tree = randomFeature.tree  # get the tree (for the feature)
+
+        # * Get CFs from the Same Class * #
+        # Feature 1
+        feature1: ConstructedFeature = random.choice(parent1.features)  # get a random feature from the parent
+        tree1: Tree = feature1.tree                                     # get the tree
+        print('Parent Tree 1:')  # ! For Testing Only !!
+        tree1.sendToStdOut()     # ! For Testing Only !!
+
+        # Feature 2
+        feature2: ConstructedFeature = parent2.idsToFeatures[feature1.className]  # makes sure CFs are from/for the same class
+        tree2: Tree = feature2.tree                                               # get the tree
+        print('Parent Tree 2:')  # ! For Testing Only !!
+        tree2.sendToStdOut()     # ! For Testing Only !!
     
         # *************** Find the Two Sub-Trees **************** #
-        subTree1, parentTree1, choice1 = getSubtree(feature1, terminals1)
-        subTree2, parentTree2, choice2 = getSubtree(feature2, terminals2)
+        node1: Node = tree1.getRandomNode()           # get a random node
+        branch1, p1 = tree1.getBranch(node1)          # get the branch string
+        subTree1: Tree = tree1.remove_subtree(node1)  # get a sub-tree with node1 as root
+
+        node2: Node = tree2.getRandomNode()           # get a random node
+        branch2, p2 = tree2.getBranch(node2)          # get the branch string
+        subTree2: Tree = tree2.remove_subtree(node2)  # get a sub-tree with node1 as root
         # ******************************************************* #
     
-        # ************************ error checking before swap ************************ #
-        try:  # ! these will always trigger if we left on a terminal
-            if choice1 == 'left' and parentTree1.getLeft() is None:
-                raise Exception('Crossover tried to swap the left child of parentTree1, but left is None')
-            if choice1 == 'right' and parentTree1.getRight() is None:
-                raise Exception('Crossover tried to swap the right child of parentTree1, but right is None')
-            if choice1 == 'middle' and parentTree1.getMiddle() is None:
-                raise Exception('Crossover tried to swap the right child of parentTree1, but middle is None')
-            if choice2 == 'left' and parentTree2.getLeft() is None:
-                raise Exception('Crossover tried to swap the left child of parentTree2, but left is None')
-            if choice2 == 'right' and parentTree2.getRight() is None:
-                raise Exception('Crossover tried to swap the right child of parentTree2, but right is None')
-            if choice2 == 'middle' and parentTree2.getMiddle() is None:
-                raise Exception('Crossover tried to swap the right child of parentTree2, but middle is None')
-        except Exception as err:  # if we tried to swap with a None
-            lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-            msg = f'{str(err)}, line = {lineNm}'  # create the error/log message
-            log.error(msg)  # log the error
-            printError(msg)  # print error to console
-            sys.exit(-1)  # exit on error; recovery not possible
-        # **************************************************************************** #
-    
         # ************************** swap the two subtrees ************************** #
-        # update the first parent tree
-        if choice1 == 'left':                # if subTree 1 went left to find the subTree
-            parentTree1.setLeft(subTree2)    # then replace the left with subTree 2
-        elif choice1 == 'right':             # if subTree 1 went right to find the subTree
-            parentTree1.setRight(subTree2)   # then replace the right with subTree 2
-        elif choice1 == 'middle':            # if subTree 1 went right to find the subTree
-            parentTree1.setMiddle(subTree2)  # then replace the right with subTree 2
-        elif choice1 == 'stop':              # if subTree 1 is only a single node
-            parentTree1.overwrite(subTree2)  # then swap the current trees
-        # update the second parent tree
-        if choice2 == 'left':                # if subTree 2 went left to find the subTree
-            parentTree2.setLeft(subTree1)    # then replace the left with subTree 1
-        elif choice2 == 'right':             # if subTree 2 went right to find the subTree
-            parentTree2.setRight(subTree1)   # then replace the right with subTree 1
-        elif choice2 == 'middle':            # if subTree 2 went right to find the subTree
-            parentTree2.setMiddle(subTree1)  # then replace the right with subTree 1
-        elif choice2 == 'stop':              # if subTree 2 is only a single node
-            parentTree2.overwrite(subTree1)  # then swap the current trees
+        tree1.addSubTree(parent=p1, branch=branch1, subtree=subTree2)  # update the first parent tree
+        tree2.addSubTree(parent=p2, branch=branch2, subtree=subTree1)  # update the second parent tree
         # **************************************************************************** #
-    
-        # get the size of the new constructed features by walking the trees
-        log.debug('Crossover is attempting to set the size for the new parents')
-        parentTree1.updateSize(choice1)
-        parentTree2.updateSize(choice2)
-    
-        log.debug('Crossover completed setting the size for the new parents')
+
+        # !!!!!!!!!!!!!! For Testing Only !!!!!!!!!!!!!! #
+        # Print the trees to see if crossover broke them/performed correctly
+        print('Crossover Finished')
+        print('Parent Tree 1:')
+        tree1.sendToStdOut()
+        print('Parent Tree 2:')
+        tree2.sendToStdOut()
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
     
         # parent 1 & 2 are both hypotheses and should have been changed in place,
         # but they refer to a copy made in tournament so add them to the new pop
@@ -1265,28 +1100,29 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
     # range(newPopulation.candidateHypotheses) = POPULATION_SIZE so loop over pop size
     with alive_bar(POPULATION_SIZE, title="Evolving") as bar:  # declare your expected total
         for pop in range(POPULATION_SIZE):
-            # bar.text(f' evolving {pop}/{POPULATION_SIZE}...')
-            probability = random.uniform(0, 1)  # get a random number between 0 & 1
+            print(f' evolving {pop}/{POPULATION_SIZE}...')  # update user on progress
+            probability = random.uniform(0, 1)              # get a random number between 0 & 1
         
             # ***************** Mutate ***************** #
             if probability < MUTATION_RATE:  # if probability is less than mutation rate, mutate
-                bar.text('mutating...')
-                mutate()
-                bar()  # update bar now that a candidate is finished
+                bar.text('mutating...')      # update user
+                mutate()                     # perform mutation
+                bar()                        # update bar now that a candidate is finished
             # ************* End of Mutation ************* #
 
             # **************** Crossover **************** #
-            else:
-                bar.text('crossing...')
-                crossover()
-                bar()  # update bar now that a candidate is finished
+            else:                        # if probability is greater than mutation rate, use crossover
+                bar.text('crossing...')  # update user
+                crossover()              # perform crossover operation
+                bar()                    # update bar now that a candidate is finished
             # ************* End of Crossover ************* #
             
-            # ************** handle elitism ************** #
+            # ****************** Elitism ****************** #
             # check that if latest hypothesis has a higher fitness than our current elite
             newHypothFitness = newPopulation.candidateHypotheses[-1].getFitness()
             if newHypothFitness > elite.getFitness():
                 elite = newPopulation.candidateHypotheses[-1]
+            # ************** End of Elitism *************** #
             
         print('Evolution Done')
     return newPopulation, elite
@@ -1322,7 +1158,8 @@ def cdfc(dataIn) -> Hypothesis:
     # Read the values in the dictionary into the constants
     FEATURE_NUMBER = values['FEATURE_NUMBER']
     CLASS_IDS = values['CLASS_IDS']
-    POPULATION_SIZE = values['POPULATION_SIZE']
+    # POPULATION_SIZE = values['POPULATION_SIZE']
+    POPULATION_SIZE = 10
     INSTANCES_NUMBER = values['INSTANCES_NUMBER']
     LABEL_NUMBER = values['LABEL_NUMBER']
     M = values['M']
