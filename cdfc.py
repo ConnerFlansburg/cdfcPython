@@ -18,6 +18,7 @@ from pathlib import Path
 import traceback
 import treelib
 from treelib import Node as Node
+from collections import defaultdict
 
 import numpy as np
 from tqdm import tqdm
@@ -143,7 +144,7 @@ class Tree(treelib.Tree):
     # typing alias for tree nodes. They will either have a terminal index (int) or an OP (str)
     TREE_DATA = typ.Union[int, str]
     # used to get children quickly Dict[key=parentId, value=Dict[key=branch, value=childId]]
-    BRANCHES: typ.Dict[int, typ.Dict[str, str]] = {}
+    BRANCHES: typ.Dict[int, typ.Dict[str, str]] = defaultdict(dict)
     # BUG ^ something about this dictionary isn't working. getLeft throws a KeyError evening though it has a left
     # !     node that was set by addLeft. Is the assignment in addLeft failing?
     
@@ -151,21 +152,29 @@ class Tree(treelib.Tree):
         """Checks the tree dictionary"""
         for n in self.all_nodes_itr():  # loop over every node
             try:
-                lft = self.BRANCHES[n.identifier]['left']  # ! this does raise a KeyError
-                r = self.BRANCHES[n.identifier]['right']
+                dct = self.BRANCHES[n.identifier]
+                lft = dct['left']  # ! this does raise a KeyError
+                r = dct['right']
                 
                 if lft or r is None:                                               # if getting left or right key failed
                     raise AssertionError('Getting left and/or right key failed')      # throw exception
                 
                 if n.data == 'if':                                    # if the node stores an if OP
-                    m = self.BRANCHES[n.identifier]['middle']
+                    m = dct['middle']
                     if m is None:                                     # if getting middle key failed
                         raise AssertionError('Getting middle key failed')  # throw exception
                     
+            except KeyError as err1:
+                lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+                log.error(f'CheckTree raised a KeyError, on line {lineNm}')  # log the error
+                printError(f'CheckTree raised a KeyError, keys = {list(dct.keys())}, on line {lineNm}')  # print message
+                traceback.print_stack()  # print stack trace
+                sys.exit(-1)  # exit on error; recovery not possible
+                
             except AssertionError as err:
                 lineNm = sys.exc_info()[-1].tb_lineno        # get the line number of error
                 log.error(f'{str(err)}, on line {lineNm}')   # log the error
-                printError(f'{str(err)}, on line {lineNm}')  # print message
+                printError(f'{str(err)}, keys = {dct.keys()}, on line {lineNm}')  # print message
                 traceback.print_stack()                      # print stack trace
                 sys.exit(-1)                                 # exit on error; recovery not possible
     
@@ -194,7 +203,8 @@ class Tree(treelib.Tree):
 
         # update dictionary used by getLeft(), getRight(), & getMiddle()
         # store new Node ID at ParentId, 'left' (overwriting any old values)
-        self.BRANCHES[parent.identifier] = {'left': new.identifier}
+        # ! this should never throw a key error, but it does
+        self.BRANCHES[parent.identifier]['left'] = new.identifier
         
         try:  # ! For Testing Only !! - attempt to access created entry
             self.BRANCHES[parent.identifier]['left']
@@ -217,8 +227,7 @@ class Tree(treelib.Tree):
         
         # update dictionary used by getLeft(), getRight(), & getMiddle()
         # store new Node ID at ParentId, 'left' (overwriting any old values)
-        self.BRANCHES[parent.identifier] = {'right': new.identifier}
-        # self.BRANCHES[parent.identifier]['right'] = new.identifier
+        self.BRANCHES[parent.identifier]['right'] = new.identifier
         
         try:  # ! For Testing Only !! - attempt to access created entry
             self.BRANCHES[parent.identifier]['right']
@@ -241,8 +250,7 @@ class Tree(treelib.Tree):
         
         # update dictionary used by getLeft(), getRight(), & getMiddle()
         # store new Node ID at ParentId, 'left' (overwriting any old values)
-        self.BRANCHES[parent.identifier] = {'middle': new.identifier}
-        # self.BRANCHES[parent.identifier]['middle'] = new.identifier
+        self.BRANCHES[parent.identifier]['middle'] = new.identifier
         try:  # ! For Testing Only !! - attempt to access created entry
             self.BRANCHES[parent.identifier]['middle']
         except KeyError:
@@ -427,7 +435,7 @@ class Tree(treelib.Tree):
                 if featureValues[node.data] is None:  # if the value stored is a None
                     raise TypeError(f'featureValues contained a None at index {node.data}')
                 # ************************ Return Terminal Value ************************ #
-                return featureValues[self.data]       # if the terminal is valid, return it
+                return featureValues[node.data]       # if the terminal is valid, return it
                 # *********************************************************************** #
                 
             else:                                     # if the node is not a terminal or a OP
@@ -976,8 +984,8 @@ def createInitialPopulation() -> Population:
                 raise Exception('Root is not equal to tree root')
             # __grow(name, root, tree)    # create tree using grow
             __full(name, root, tree)    # create tree using full
-            tree.checkTree()
-            log.debug('checkTree Passed!')
+            # tree.checkTree()
+            # log.debug('checkTree Passed!')
             # tree.sendToStdOut()                          # print the tree
             # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
             
@@ -1041,7 +1049,7 @@ def sanityCheckCF(cf: ConstructedFeature):
 def sanityCheckTree(tree: Tree, classId):
     """Used in debugging to check a Tree"""
     log.debug('Starting Tree Sanity Check...')
-    tree.checkTree()
+    # tree.checkTree()
     tree.runTree(rows[0].attributes, classId)
     log.debug('Tree Sanity Check Passed')
 # *************************************************************** #
