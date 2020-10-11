@@ -8,7 +8,7 @@ import pickle
 import traceback
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox
+# from tkinter import messagebox
 
 from pyfiglet import Figlet
 from scipy import stats

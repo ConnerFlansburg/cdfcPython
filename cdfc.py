@@ -144,6 +144,30 @@ class Tree(treelib.Tree):
     TREE_DATA = typ.Union[int, str]
     # used to get children quickly Dict[key=parentId, value=Dict[key=branch, value=childId]]
     BRANCHES: typ.Dict[int, typ.Dict[str, str]] = {}
+    # BUG ^ something about this dictionary isn't working. getLeft throws a KeyError evening though it has a left
+    # !     node that was set by addLeft. Is the assignment in addLeft failing?
+    
+    def checkTree(self) -> None:
+        """Checks the tree dictionary"""
+        for n in self.all_nodes_itr():  # loop over every node
+            try:
+                lft = self.BRANCHES[n.identifier]['left']  # ! this does raise a KeyError
+                r = self.BRANCHES[n.identifier]['right']
+                
+                if lft or r is None:                                               # if getting left or right key failed
+                    raise AssertionError('Getting left and/or right key failed')      # throw exception
+                
+                if n.data == 'if':                                    # if the node stores an if OP
+                    m = self.BRANCHES[n.identifier]['middle']
+                    if m is None:                                     # if getting middle key failed
+                        raise AssertionError('Getting middle key failed')  # throw exception
+                    
+            except AssertionError as err:
+                lineNm = sys.exc_info()[-1].tb_lineno        # get the line number of error
+                log.error(f'{str(err)}, on line {lineNm}')   # log the error
+                printError(f'{str(err)}, on line {lineNm}')  # print message
+                traceback.print_stack()                      # print stack trace
+                sys.exit(-1)                                 # exit on error; recovery not possible
     
     def sendToStdOut(self) -> None:
         """Used to print a Tree."""
@@ -155,7 +179,13 @@ class Tree(treelib.Tree):
         # self.show('ascii-emh')  # ascii-emh FAILS
         out = Path.cwd() / 'logs' / 'tree.txt'  # create the file path
         self.save2file(out)
-        
+    
+    def addRoot(self) -> Node:  # ? is the bug in root creation somehow?
+        """Adds a root node to the tree"""
+        op = random.choice(OPS)
+        root = self.create_node(tag=f'root: {op}', data=op)  # create a root node for the tree
+        return root
+     
     def addLeft(self, parent: Node, data: TREE_DATA) -> Node:
         """Sets the left child of a tree."""
         
@@ -165,6 +195,17 @@ class Tree(treelib.Tree):
         # update dictionary used by getLeft(), getRight(), & getMiddle()
         # store new Node ID at ParentId, 'left' (overwriting any old values)
         self.BRANCHES[parent.identifier] = {'left': new.identifier}
+        
+        try:  # ! For Testing Only !! - attempt to access created entry
+            self.BRANCHES[parent.identifier]['left']
+        except KeyError:
+            msg: str = f'Tree encountered an error in addLeft(), {parent}'
+            lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+            log.error(msg)  # log the error
+            printError(msg)  # print message
+            printError(f'Error on line {lineNm}')
+            traceback.print_stack()  # print stack trace
+            sys.exit(-1)  # exit on error; recovery not possible
         
         return new
     
@@ -179,6 +220,17 @@ class Tree(treelib.Tree):
         self.BRANCHES[parent.identifier] = {'right': new.identifier}
         # self.BRANCHES[parent.identifier]['right'] = new.identifier
         
+        try:  # ! For Testing Only !! - attempt to access created entry
+            self.BRANCHES[parent.identifier]['right']
+        except KeyError:
+            msg: str = f'Tree encountered an error in addRight(), {parent}'
+            lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+            log.error(msg)  # log the error
+            printError(msg)  # print message
+            printError(f'Error on line {lineNm}')
+            traceback.print_stack()  # print stack trace
+            sys.exit(-1)  # exit on error; recovery not possible
+        
         return new
     
     def addMiddle(self, parent: Node, data: TREE_DATA) -> Node:
@@ -191,6 +243,16 @@ class Tree(treelib.Tree):
         # store new Node ID at ParentId, 'left' (overwriting any old values)
         self.BRANCHES[parent.identifier] = {'middle': new.identifier}
         # self.BRANCHES[parent.identifier]['middle'] = new.identifier
+        try:  # ! For Testing Only !! - attempt to access created entry
+            self.BRANCHES[parent.identifier]['middle']
+        except KeyError:
+            msg: str = f'Tree encountered an error in addMiddle(), {parent}'
+            lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+            log.error(msg)  # log the error
+            printError(msg)  # print message
+            printError(f'Error on line {lineNm}')
+            traceback.print_stack()  # print stack trace
+            sys.exit(-1)  # exit on error; recovery not possible
         
         return new
     
@@ -227,18 +289,50 @@ class Tree(treelib.Tree):
     
     def getLeft(self, parent: Node) -> typ.Optional[Node]:
         """Gets the left child of a tree."""
-        nid: str = self.BRANCHES[parent.identifier]['left']  # get the nodes Id
-        return self.get_node(nid)                            # get the node & return
+        try:
+            dct = self.BRANCHES[parent.identifier]
+            # ! This is the part triggering the error
+            nid: str = dct['left']                               # get the nodes Id
+            return self.get_node(nid)                            # get the node & return
+        except KeyError:
+            lineNm = sys.exc_info()[-1].tb_lineno        # get the line number of error
+            msg: str = f'getLeft() could not find left for {parent}, on line {lineNm}'
+            log.error(msg)           # log the error
+            printError(msg)          # print message
+            printError(f'Node\'s children: {self.children(parent.identifier)}')
+            # printError(f'Error on line {lineNm}')
+            # traceback.print_stack()  # print stack trace
+            return None              # attempt recovery
         
     def getRight(self, parent: Node) -> typ.Optional[Node]:
         """Gets the right child of a tree."""
-        nid: str = self.BRANCHES[parent.identifier]['right']  # get the nodes Id
-        return self.get_node(nid)                             # get the node & return
+        try:
+            nid: str = self.BRANCHES[parent.identifier]['right']  # get the nodes Id
+            return self.get_node(nid)                             # get the node & return
+        except KeyError:
+            lineNm = sys.exc_info()[-1].tb_lineno        # get the line number of error
+            msg: str = f'getRight() could not find right for {parent}, on line {lineNm}'
+            log.error(msg)           # log the error
+            printError(msg)          # print message
+            printError(f'Node\'s children: {self.children(parent.identifier)}')
+            # printError(f'Error on line {lineNm}')
+            # traceback.print_stack()  # print stack trace
+            return None              # attempt recovery
     
     def getMiddle(self, parent: Node) -> typ.Optional[Node]:
         """Gets the middle child of a tree."""
-        nid: str = self.BRANCHES[parent.identifier]['middle']  # get the nodes Id
-        return self.get_node(nid)                              # get the node & return
+        try:
+            nid: str = self.BRANCHES[parent.identifier]['middle']  # get the nodes Id
+            return self.get_node(nid)                              # get the node & return
+        except KeyError:
+            lineNm = sys.exc_info()[-1].tb_lineno        # get the line number of error
+            msg: str = f'getMiddle() could not find middle for {parent}, on line {lineNm}'
+            log.error(msg)           # log the error
+            printError(msg)          # print message
+            printError(f'Node\'s children: {self.children(parent.identifier)}')
+            # printError(f'Error on line {lineNm}')
+            # traceback.print_stack()  # print stack trace
+            return None              # attempt recovery
     
     def getBranch(self, child: Node) -> typ.Tuple[str, Node]:
         """Given a child, this returns what branch of it's parent it was on."""
@@ -281,11 +375,9 @@ class Tree(treelib.Tree):
 
         try:
             if node.data in OPS:  # if the node is an OP
-                left: Node = self.getLeft(node)    # get the left child (all OPS wil have a left)
-                right: Node = self.getRight(node)  # get the right child (all OPS wil have a right)
                 # *************************** Error Checking *************************** #
-                lftNone: bool = left is None                              # is left None?
-                rgtNone: bool = right is None                             # is right None?
+                lftNone: bool = self.getLeft(node) is None                          # is left None?
+                rgtNone: bool = self.getRight(node) is None                         # is right None?
                 xor: bool = (lftNone and not rgtNone) or (not lftNone and rgtNone)  # exclusive or
                 if xor:                                             # if one child is None, but not both
                     raise AssertionError('runNode found a node in OPS with 1 \'None\' child')
@@ -293,8 +385,10 @@ class Tree(treelib.Tree):
                     raise AssertionError('runNode found a node in OPS with 2 \'None\' children')
                 if node.data == 'if' and self.getMiddle(node) is None:  # if the OP is IF and it has no middle
                     raise AssertionError('runNode found a node with a IF OP and no middle node')
-
                 # ************ Determine Which OP is Stored & Run Recursion ************ #
+                left: Node = self.getLeft(node)  # get the left child (all OPS wil have a left)
+                right: Node = self.getRight(node)  # get the right child (all OPS wil have a right)
+                
                 if node.data == 'add':                                      # if the OP was add
                     vl = (self.__runNode(featureValues, left, classId) +    # left + right
                           self.__runNode(featureValues, right, classId))
@@ -340,7 +434,8 @@ class Tree(treelib.Tree):
                 raise TypeError(f'runNode could not parse data in tree, data ={node.data}')
         
         # ! This error is getting hit
-        except Exception as err:                         # catch any exceptions
+        except (TypeError, AssertionError) as err:       # catch any exceptions
+            self.sendToStdOut()                          # record the tree
             lineNm = sys.exc_info()[-1].tb_lineno        # get the line number of error
             log.error(f'{str(err)}, line = {lineNm}')    # log the error
             printError(f'{str(err)}, line = {lineNm}')   # print message
@@ -369,7 +464,7 @@ class ConstructedFeature:
         self.size = tree.size                         # the individual size (the size of the tree)
         self.relevantFeatures = TERMINALS[className]  # holds the indexes of the relevant features
         # ! if tree sanity check passes then the constructed feature is fine & the error is somewhere else
-        sanityCheckCF(self)  # ! testing purposes only!
+        # sanityCheckCF(self)  # ! testing purposes only!
     
     '''def __str__(self):
         """Used to print a Constructed Feature."""
@@ -871,8 +966,8 @@ def createInitialPopulation() -> Population:
                 sys.exit(-1)                           # exit on error; recovery not possible
             # DEBUG if we pass this point we know that name is valid
             
-            tree = Tree()                                          # create an empty tree
-            root = tree.create_node(tag='root', data=random.choice(OPS))  # create a root node for the tree
+            tree = Tree()          # create an empty tree
+            root = tree.addRoot()  # create a root node for the tree
             
             # !!!!!!!!!!!!!!!!!!!!! Used for Testing Only !!!!!!!!!!!!!!!!!!!!! #
             if not (root.is_root()):  # + This does pass so root doesn't have parents
@@ -881,7 +976,9 @@ def createInitialPopulation() -> Population:
                 raise Exception('Root is not equal to tree root')
             # __grow(name, root, tree)    # create tree using grow
             __full(name, root, tree)    # create tree using full
-            tree.sendToStdOut()                          # print the tree
+            tree.checkTree()
+            log.debug('checkTree Passed!')
+            # tree.sendToStdOut()                          # print the tree
             # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
             
             '''if random.choice([True, False]):         # *** use grow *** #
@@ -906,11 +1003,11 @@ def createInitialPopulation() -> Population:
     with alive_bar(POPULATION_SIZE, title="Initial Hypotheses") as bar:  # declare your expected total
         for __ in range(POPULATION_SIZE):  # iterate as usual
             hyp = createHypothesis()       # create a Hypothesis
-            sanityCheckHyp(hyp)            # ! testing purposes only!
+            # sanityCheckHyp(hyp)            # ! testing purposes only!
             hypothesis.append(hyp)         # add the new hypothesis to the list
             bar()
     
-    sanityCheckPop(hypothesis)  # ! testing purposes only!
+    # sanityCheckPop(hypothesis)  # ! testing purposes only!
     return Population(hypothesis, 0)
 
 
@@ -944,6 +1041,7 @@ def sanityCheckCF(cf: ConstructedFeature):
 def sanityCheckTree(tree: Tree, classId):
     """Used in debugging to check a Tree"""
     log.debug('Starting Tree Sanity Check...')
+    tree.checkTree()
     tree.runTree(rows[0].attributes, classId)
     log.debug('Tree Sanity Check Passed')
 # *************************************************************** #
@@ -1058,14 +1156,12 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         # Feature 1
         feature1: ConstructedFeature = random.choice(parent1.features)  # get a random feature from the parent
         tree1: Tree = feature1.tree                                     # get the tree
-        print('Parent Tree 1:')  # ! For Testing Only !!
-        tree1.sendToStdOut()     # ! For Testing Only !!
+        # tree1.sendToStdOut()     # ! For Testing Only !!
 
         # Feature 2
         feature2: ConstructedFeature = parent2.idsToFeatures[feature1.className]  # makes sure CFs are from/for the same class
         tree2: Tree = feature2.tree                                               # get the tree
-        print('Parent Tree 2:')  # ! For Testing Only !!
-        tree2.sendToStdOut()     # ! For Testing Only !!
+        # tree2.sendToStdOut()     # ! For Testing Only !!
     
         # *************** Find the Two Sub-Trees **************** #
         node1: Node = tree1.getRandomNode()           # get a random node
@@ -1084,11 +1180,11 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
 
         # !!!!!!!!!!!!!! For Testing Only !!!!!!!!!!!!!! #
         # Print the trees to see if crossover broke them/performed correctly
-        print('Crossover Finished')
-        print('Parent Tree 1:')
-        tree1.sendToStdOut()
-        print('Parent Tree 2:')
-        tree2.sendToStdOut()
+        # print('Crossover Finished')
+        # print('Parent Tree 1:')
+        # tree1.sendToStdOut()
+        # print('Parent Tree 2:')
+        # tree2.sendToStdOut()
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
     
         # parent 1 & 2 are both hypotheses and should have been changed in place,
