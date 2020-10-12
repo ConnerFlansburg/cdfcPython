@@ -269,7 +269,7 @@ class Tree(treelib.Tree):
            BRANCHES dictionary & should overwrite any old values."""
         
         # add the subtree to the original tree as a child of parent
-        self.paste(parent.identifier, subtree, deep=True)           # ? should deep be true or false?
+        self.paste(parent.identifier, subtree)           # ? should deep be true or false?
         children: typ.List[str] = self.children(parent.identifier)  # get all of parent's children
         
         for cid in children:                                        # loop over all the child ids
@@ -288,11 +288,20 @@ class Tree(treelib.Tree):
         """Returns the trees root & prevent root from being overwritten"""
         return self.get_node(self.root)
     
-    def getRandomNode(self) -> Node:  # BUG is the problem here?
+    def getRandomNode(self) -> Node:
         """Get a random node obj from the tree."""
-        n = random.choice(self.all_nodes())      # pick a random node
-        while n is self.getRoot():               # if we picked the root,
-            n = random.choice(self.all_nodes())  # pick again
+        n: Node = random.choice(self.all_nodes())      # pick a random node
+        
+        if (n is self.getRoot()) or not(self.contains(n.identifier)):
+            nodeList = self.all_nodes()  # get all the node
+            random.shuffle(nodeList)     # shuffle them
+        
+            # if we picked the root or a node not in the tree
+            while (n is self.getRoot()) or not(self.contains(n.identifier)):
+                if len(nodeList) == 0:  # if nodeList is empty
+                    raise Exception('getRandomNode could not find a node in the tree')
+                n = nodeList.pop(0)  # pop the top of the list
+        
         return n
     
     def getLeft(self, parent: Node) -> typ.Optional[Node]:
@@ -1174,12 +1183,11 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         # *************** Find the Two Sub-Trees **************** #
         node1: Node = tree1.getRandomNode()           # get a random node
         branch1, p1 = tree1.getBranch(node1)          # get the branch string
-        # Bug node1 is not in tree
-        subTree1: Tree = tree1.remove_subtree()  # get a sub-tree with node1 as root
+        subTree1: Tree = tree1.remove_subtree(node1.identifier)  # get a sub-tree with node1 as root
 
         node2: Node = tree2.getRandomNode()           # get a random node
         branch2, p2 = tree2.getBranch(node2)          # get the branch string
-        subTree2: Tree = tree2.remove_subtree(node2)  # get a sub-tree with node2 as root
+        subTree2: Tree = tree2.remove_subtree(node2.identifier)  # get a sub-tree with node2 as root
         # ******************************************************* #
     
         # ************************** swap the two subtrees ************************** #
