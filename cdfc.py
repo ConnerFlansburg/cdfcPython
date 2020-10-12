@@ -150,20 +150,28 @@ class Tree(treelib.Tree):
     
     def checkTree(self) -> None:
         """Checks the tree dictionary"""
-        for n in self.all_nodes_itr():  # loop over every node
+        for n in self.all_nodes():  # loop over every node
             try:
-                dct = self.BRANCHES[n.identifier]
-                lft = dct['left']  # ! this does raise a KeyError
-                r = dct['right']
+                if not self.contains(n.identifier):  # check that the node is in the tree
+                    log.error(f'Tree found node that was not in tree: {n}')
+                    print(f'Tree found node that was not in tree: {n}')
                 
-                if lft or r is None:                                               # if getting left or right key failed
-                    raise AssertionError('Getting left and/or right key failed')      # throw exception
+                if n.data not in OPS:                # if this is a terminal node
+                    continue                         # skip this iteration
                 
-                if n.data == 'if':                                    # if the node stores an if OP
+                dct = self.BRANCHES[n.identifier]    # get the branches the node has
+                lft = dct['left']                    # all nodes should have a left
+                r = dct['right']                     # all nodes should have a right
+                
+                if lft or r is None:                 # if getting left or right key failed, raise exception
+                    raise AssertionError('Getting left and/or right key failed')
+                
+                if n.data == 'if':                   # if the node stores an IF OP
                     m = dct['middle']
-                    if m is None:                                     # if getting middle key failed
-                        raise AssertionError('Getting middle key failed')  # throw exception
-                    
+                    if m is None:                    # if getting middle key failed, throw exception
+                        raise AssertionError('Getting middle key failed')
+            # NOTE: KeyError indicates that the key (left, right, middle) doesn't exist,
+            # +     AssertionError means it does exist & stores a None
             except KeyError:
                 lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
                 log.error(f'CheckTree raised a KeyError, on line {lineNm}')  # log the error
@@ -308,18 +316,18 @@ class Tree(treelib.Tree):
         """Gets the left child of a tree."""
         try:
             dct = self.BRANCHES[parent.identifier]
-            # ! This is the part triggering the error
-            nid: str = dct['left']                               # get the nodes Id
-            return self.get_node(nid)                            # get the node & return
+            nid: str = dct['left']                 # get the nodes Id
+            return self.get_node(nid)              # get the node & return NOTE: if the nid not in tree this will trigger error
         except KeyError:
-            lineNm = sys.exc_info()[-1].tb_lineno        # get the line number of error
+            lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
             msg: str = f'getLeft() could not find left for {parent}, on line {lineNm}'
             log.error(msg)           # log the error
             printError(msg)          # print message
             printError(f'Node\'s children: {self.children(parent.identifier)}')
             # printError(f'Error on line {lineNm}')
             # traceback.print_stack()  # print stack trace
-            return None              # attempt recovery
+            sys.exit(-1)
+            # return None              # attempt recovery
         
     def getRight(self, parent: Node) -> typ.Optional[Node]:
         """Gets the right child of a tree."""
@@ -334,7 +342,8 @@ class Tree(treelib.Tree):
             printError(f'Node\'s children: {self.children(parent.identifier)}')
             # printError(f'Error on line {lineNm}')
             # traceback.print_stack()  # print stack trace
-            return None              # attempt recovery
+            sys.exit(-1)
+            # return None              # attempt recovery
     
     def getMiddle(self, parent: Node) -> typ.Optional[Node]:
         """Gets the middle child of a tree."""
@@ -349,7 +358,9 @@ class Tree(treelib.Tree):
             printError(f'Node\'s children: {self.children(parent.identifier)}')
             # printError(f'Error on line {lineNm}')
             # traceback.print_stack()  # print stack trace
-            return None              # attempt recovery
+            sys.exit(-1)
+            # return None              # attempt recovery
+            
     
     def getBranch(self, child: Node) -> typ.Tuple[str, Node]:
         """Given a child, this returns what branch of it's parent it was on."""
@@ -1124,6 +1135,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
            an offset. This means that mutate trees will still obey the max depth rule.
         """
         
+        log.debug('Starting mutation')
         # ******************* Fetch Values Needed ******************* #
         parent: Hypothesis = __tournament(population)                # get copy of a parent Hypothesis using tournament
         randIndex: int = random.choice(range(len(parent.features)))  # get a random index
@@ -1159,7 +1171,9 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
     
     def crossover():
         """Performs the crossover operation on two trees"""
-
+        
+        log.debug('Starting Crossover')
+        
         # * Find Random Parents * #
         parent1: Hypothesis = __tournament(population)  # parent1 & parent2 are from a copy of population made by tournament, NOT original pop
         parent2: Hypothesis = __tournament(population)  # because of this they should not be viewed as references
