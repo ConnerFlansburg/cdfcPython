@@ -3,6 +3,12 @@ import numpy as np
 import typing as typ
 from cdfcProject import __discretization, __getPermutation, __formatForSciKit, __flattenTrainingData
 
+# TODO add test case for __transform()
+# TODO add test case for __mapToInstance()
+# TODO add test case for __dealToBuckets()
+# TODO add test case for __buildAccuracyFrame()
+# TODO add test case for __accuracyFrameToLatex()
+
 
 def test_discretization() -> None:
     # * This test checks that the discrete function we are using has the expected outcomes

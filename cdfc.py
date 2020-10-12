@@ -38,6 +38,7 @@ ELITISM_RATE: typ.Final = 1                   # ELITISM_RATE is the elitism rate
 GENERATIONS: typ.Final = 50                   # GENERATIONS is the number of generations the GP should run for
 MAX_DEPTH: typ.Final = 8                      # MAX_DEPTH is the max depth trees are allowed to be & is used in grow/full
 MUTATION_RATE: typ.Final = 0.2                # MUTATION_RATE is the chance that a candidate will be mutated
+NodeCount = 0
 # ! changes here must also be made in the tree object, and the grow & full functions ! #
 OPS: typ.Final = ['add', 'subtract',          # OPS is the list of valid operations on the tree
                   'times', 'max', 'if']
@@ -163,7 +164,8 @@ class Tree(treelib.Tree):
                 lft = dct['left']                    # all nodes should have a left
                 r = dct['right']                     # all nodes should have a right
                 
-                if lft or r is None:                 # if getting left or right key failed, raise exception
+                # ! this gets raised, but not a key error, so the keys are getting create but store a None
+                if lft is None or r is None:         # if getting left or right key got a None, raise exception
                     raise AssertionError('Getting left and/or right key failed')
                 
                 if n.data == 'if':                   # if the node stores an IF OP
@@ -175,14 +177,14 @@ class Tree(treelib.Tree):
             except KeyError:
                 lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
                 log.error(f'CheckTree raised a KeyError, on line {lineNm}')  # log the error
-                printError(f'CheckTree raised a KeyError, keys = {list(dct.keys())}, on line {lineNm}')  # print message
+                printError(f'CheckTree raised a KeyError, dict = {dct.items()}, on line {lineNm}')  # print message
                 traceback.print_stack()  # print stack trace
                 sys.exit(-1)  # exit on error; recovery not possible
                 
             except AssertionError as err:
                 lineNm = sys.exc_info()[-1].tb_lineno        # get the line number of error
                 log.error(f'{str(err)}, on line {lineNm}')   # log the error
-                printError(f'{str(err)}, keys = {dct.keys()}, on line {lineNm}')  # print message
+                printError(f'CheckTree raised a AssertionError, dict = {dct.items()}, on line {lineNm}')  # print message
                 traceback.print_stack()                      # print stack trace
                 sys.exit(-1)                                 # exit on error; recovery not possible
     
@@ -200,19 +202,21 @@ class Tree(treelib.Tree):
     def addRoot(self) -> Node:  # ? is the bug in root creation somehow?
         """Adds a root node to the tree"""
         op = random.choice(OPS)
-        root = self.create_node(tag=f'root: {op}', data=op)  # create a root node for the tree
+        root = self.create_node(tag=f'root: {op}', identifier='Root', data=op)  # create a root node for the tree
         return root
      
     def addLeft(self, parent: Node, data: TREE_DATA) -> Node:
         """Sets the left child of a tree."""
-        
+        global NodeCount
         # create the node & add it to the tree
-        new: Node = self.create_node(tag=data, parent=parent.identifier, data=data)
+        new: Node = self.create_node(tag=str(data), parent=parent.identifier,
+                                     data=data, identifier=f'{parent.identifier}|{str(data)}({NodeCount})')
+        NodeCount += 1
 
         # update dictionary used by getLeft(), getRight(), & getMiddle()
         # store new Node ID at ParentId, 'left' (overwriting any old values)
-        # ! this should never throw a key error, but it does
-        self.BRANCHES[parent.identifier]['left'] = new.identifier
+        # ! is the error in runNode because new.identifier is None? Or is the assignment failing
+        d = self.BRANCHES[parent.identifier]['left'] = new.identifier
         
         try:  # ! For Testing Only !! - attempt to access created entry
             self.BRANCHES[parent.identifier]['left']
@@ -229,9 +233,12 @@ class Tree(treelib.Tree):
     
     def addRight(self, parent: Node, data: TREE_DATA) -> Node:
         """Sets the right child of a tree."""
-        
+
+        global NodeCount
         # create the node & add it to the tree
-        new: Node = self.create_node(tag=data, parent=parent.identifier, data=data)
+        new: Node = self.create_node(tag=str(data), parent=parent.identifier,
+                                     data=data, identifier=f'{parent.identifier}|{str(data)}({NodeCount})')
+        NodeCount += 1
         
         # update dictionary used by getLeft(), getRight(), & getMiddle()
         # store new Node ID at ParentId, 'left' (overwriting any old values)
@@ -252,9 +259,12 @@ class Tree(treelib.Tree):
     
     def addMiddle(self, parent: Node, data: TREE_DATA) -> Node:
         """Sets the middle child of a tree."""
-        
+
+        global NodeCount
         # create the node & add it to the tree
-        new: Node = self.create_node(tag=data, parent=parent.identifier, data=data)
+        new: Node = self.create_node(tag=str(data), parent=parent.identifier,
+                                     data=data, identifier=f'{parent.identifier}|{str(data)}({NodeCount})')
+        NodeCount += 1
         
         # update dictionary used by getLeft(), getRight(), & getMiddle()
         # store new Node ID at ParentId, 'left' (overwriting any old values)
@@ -361,7 +371,6 @@ class Tree(treelib.Tree):
             sys.exit(-1)
             # return None              # attempt recovery
             
-    
     def getBranch(self, child: Node) -> typ.Tuple[str, Node]:
         """Given a child, this returns what branch of it's parent it was on."""
         parent: Node = self.parent(child.identifier)                     # get the parents Id
@@ -608,16 +617,16 @@ class Hypothesis:
                 else:
                     value = 1 - ((2*minSum) / addSum)           # capture the return value
             
-            except RuntimeWarning:
-                # log.error(str(err))
+            except RuntimeWarning as err1:
+                # log.error(str(err1))
                 # lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-                # print(str(err) + f', line = {lineNm}')
+                # print(str(err1) + f', line = {lineNm}')
                 value = 0                              # attempt recovery
 
-            except Exception as err:
+            except Exception as err2:
                 lineNm = sys.exc_info()[-1].tb_lineno       # print line number error occurred on
-                log.error(str(err))
-                printError(str(err) + f', line = {lineNm}')
+                log.error(str(err2))
+                printError(str(err2) + f', line = {lineNm}')
                 sys.exit(-1)                                # recovery impossible, exit with error
 
             # log.debug('Finished Czekanowski() method')
@@ -1004,8 +1013,7 @@ def createInitialPopulation() -> Population:
                 raise Exception('Root is not equal to tree root')
             # __grow(name, root, tree)    # create tree using grow
             __full(name, root, tree)    # create tree using full
-            # tree.checkTree()
-            # log.debug('checkTree Passed!')
+            tree.checkTree()
             # tree.sendToStdOut()                          # print the tree
             # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
             
