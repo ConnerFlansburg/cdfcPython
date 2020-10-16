@@ -5,5 +5,5 @@ DEBUG - 174: Parser created dictionary for classId 1
 DEBUG - 174: Parser created dictionary for classId 0
 DEBUG - 520: Finished terminals() method
 DEBUG - 520: Finished terminals() method
-DEBUG - 1183: Starting Crossover
-ERROR - 477: runNode found a node in OPS with 2 'None' children, line = 422
+DEBUG - 1149: Starting mutation
+ERROR - 479: runNode found a node in OPS with 2 'None' children, node = Node(tag=root: times, identifier=Root, data=times), line = 424

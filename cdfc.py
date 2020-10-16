@@ -36,7 +36,8 @@ BARCOLS = 25                                  # BARCOLS is the number of columns
 CROSSOVER_RATE: typ.Final = 0.8               # CROSSOVER_RATE is the chance that a candidate will reproduce
 ELITISM_RATE: typ.Final = 1                   # ELITISM_RATE is the elitism rate
 GENERATIONS: typ.Final = 50                   # GENERATIONS is the number of generations the GP should run for
-MAX_DEPTH: typ.Final = 8                      # MAX_DEPTH is the max depth trees are allowed to be & is used in grow/full
+# MAX_DEPTH: typ.Final = 8                      # MAX_DEPTH is the max depth trees are allowed to be & is used in grow/full
+MAX_DEPTH: typ.Final = 4                      # ! value for testing/debugging to make trees more readable
 MUTATION_RATE: typ.Final = 0.2                # MUTATION_RATE is the chance that a candidate will be mutated
 NodeCount = 0
 # ! changes here must also be made in the tree object, and the grow & full functions ! #
@@ -196,7 +197,7 @@ class Tree(treelib.Tree):
         # self.show('ascii-em')   # ascii-em FAILS
         # self.show('ascii-emv')  # ascii-emv FAILS
         # self.show('ascii-emh')  # ascii-emh FAILS
-        out = Path.cwd() / 'logs' / 'tree.txt'  # create the file path
+        out = Path.cwd() / 'logs' / 'tree.log'  # create the file path
         self.save2file(out)
     
     def addRoot(self) -> Node:  # ? is the bug in root creation somehow?
@@ -411,15 +412,16 @@ class Tree(treelib.Tree):
         """
 
         try:
+            
             if node.data in OPS:  # if the node is an OP
                 # *************************** Error Checking *************************** #
                 lftNone: bool = self.getLeft(node) is None                          # is left None?
                 rgtNone: bool = self.getRight(node) is None                         # is right None?
                 xor: bool = (lftNone and not rgtNone) or (not lftNone and rgtNone)  # exclusive or
                 if xor:                                             # if one child is None, but not both
-                    raise AssertionError('runNode found a node in OPS with 1 \'None\' child')
+                    raise AssertionError(f'runNode found a node in OPS with 1 \'None\' child,\n\t node = {node}')
                 if lftNone and rgtNone:                             # if both children are None
-                    raise AssertionError('runNode found a node in OPS with 2 \'None\' children')
+                    raise AssertionError(f'runNode found a node in OPS with 2 \'None\' children,\n\t node = {node}')
                 if node.data == 'if' and self.getMiddle(node) is None:  # if the OP is IF and it has no middle
                     raise AssertionError('runNode found a node with a IF OP and no middle node')
                 # ************ Determine Which OP is Stored & Run Recursion ************ #
@@ -474,8 +476,9 @@ class Tree(treelib.Tree):
         except (TypeError, AssertionError) as err:       # catch any exceptions
             self.sendToStdOut()                          # record the tree
             lineNm = sys.exc_info()[-1].tb_lineno        # get the line number of error
-            log.error(f'{str(err)}, line = {lineNm}')    # log the error
-            printError(f'{str(err)}, line = {lineNm}')   # print message
+            log.error(f'line = {lineNm}, {str(err)}')    # log the error
+            printError(f'line = {lineNm}, {str(err)}')   # print message
+            printError(f'node = {node}')
             traceback.print_stack()                      # print stack trace
             sys.exit(-1)                                 # exit on error; recovery not possible
 
@@ -860,7 +863,7 @@ def __grow(classId: int, node: Node, tree: Tree) -> Node:
     # NOTE: check depth-1 because we will create children
     if coin == 'TERM' or (tree.getDepth(node) == MAX_DEPTH - 1):  # if we need to add terminals
 
-        # pick the needed amount of OPs
+        # pick the needed amount of terminals
         terms: typ.List[int] = random.choices(TERMINALS[classId], k=NUM_TERMINALS[node.data])
         
         if NUM_TERMINALS[node.data] == 2:                  # if the OP needs 2 children
@@ -869,7 +872,7 @@ def __grow(classId: int, node: Node, tree: Tree) -> Node:
             
             return tree.getRoot()                          # return the root node of the tree
         
-        elif NUM_TERMINALS[node.data] == 3:                 # if the OP needs 2 children
+        elif NUM_TERMINALS[node.data] == 3:                 # if the OP needs 3 children
             tree.addLeft(parent=node, data=terms.pop(0))    # create a new left node & add it
             tree.addRight(parent=node, data=terms.pop(0))   # create a new right node & add it
             tree.addMiddle(parent=node, data=terms.pop(0))  # create a new middle node & add it
@@ -897,7 +900,7 @@ def __grow(classId: int, node: Node, tree: Tree) -> Node:
             
             left: Node = tree.addLeft(parent=node, data=ops.pop(0))      # create & add the new left node to the tree
             right: Node = tree.addRight(parent=node, data=ops.pop(0))    # create & add the new right node to the tree
-            middle: Node = tree.addMiddle(parent=node, data=ops.pop(0))  # create & add the new left node to the tree
+            middle: Node = tree.addMiddle(parent=node, data=ops.pop(0))  # create & add the new middle node to the tree
             
             __grow(classId, left, tree)                                  # call grow on left to set it's children
             __grow(classId, right, tree)                                 # call grow on right to set it's children
@@ -921,7 +924,7 @@ def __full(classId: int, node: Node, tree: Tree):
     # *************************** Max Depth Reached *************************** #
     if tree.getDepth(node) == MAX_DEPTH - 1:
         
-        # pick the needed amount of OPs
+        # pick the needed amount of terminals
         terms: typ.List[int] = random.choices(TERMINALS[classId], k=NUM_TERMINALS[node.data])
         
         if NUM_TERMINALS[node.data] == 2:      # if the OP needs 2 children
@@ -929,7 +932,7 @@ def __full(classId: int, node: Node, tree: Tree):
             tree.addRight(parent=node, data=terms.pop(0))  # create a right left node & add it
             return tree.getRoot()              # return the root node of the tree
         
-        elif NUM_TERMINALS[node.data] == 3:     # if the OP needs 2 children
+        elif NUM_TERMINALS[node.data] == 3:     # if the OP needs 3 children
             tree.addLeft(parent=node, data=terms.pop(0))    # create a new left node & add it
             tree.addRight(parent=node, data=terms.pop(0))   # create a new right node & add it
             tree.addMiddle(parent=node, data=terms.pop(0))  # create a new middle node & add it
@@ -956,7 +959,7 @@ def __full(classId: int, node: Node, tree: Tree):
             
             left: Node = tree.addLeft(parent=node, data=ops.pop(0))      # create & add the new left node to the tree
             right: Node = tree.addRight(parent=node, data=ops.pop(0))    # create & add the new right node to the tree
-            middle: Node = tree.addMiddle(parent=node, data=ops.pop(0))  # create & add the new left node to the tree
+            middle: Node = tree.addMiddle(parent=node, data=ops.pop(0))  # create & add the new middle node to the tree
             
             __full(classId, left, tree)                                   # call grow on left to set it's children
             __full(classId, right, tree)                                  # call grow on right to set it's children
@@ -1150,6 +1153,8 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         randCF: ConstructedFeature = parent.features[randIndex]      # get a random Constructed Feature
         terminals = randCF.relevantFeatures                          # save the indexes of the relevant features
         tree: Tree = randCF.tree                                     # get the tree from the CF
+        tree.checkTree()     # ! For Testing purposes only !!
+        tree.sendToStdOut()  # ! For Testing purposes only !!
         node: Node = randCF.tree.getRandomNode()                     # get a random node from the CF's tree
         # *********************************************************** #
         
@@ -1171,7 +1176,9 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             else:                                          # * Full * #
                 __full(randCF.className, node, tree)       # tree is changed in place starting with node
         # *********************************************************** #
-        
+
+        tree.checkTree()     # ! For Testing purposes only !!
+        tree.sendToStdOut()  # ! For Testing purposes only !!
         # overwrite old CF with the new one
         parent.features[randIndex] = ConstructedFeature(randCF.className, randCF.tree)
         # add the mutated parent to the new pop (appending is needed because parent is a copy NOT a reference)
@@ -1195,12 +1202,14 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         # Feature 1
         feature1: ConstructedFeature = random.choice(parent1.features)  # get a random feature from the parent
         tree1: Tree = feature1.tree                                     # get the tree
-        # tree1.sendToStdOut()     # ! For Testing Only !!
+        tree1.checkTree()        # ! For Testing Only !!
+        tree1.sendToStdOut()     # ! For Testing Only !!
 
         # Feature 2
         feature2: ConstructedFeature = parent2.idsToFeatures[feature1.className]  # makes sure CFs are from/for the same class
         tree2: Tree = feature2.tree                                               # get the tree
-        # tree2.sendToStdOut()     # ! For Testing Only !!
+        tree2.checkTree()        # ! For Testing Only !!
+        tree2.sendToStdOut()     # ! For Testing Only !!
     
         # *************** Find the Two Sub-Trees **************** #
         node1: Node = tree1.getRandomNode()           # get a random node
@@ -1221,9 +1230,11 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         # Print the trees to see if crossover broke them/performed correctly
         # print('Crossover Finished')
         # print('Parent Tree 1:')
-        # tree1.sendToStdOut()
+        tree1.checkTree()
+        tree1.sendToStdOut()
         # print('Parent Tree 2:')
-        # tree2.sendToStdOut()
+        tree2.checkTree()
+        tree2.sendToStdOut()
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
     
         # parent 1 & 2 are both hypotheses and should have been changed in place,
