@@ -16,7 +16,9 @@ import typing as typ
 import warnings
 from pathlib import Path
 import traceback
-import treelib
+from pprint import pprint
+
+from treelib import Tree as libTree
 from treelib import Node as Node
 from collections import defaultdict
 
@@ -40,6 +42,7 @@ GENERATIONS: typ.Final = 50                   # GENERATIONS is the number of gen
 MAX_DEPTH: typ.Final = 4                      # ! value for testing/debugging to make trees more readable
 MUTATION_RATE: typ.Final = 0.2                # MUTATION_RATE is the chance that a candidate will be mutated
 NodeCount = 0
+TreeCount = 0
 # ! changes here must also be made in the tree object, and the grow & full functions ! #
 OPS: typ.Final = ['add', 'subtract',          # OPS is the list of valid operations on the tree
                   'times', 'max', 'if']
@@ -121,7 +124,7 @@ class Instance:
 rows: typ.List[Instance] = []  # this will store all of the records read in (the training dat) as a list of rows
 
 
-class Tree(treelib.Tree):
+class Tree(libTree):
     """Tree is a binary tree data structure that is used to represent a
        constructed feature
 
@@ -145,13 +148,33 @@ class Tree(treelib.Tree):
     """
     # typing alias for tree nodes. They will either have a terminal index (int) or an OP (str)
     TREE_DATA = typ.Union[int, str]
-    # used to get children quickly Dict[key=parentId, value=Dict[key=branch, value=childId]]
-    BRANCHES: typ.Dict[int, typ.Dict[str, str]] = defaultdict(dict)
+    
     # BUG ^ something about this dictionary isn't working. getLeft throws a KeyError evening though it has a left
     # !     node that was set by addLeft. Is the assignment in addLeft failing?
     
+    def __init__(self, *args, **kwargs) -> None:
+        """Constructor for Tree object."""
+        libTree.__init__(self, *args, **kwargs)  # call parent constructor
+        # used to get children quickly Dict[key=parentId, value=Dict[key=branch, value=childId]]
+        self.BRANCHES: typ.Dict[int, typ.Dict[str, str]] = defaultdict(dict)
+    
+    def printNodes(self) -> None:
+        """Prints all the nodes in a tree & then the tree."""
+        # pprint(self.all_nodes())                # print all the nodes using pretty print
+        
+        for n in self.all_nodes_itr():          # loop over every node
+            if self.BRANCHES[n.identifier] == {}:  # if the n is a terminal, skip
+                continue
+            print(n)                            # print the node
+            print(self.BRANCHES[n.identifier])  # print the dictionary for that node
+        
+        self.show(idhidden=False)               # print the tree
+        out = Path.cwd() / 'logs' / 'tree.log'  # create the file path
+        self.save2file(out)                     # save to tree.log
+        
     def checkTree(self) -> None:
         """Checks the tree dictionary"""
+        # self.printNodes()           # print the tree being checked
         for n in self.all_nodes():  # loop over every node
             try:
                 if not self.contains(n.identifier):  # check that the node is in the tree
@@ -161,31 +184,40 @@ class Tree(treelib.Tree):
                 if n.data not in OPS:                # if this is a terminal node
                     continue                         # skip this iteration
                 
-                dct = self.BRANCHES[n.identifier]    # get the branches the node has
-                lft = dct['left']                    # all nodes should have a left
-                r = dct['right']                     # all nodes should have a right
+                lft: Node = self.get_node(self.BRANCHES[n.identifier]['left'])  # all nodes should have a left
+                r: Node = self.get_node(self.BRANCHES[n.identifier]['right'])   # all nodes should have a right
                 
-                # ! this gets raised, but not a key error, so the keys are getting create but store a None
-                if lft is None or r is None:         # if getting left or right key got a None, raise exception
+                if lft is None or r is None:                # if getting left or right key got a None, raise exception
                     raise AssertionError('Getting left and/or right key failed')
+                if lft not in self.children(n.identifier):  # check that the left child is valid
+                    pprint(self.children(n.identifier))
+                    print(lft)
+                    raise AssertionError(f'Left child was set incorrectly parent = {n}')
+                if r not in self.children(n.identifier):    # check that the right child is valid
+                    pprint(self.children(n.identifier))
+                    print(r)
+                    raise AssertionError(f'Right child was set incorrectly parent = {n}')
                 
                 if n.data == 'if':                   # if the node stores an IF OP
-                    m = dct['middle']
+                    m = self.get_node(self.BRANCHES[n.identifier]['middle'])
                     if m is None:                    # if getting middle key failed, throw exception
                         raise AssertionError('Getting middle key failed')
+                    if not (m in self.children(n.identifier)):  # check that the middle child is valid
+                        raise AssertionError('Left child was set incorrectly')
             # NOTE: KeyError indicates that the key (left, right, middle) doesn't exist,
             # +     AssertionError means it does exist & stores a None
             except KeyError:
                 lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
                 log.error(f'CheckTree raised a KeyError, on line {lineNm}')  # log the error
-                printError(f'CheckTree raised a KeyError, dict = {dct.items()}, on line {lineNm}')  # print message
+                printError(f'CheckTree raised a KeyError, dict = {self.BRANCHES[n.identifier].items()}, on line {lineNm}')  # print message
                 traceback.print_stack()  # print stack trace
                 sys.exit(-1)  # exit on error; recovery not possible
                 
             except AssertionError as err:
                 lineNm = sys.exc_info()[-1].tb_lineno        # get the line number of error
+                printError(str(err))
                 log.error(f'{str(err)}, on line {lineNm}')   # log the error
-                printError(f'CheckTree raised a AssertionError, dict = {dct.items()}, on line {lineNm}')  # print message
+                printError(f'CheckTree raised a AssertionError, dict = {self.BRANCHES[n.identifier].items()}, on line {lineNm}')  # print message
                 traceback.print_stack()                      # print stack trace
                 sys.exit(-1)                                 # exit on error; recovery not possible
     
@@ -202,8 +234,10 @@ class Tree(treelib.Tree):
     
     def addRoot(self) -> Node:  # ? is the bug in root creation somehow?
         """Adds a root node to the tree"""
+        global TreeCount
         op = random.choice(OPS)
-        root = self.create_node(tag=f'root: {op}', identifier='Root', data=op)  # create a root node for the tree
+        root = self.create_node(tag=f'root: {op}', identifier=f'Tree{TreeCount}', data=op)  # create a root node for the tree
+        TreeCount += 1
         return root
      
     def addLeft(self, parent: Node, data: TREE_DATA) -> Node:
@@ -217,7 +251,7 @@ class Tree(treelib.Tree):
         # update dictionary used by getLeft(), getRight(), & getMiddle()
         # store new Node ID at ParentId, 'left' (overwriting any old values)
         # ! is the error in runNode because new.identifier is None? Or is the assignment failing
-        d = self.BRANCHES[parent.identifier]['left'] = new.identifier
+        self.BRANCHES[parent.identifier]['left'] = new.identifier
         
         try:  # ! For Testing Only !! - attempt to access created entry
             self.BRANCHES[parent.identifier]['left']
@@ -473,14 +507,16 @@ class Tree(treelib.Tree):
                 raise TypeError(f'runNode could not parse data in tree, data ={node.data}')
         
         # ! This error is getting hit
-        except (TypeError, AssertionError) as err:       # catch any exceptions
-            self.sendToStdOut()                          # record the tree
-            lineNm = sys.exc_info()[-1].tb_lineno        # get the line number of error
-            log.error(f'line = {lineNm}, {str(err)}')    # log the error
-            printError(f'line = {lineNm}, {str(err)}')   # print message
-            printError(f'node = {node}')
-            traceback.print_stack()                      # print stack trace
-            sys.exit(-1)                                 # exit on error; recovery not possible
+        except (TypeError, AssertionError) as err:                      # catch any exceptions
+            self.sendToStdOut()                                         # record the tree
+            lineNm = sys.exc_info()[-1].tb_lineno                       # get the line number of error
+            log.error(f'line = {lineNm}, {str(err)}'
+                      f'\ndict = {self.BRANCHES[node.identifier]}'
+                      f'\n{self.all_nodes()}')                        # log the error
+            printError(f'line = {lineNm}, {str(err)}')                  # print message
+            printError(f'dict = {self.BRANCHES[node.identifier]}')
+            traceback.print_stack()                                     # print stack trace
+            sys.exit(-1)                                                # exit on error; recovery not possible
 
 
 class ConstructedFeature:
@@ -1015,9 +1051,9 @@ def createInitialPopulation() -> Population:
             if root is not tree.getRoot():
                 raise Exception('Root is not equal to tree root')
             # __grow(name, root, tree)    # create tree using grow
-            __full(name, root, tree)    # create tree using full
+            __full(name, root, tree)      # create tree using full
             tree.checkTree()
-            # tree.sendToStdOut()                          # print the tree
+            tree.printNodes()             # print the tree
             # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
             
             '''if random.choice([True, False]):         # *** use grow *** #
@@ -1080,7 +1116,7 @@ def sanityCheckCF(cf: ConstructedFeature):
 def sanityCheckTree(tree: Tree, classId):
     """Used in debugging to check a Tree"""
     log.debug('Starting Tree Sanity Check...')
-    # tree.checkTree()
+    tree.checkTree()
     tree.runTree(rows[0].attributes, classId)
     log.debug('Tree Sanity Check Passed')
 # *************************************************************** #
@@ -1154,7 +1190,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         terminals = randCF.relevantFeatures                          # save the indexes of the relevant features
         tree: Tree = randCF.tree                                     # get the tree from the CF
         tree.checkTree()     # ! For Testing purposes only !!
-        tree.sendToStdOut()  # ! For Testing purposes only !!
+        # tree.sendToStdOut()  # ! For Testing purposes only !!
         node: Node = randCF.tree.getRandomNode()                     # get a random node from the CF's tree
         # *********************************************************** #
         
@@ -1178,7 +1214,8 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         # *********************************************************** #
 
         tree.checkTree()     # ! For Testing purposes only !!
-        tree.sendToStdOut()  # ! For Testing purposes only !!
+        # tree.sendToStdOut()  # ! For Testing purposes only !!
+        
         # overwrite old CF with the new one
         parent.features[randIndex] = ConstructedFeature(randCF.className, randCF.tree)
         # add the mutated parent to the new pop (appending is needed because parent is a copy NOT a reference)
@@ -1249,7 +1286,11 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             print(f' evolving {pop}/{POPULATION_SIZE}...')  # update user on progress
             probability = random.uniform(0, 1)              # get a random number between 0 & 1
         
-            # ***************** Mutate ***************** #
+            # mutate()     # ! For Testing Only
+            crossover()  # ! For Testing Only
+            bar()        # ! For Testing Only
+        
+            ''''# ***************** Mutate ***************** #
             if probability < MUTATION_RATE:  # if probability is less than mutation rate, mutate
                 bar.text('mutating...')      # update user
                 mutate()                     # perform mutation
@@ -1261,7 +1302,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
                 bar.text('crossing...')  # update user
                 crossover()              # perform crossover operation
                 bar()                    # update bar now that a candidate is finished
-            # ************* End of Crossover ************* #
+            # ************* End of Crossover ************* #'''
             
             # ****************** Elitism ****************** #
             # check that if latest hypothesis has a higher fitness than our current elite
