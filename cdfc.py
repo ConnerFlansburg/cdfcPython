@@ -17,13 +17,12 @@ import warnings
 from pathlib import Path
 import traceback
 from pprint import pprint
-
+from treelib.exceptions import NodeIDAbsentError
 from treelib import Tree as libTree
 from treelib import Node as Node
 from collections import defaultdict
 
 import numpy as np
-from tqdm import tqdm
 from alive_progress import alive_bar, config_handler
 
 # ! Next Steps
@@ -37,12 +36,11 @@ ALPHA: typ.Final = 0.8                        # ALPHA is the fitness weight alph
 BARCOLS = 25                                  # BARCOLS is the number of columns for the progress bar to print
 CROSSOVER_RATE: typ.Final = 0.8               # CROSSOVER_RATE is the chance that a candidate will reproduce
 ELITISM_RATE: typ.Final = 1                   # ELITISM_RATE is the elitism rate
-GENERATIONS: typ.Final = 50                   # GENERATIONS is the number of generations the GP should run for
+# GENERATIONS: typ.Final = 50                   # GENERATIONS is the number of generations the GP should run for
+GENERATIONS: typ.Final = 10                   # ! value for testing/debugging to increase speed
 # MAX_DEPTH: typ.Final = 8                      # MAX_DEPTH is the max depth trees are allowed to be & is used in grow/full
 MAX_DEPTH: typ.Final = 4                      # ! value for testing/debugging to make trees more readable
 MUTATION_RATE: typ.Final = 0.2                # MUTATION_RATE is the chance that a candidate will be mutated
-
-
 # ! changes here must also be made in the tree object, and the grow & full functions ! #
 OPS: typ.Final = ['add', 'subtract',          # OPS is the list of valid operations on the tree
                   'times', 'max', 'if']
@@ -92,7 +90,7 @@ def printError(err): print("\033[91m {}\033[00m" .format(err))  # used for color
 # ********************** Namespaces/Structs & Objects ***********************
 
 
-def countNodes():
+def countNodes() -> typ.Generator:
     """Used to generate unique node IDs."""
     
     num = 0
@@ -104,7 +102,7 @@ def countNodes():
 NodeCount = countNodes()  # create a generator for node count
 
 
-def countTrees():
+def countTrees() -> typ.Generator:
     """Used to generate unique root IDs."""
     num = 1
     while True:
@@ -181,7 +179,7 @@ class Tree(libTree):
     def remove_subtree(self, nid, identifier=None) -> "Tree":
         """This overrides the remove_subtree method so the new tree's BRANCHES dictionary is set."""
         # NOTE: we don't need to delete dictionary values from the old tree as they will be overwritten during swap
-        subTree = super().remove_subtree(nid, nid)  # create a subtree
+        subTree: Tree = super().remove_subtree(nid=nid)  # create a subtree
         subTree.BRANCHES = self.BRANCHES.copy()            # copy the dict from the original tree into the subtree
         return subTree                                     # return the subtree
     
@@ -252,7 +250,7 @@ class Tree(libTree):
     
     def sendToStdOut(self) -> None:
         """Used to print a Tree."""
-        self.show()  # ascii
+        self.show(idhidden=False)  # ascii
         # self.show('ascii-ex')   # ascii-ex FAILS
         # self.show('ascii-exr')  # ascii-exr FAILS
         # self.show('ascii-em')   # ascii-em FAILS
@@ -343,18 +341,40 @@ class Tree(libTree):
            dictionary & should overwrite any old values. This shouldn't delete
            values from the old tree's dictionary as subtree is a copy"""
 
-        # BUG: currently this causes key errors, because it can't find node IDs in a tree
-        # !    this was not an issue before the changes to the code & so a result of the below
-        # !    somehow this is creating an empty dictionary
-        # ?    is the issue that remove_tree doesn't set the dict?
-        self.BRANCHES[parent.identifier][branch] = subtree.root  # add the subtree root to the dictionary
-        # this shouldn't delete values from the old tree's dictionary as subtree is a copy
-        for nid in subtree.nodes.keys():                         # loop over all the nids in the subtree
-            # ? this makes a shallow copy. Is that okay or should it be deep?
-            self.BRANCHES[nid] = subtree.BRANCHES[nid].copy()    # copy the sub-dictionary over
-        del subtree.BRANCHES                                     # delete the old dictionary
-        # add the subtree to the original tree as a child of parent
-        self.paste(parent.identifier, subtree, deep=False)  # ? should deep be true or false?
+        try:
+            self.BRANCHES[parent.identifier][branch] = subtree.root  # add the subtree root to the dictionary
+            
+            # this shouldn't delete values from the old tree's dictionary as subtree is a copy
+            for nid in subtree.nodes.keys():                         # loop over all the nids in the subtree
+                # ? this makes a shallow copy. Is that okay or should it be deep?
+                self.BRANCHES[nid] = subtree.BRANCHES[nid].copy()    # copy the sub-dictionary over
+            del subtree.BRANCHES                                     # delete the old dictionary
+            
+            # add the subtree to the original tree as a child of parent
+            # deep=False because the subtree has been deleted from the old tree so can't affect it anymore.
+            # However is subtree is used after this it will need to be True
+            self.paste(parent.identifier, subtree, deep=False)  # ? should deep be true or false?
+    
+        except NodeIDAbsentError as err:  # catch error thrown by deep paste
+            print('adding to:')
+            self.sendToStdOut()                          # print the tree
+            print('subTree:')
+            subtree.sendToStdOut()
+            msg: str = f'addSubTree failed, {str(err)}'  # create the message
+            log.error(msg)                               # log the error
+            printError(msg)                              # print message
+            printError(f'Parent = {parent}')
+            traceback.print_stack()  # print stack trace
+            sys.exit(-1)  # exit on error; recovery not possible
+        
+        except Exception as err:
+            msg: str = f'addSubTree failed, {str(err)}'  # create the message
+            lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+            log.error(msg)  # log the error
+            printError(msg)  # print message
+            printError(f'Error on line {lineNm}')
+            traceback.print_stack()  # print stack trace
+            sys.exit(-1)  # exit on error; recovery not possible
         
     def getDepth(self, node: Node) -> int:
         """Given a node, return the node's depth"""
@@ -571,7 +591,8 @@ class ConstructedFeature:
 
     def transform(self, instance: Instance) -> float:
         """Takes an instance, transforms it using the decision tree, and return the value computed."""
-        
+        # BUG AttributeError: 'numpy.ndarray' object has no attribute 'attributes'
+        # ! happens after training when we are trying to transform data using it
         # Send the tree a list of all the attribute values in a single instance
         featureValues: typ.Dict[int, float] = instance.attributes
         return self.tree.runTree(featureValues, self.className)
@@ -596,7 +617,7 @@ class Hypothesis:
 
     """
 
-    fitness: typ.Union[None, int, float] = None  # the fitness score
+    _fitness: typ.Union[None, int, float] = None  # the fitness score
     distance: typ.Union[float, int] = 0          # the distance function score
     averageInfoGain: typ.Union[float, int] = -1  # the average info gain of the hypothesis
     maxInfoGain: typ.Union[float, int] = -1      # the max info gain in the hypothesis
@@ -616,6 +637,13 @@ class Hypothesis:
         for ft in self.features:  # loop over every constructed feature
             print(f'{ft}\n')      # and print every constructed feature'''
 
+    @property
+    def fitness(self) -> typ.Union[int, float]:
+        """Getter for fitness."""
+        if self._fitness is None:  # if fitness isn't set
+            self.getFitness()      # run fitness to set it
+        return self._fitness       # either way return fitness
+    
     def getFitness(self) -> float:
         """getFitness uses several helper functions to calculate the fitness of a Hypothesis"""
     
@@ -626,8 +654,6 @@ class Hypothesis:
             # log.debug('Starting Czekanowski() method')
 
             # ************************** Error checking ************************** #
-            # BUG Vi & Vj are [None, None]
-            # ? How???
             try:
                 if len(Vi) != len(Vj):
                     log.error(f'In Czekanowski Vi[d] & Vi[d] are not equal Vi = {Vi}, Vj = {Vj}')
@@ -829,6 +855,7 @@ class Hypothesis:
         # ********* Finish Calculation ********* #
 
         # log.debug('Finished getFitness() method')
+        self._fitness = final
         return final
 
     def transform(self, data: typ.Union[None, np.array] = None) -> np.array:
@@ -873,6 +900,7 @@ class Hypothesis:
                 values = []  # this will hold the calculated values for all the constructed features
                 
                 for f in self.features:            # transform the original input using each constructed feature
+                    # BUG the call to transform here creates an error
                     values.append(f.transform(d))  # append the transformed values for a single CF to values
                 
                 # each Instance will hold the new values for an Instance & className, and
@@ -895,14 +923,10 @@ class Population:
     """
 
     def __init__(self, candidates: typ.List[Hypothesis], generationNumber: int) -> None:
-        self.candidateHypotheses = candidates  # a list of all the candidate hypotheses
+        self.candidateHypotheses: typ.List[Hypothesis] = candidates  # a list of all the candidate hypotheses
         self.generation = generationNumber     # this is the number of this generation
-        
-    '''def __str__(self):
-        """Used to print a population"""
-        print(f'Generation: {self.generation}\n')  # print the generation number
-        for hy in self.candidateHypotheses:        # loop over every hypothesis
-            print(f'{hy}\n')                       # and print each hypothesis'''
+
+    
 # ***************** End of Namespaces/Structs & Objects ******************* #
 
 
@@ -1243,7 +1267,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         # add the mutated parent to the new pop (appending is needed because parent is a copy NOT a reference)
         newPopulation.candidateHypotheses.append(parent)
     
-    def crossover():
+    def crossover() -> None:
         """Performs the crossover operation on two trees"""
         
         log.debug('Starting Crossover')
@@ -1262,41 +1286,41 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         feature1: ConstructedFeature = random.choice(parent1.features)  # get a random feature from the parent
         tree1: Tree = feature1.tree                                     # get the tree
         tree1.checkTree()        # ! For Testing Only !!
-        tree1.sendToStdOut()     # ! For Testing Only !!
+        # tree1.sendToStdOut()     # ! For Testing Only !!
 
         # Feature 2
         feature2: ConstructedFeature = parent2.idsToFeatures[feature1.className]  # makes sure CFs are from/for the same class
         tree2: Tree = feature2.tree                                               # get the tree
         tree2.checkTree()        # ! For Testing Only !!
-        tree2.sendToStdOut()     # ! For Testing Only !!
+        # tree2.sendToStdOut()     # ! For Testing Only !!
     
         # *************** Find the Two Sub-Trees **************** #
         node1: Node = tree1.getRandomNode()           # get a random node
         branch1, p1 = tree1.getBranch(node1)          # get the branch string
         subTree1: Tree = tree1.remove_subtree(node1.identifier)  # get a sub-tree with node1 as root
-        subTree1.sendToStdOut()  # ! For Testing Only !!
+        # subTree1.sendToStdOut()  # ! For Testing Only !!
 
         node2: Node = tree2.getRandomNode()           # get a random node
         branch2, p2 = tree2.getBranch(node2)          # get the branch string
         subTree2: Tree = tree2.remove_subtree(node2.identifier)  # get a sub-tree with node2 as root
-        subTree2.sendToStdOut()  # ! For Testing Only !!
+        # subTree2.sendToStdOut()  # ! For Testing Only !!
         # ******************************************************* #
     
         # ************************** swap the two subtrees ************************** #
-        tree1.addSubTree(parent=p1, branch=branch1, subtree=subTree2)  # update the first parent tree
-        tree2.addSubTree(parent=p2, branch=branch2, subtree=subTree1)  # update the second parent tree
+        tree1.addSubTree(parent=p1, branch=branch1, subtree=subTree1)  # update the first parent tree
+        tree2.addSubTree(parent=p2, branch=branch2, subtree=subTree2)  # update the second parent tree
         # **************************************************************************** #
 
         # !!!!!!!!!!!!!! For Testing Only !!!!!!!!!!!!!! #
         # Print the trees to see if crossover broke them/performed correctly
         # print('Crossover Finished')
         # print('Parent Tree 1:')
-        print('1st Swapped Tree:')
-        tree1.sendToStdOut()
+        # print('1st Swapped Tree:')
+        # tree1.sendToStdOut()
         tree1.checkTree()
         # print('Parent Tree 2:')
-        print('2nd Swapped Tree:')
-        tree2.sendToStdOut()
+        # print('2nd Swapped Tree:')
+        # tree2.sendToStdOut()
         tree2.checkTree()
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
     
@@ -1309,11 +1333,11 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
     # range(newPopulation.candidateHypotheses) = POPULATION_SIZE so loop over pop size
     with alive_bar(POPULATION_SIZE, title="Evolving") as bar:  # declare your expected total
         for pop in range(POPULATION_SIZE):
-            print(f' evolving {pop}/{POPULATION_SIZE}...')  # update user on progress
+            # print(f' evolving {pop}/{POPULATION_SIZE}...')  # update user on progress
             probability = random.uniform(0, 1)              # get a random number between 0 & 1
         
-            # mutate()     # ! For Testing Only
-            crossover()  # ! For Testing Only
+            mutate()     # ! For Testing Only
+            # crossover()  # ! For Testing Only
             bar()        # ! For Testing Only
         
             ''''# ***************** Mutate ***************** #
@@ -1336,8 +1360,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             if newHypothFitness > elite.getFitness():
                 elite = newPopulation.candidateHypotheses[-1]
             # ************** End of Elitism *************** #
-            
-        print('Evolution Done')
+
     return newPopulation, elite
 
 
@@ -1402,16 +1425,9 @@ def cdfc(dataIn) -> Hypothesis:
     # ***************************************************************** #
 
     # ****************** Return the Best Hypothesis ******************* #
-    # check to see if the last generation has generated fitness scores
     log.debug('Finding best hypothesis')
-    if currentPopulation.candidateHypotheses[2].fitness is None:
-        # if not then generate them
-        for i in currentPopulation.candidateHypotheses:
-            i.getFitness()
 
-    # now that we know each hypothesis has a fitness score, get the one with the highest fitness
-    # ? check this works
-    fitBar = tqdm(currentPopulation.candidateHypotheses, desc='Finding most fit hypothesis', unit='hyp', ncols=BARCOLS)
-    bestHypothesis = max(fitBar, key=lambda x: x.fitness)
+    # fitBar = tqdm(currentPopulation.candidateHypotheses, desc='Finding most fit hypothesis', unit='hyp', ncols=BARCOLS)
+    bestHypothesis = max(currentPopulation.candidateHypotheses, key=lambda x: x.fitness)
     log.debug('Found best hypothesis, returning...')
     return bestHypothesis  # return the best hypothesis generated
