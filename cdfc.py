@@ -41,8 +41,8 @@ GENERATIONS: typ.Final = 50                   # GENERATIONS is the number of gen
 # MAX_DEPTH: typ.Final = 8                      # MAX_DEPTH is the max depth trees are allowed to be & is used in grow/full
 MAX_DEPTH: typ.Final = 4                      # ! value for testing/debugging to make trees more readable
 MUTATION_RATE: typ.Final = 0.2                # MUTATION_RATE is the chance that a candidate will be mutated
-NodeCount = 0
-TreeCount = 0
+
+
 # ! changes here must also be made in the tree object, and the grow & full functions ! #
 OPS: typ.Final = ['add', 'subtract',          # OPS is the list of valid operations on the tree
                   'times', 'max', 'if']
@@ -90,6 +90,29 @@ def printError(err): print("\033[91m {}\033[00m" .format(err))  # used for color
 # ************************ End of Constants/Globals ************************ #
 
 # ********************** Namespaces/Structs & Objects ***********************
+
+
+def countNodes():
+    """Used to generate unique node IDs."""
+    
+    num = 0
+    while True:
+        yield num
+        num += 1
+
+
+NodeCount = countNodes()  # create a generator for node count
+
+
+def countTrees():
+    """Used to generate unique root IDs."""
+    num = 1
+    while True:
+        yield num
+        num += 1
+
+        
+TreeCount = countTrees()  # create a generator for tree count
 
 
 class Instance:
@@ -149,14 +172,18 @@ class Tree(libTree):
     # typing alias for tree nodes. They will either have a terminal index (int) or an OP (str)
     TREE_DATA = typ.Union[int, str]
     
-    # BUG ^ something about this dictionary isn't working. getLeft throws a KeyError evening though it has a left
-    # !     node that was set by addLeft. Is the assignment in addLeft failing?
-    
     def __init__(self, *args, **kwargs) -> None:
         """Constructor for Tree object."""
         libTree.__init__(self, *args, **kwargs)  # call parent constructor
         # used to get children quickly Dict[key=parentId, value=Dict[key=branch, value=childId]]
         self.BRANCHES: typ.Dict[int, typ.Dict[str, str]] = defaultdict(dict)
+        
+    def remove_subtree(self, nid, identifier=None) -> "Tree":
+        """This overrides the remove_subtree method so the new tree's BRANCHES dictionary is set."""
+        # NOTE: we don't need to delete dictionary values from the old tree as they will be overwritten during swap
+        subTree = super().remove_subtree(nid, nid)  # create a subtree
+        subTree.BRANCHES = self.BRANCHES.copy()            # copy the dict from the original tree into the subtree
+        return subTree                                     # return the subtree
     
     def printNodes(self) -> None:
         """Prints all the nodes in a tree & then the tree."""
@@ -188,6 +215,8 @@ class Tree(libTree):
                 r: Node = self.get_node(self.BRANCHES[n.identifier]['right'])   # all nodes should have a right
                 
                 if lft is None or r is None:                # if getting left or right key got a None, raise exception
+                    pprint(self.children(n.identifier))
+                    print(f'left found: {lft}\nright found: {r}')
                     raise AssertionError('Getting left and/or right key failed')
                 if lft not in self.children(n.identifier):  # check that the left child is valid
                     pprint(self.children(n.identifier))
@@ -206,7 +235,7 @@ class Tree(libTree):
                         raise AssertionError('Left child was set incorrectly')
             # NOTE: KeyError indicates that the key (left, right, middle) doesn't exist,
             # +     AssertionError means it does exist & stores a None
-            except KeyError:
+            except KeyError:  # ! This is getting raised
                 lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
                 log.error(f'CheckTree raised a KeyError, on line {lineNm}')  # log the error
                 printError(f'CheckTree raised a KeyError, dict = {self.BRANCHES[n.identifier].items()}, on line {lineNm}')  # print message
@@ -234,19 +263,15 @@ class Tree(libTree):
     
     def addRoot(self) -> Node:  # ? is the bug in root creation somehow?
         """Adds a root node to the tree"""
-        global TreeCount
         op = random.choice(OPS)
-        root = self.create_node(tag=f'root: {op}', identifier=f'Tree{TreeCount}', data=op)  # create a root node for the tree
-        TreeCount += 1
+        root = self.create_node(tag=f'root: {op}', identifier=f'Tree {next(TreeCount)}', data=op)  # create a root node for the tree
         return root
      
     def addLeft(self, parent: Node, data: TREE_DATA) -> Node:
         """Sets the left child of a tree."""
-        global NodeCount
         # create the node & add it to the tree
         new: Node = self.create_node(tag=str(data), parent=parent.identifier,
-                                     data=data, identifier=f'{parent.identifier}|{str(data)}({NodeCount})')
-        NodeCount += 1
+                                     data=data, identifier=f'{str(data)}({next(NodeCount)})')
 
         # update dictionary used by getLeft(), getRight(), & getMiddle()
         # store new Node ID at ParentId, 'left' (overwriting any old values)
@@ -269,11 +294,9 @@ class Tree(libTree):
     def addRight(self, parent: Node, data: TREE_DATA) -> Node:
         """Sets the right child of a tree."""
 
-        global NodeCount
         # create the node & add it to the tree
         new: Node = self.create_node(tag=str(data), parent=parent.identifier,
-                                     data=data, identifier=f'{parent.identifier}|{str(data)}({NodeCount})')
-        NodeCount += 1
+                                     data=data, identifier=f'{str(data)}({next(NodeCount)})')
         
         # update dictionary used by getLeft(), getRight(), & getMiddle()
         # store new Node ID at ParentId, 'left' (overwriting any old values)
@@ -295,11 +318,9 @@ class Tree(libTree):
     def addMiddle(self, parent: Node, data: TREE_DATA) -> Node:
         """Sets the middle child of a tree."""
 
-        global NodeCount
         # create the node & add it to the tree
         new: Node = self.create_node(tag=str(data), parent=parent.identifier,
-                                     data=data, identifier=f'{parent.identifier}|{str(data)}({NodeCount})')
-        NodeCount += 1
+                                     data=data, identifier=f'{str(data)}({next(NodeCount)})')
         
         # update dictionary used by getLeft(), getRight(), & getMiddle()
         # store new Node ID at ParentId, 'left' (overwriting any old values)
@@ -318,21 +339,23 @@ class Tree(libTree):
         return new
     
     def addSubTree(self, parent: Node, branch: str, subtree: "Tree"):
-        """Adds a subtree as a child of parent. This will also update the
-           BRANCHES dictionary & should overwrite any old values."""
-        
-        # add the subtree to the original tree as a child of parent
-        self.paste(parent.identifier, subtree)           # ? should deep be true or false?
-        children: typ.List[str] = self.children(parent.identifier)  # get all of parent's children
-        
-        for cid in children:                                        # loop over all the child ids
-            if cid in self.BRANCHES[parent.identifier]:             # if the dictionary has the child id
-                continue                                            # continue
-            else:                                                   # if the child Id is not in the dictionary
-                self.BRANCHES[parent.identifier][branch] = cid      # add the new id to the dictionary
-                return
-        raise Exception('addSubtree could not find a missing child ID in BRANCHES')
+        """Adds a subtree as a child of parent. This will also update the BRANCHES
+           dictionary & should overwrite any old values. This shouldn't delete
+           values from the old tree's dictionary as subtree is a copy"""
 
+        # BUG: currently this causes key errors, because it can't find node IDs in a tree
+        # !    this was not an issue before the changes to the code & so a result of the below
+        # !    somehow this is creating an empty dictionary
+        # ?    is the issue that remove_tree doesn't set the dict?
+        self.BRANCHES[parent.identifier][branch] = subtree.root  # add the subtree root to the dictionary
+        # this shouldn't delete values from the old tree's dictionary as subtree is a copy
+        for nid in subtree.nodes.keys():                         # loop over all the nids in the subtree
+            # ? this makes a shallow copy. Is that okay or should it be deep?
+            self.BRANCHES[nid] = subtree.BRANCHES[nid].copy()    # copy the sub-dictionary over
+        del subtree.BRANCHES                                     # delete the old dictionary
+        # add the subtree to the original tree as a child of parent
+        self.paste(parent.identifier, subtree, deep=False)  # ? should deep be true or false?
+        
     def getDepth(self, node: Node) -> int:
         """Given a node, return the node's depth"""
         return self.depth(node)
@@ -1053,7 +1076,6 @@ def createInitialPopulation() -> Population:
             # __grow(name, root, tree)    # create tree using grow
             __full(name, root, tree)      # create tree using full
             tree.checkTree()
-            tree.printNodes()             # print the tree
             # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
             
             '''if random.choice([True, False]):         # *** use grow *** #
@@ -1252,10 +1274,12 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         node1: Node = tree1.getRandomNode()           # get a random node
         branch1, p1 = tree1.getBranch(node1)          # get the branch string
         subTree1: Tree = tree1.remove_subtree(node1.identifier)  # get a sub-tree with node1 as root
+        subTree1.sendToStdOut()  # ! For Testing Only !!
 
         node2: Node = tree2.getRandomNode()           # get a random node
         branch2, p2 = tree2.getBranch(node2)          # get the branch string
         subTree2: Tree = tree2.remove_subtree(node2.identifier)  # get a sub-tree with node2 as root
+        subTree2.sendToStdOut()  # ! For Testing Only !!
         # ******************************************************* #
     
         # ************************** swap the two subtrees ************************** #
@@ -1267,11 +1291,13 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         # Print the trees to see if crossover broke them/performed correctly
         # print('Crossover Finished')
         # print('Parent Tree 1:')
-        tree1.checkTree()
+        print('1st Swapped Tree:')
         tree1.sendToStdOut()
+        tree1.checkTree()
         # print('Parent Tree 2:')
-        tree2.checkTree()
+        print('2nd Swapped Tree:')
         tree2.sendToStdOut()
+        tree2.checkTree()
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
     
         # parent 1 & 2 are both hypotheses and should have been changed in place,
