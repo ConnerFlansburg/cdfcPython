@@ -353,7 +353,7 @@ class Tree(libTree):
             # add the subtree to the original tree as a child of parent
             # deep=False because the subtree has been deleted from the old tree so can't affect it anymore.
             # However is subtree is used after this it will need to be True
-            self.paste(parent.identifier, subtree, deep=False)  # ? should deep be true or false?
+            self.paste(parent.identifier, subtree)  # ? should deep be true or false?
     
         except NodeIDAbsentError as err:  # catch error thrown by deep paste
             print('adding to:')
@@ -591,8 +591,7 @@ class ConstructedFeature:
 
     def transform(self, instance: Instance) -> float:
         """Takes an instance, transforms it using the decision tree, and return the value computed."""
-        # BUG AttributeError: 'numpy.ndarray' object has no attribute 'attributes'
-        # ! happens after training when we are trying to transform data using it
+        
         # Send the tree a list of all the attribute values in a single instance
         featureValues: typ.Dict[int, float] = instance.attributes
         return self.tree.runTree(featureValues, self.className)
@@ -898,15 +897,15 @@ class Hypothesis:
             
             for d in data:   # for each Instance
                 values = []  # this will hold the calculated values for all the constructed features
+                instance: Instance = Instance(d[0], dict(zip(range(d[1:].size), d[1:])))
                 
-                for f in self.features:            # transform the original input using each constructed feature
-                    # BUG the call to transform here creates an error
-                    values.append(f.transform(d))  # append the transformed values for a single CF to values
+                for f in self.features:                   # transform the original input using each constructed feature
+                    values.append(f.transform(instance))  # append the transformed values for a single CF to values
                 
                 # each Instance will hold the new values for an Instance & className, and
                 # transformed will hold all the instances for a hypothesis
                 vls = dict(zip(range(len(values)), values))  # create a dict of the values keyed by their index
-                transformed.append(Instance(d.className, vls))
+                transformed.append(Instance(d[0], vls))
 
             # log.debug('Finished transform() method')
 

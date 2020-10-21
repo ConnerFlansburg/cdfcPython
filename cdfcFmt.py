@@ -51,6 +51,7 @@ def __flattenTrainingData(trainList: typ.List[typ.List[np.ndarray]]) -> np.ndarr
 def __formatForSciKit(data: np.ndarray) -> (np.ndarray, np.ndarray):
     # create the label array Y (the target of our training)
     # from all rows, pick the 0th column
+    # BUG TypeError: list indices must be integers or slices, not tuple
     flat = np.ravel(data[:, :1])  # get a list of all the labels as a list of lists & then flatten it
     labels = np.array(flat)  # convert the label list to a numpy array
     
