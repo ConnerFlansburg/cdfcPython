@@ -1,10 +1,13 @@
 import sys
 import typing as typ
 from tkinter import filedialog
-
+# from pprint import pprint
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import logging as log
+import traceback
+
 
 # console formatting strings
 HDR = '*' * 6
@@ -13,6 +16,10 @@ OVERWRITE = '\r' + HDR
 SYSOUT = sys.stdout
 
 ModelList = typ.Tuple[typ.List[float], typ.List[float], typ.List[float]]  # type hinting alias
+
+
+# noinspection PyMissingOrEmptyDocstring
+def printError(err): print("\033[91m {}\033[00m" .format(err))  # used for coloring error message red
 
 
 def __createPlot(df):
@@ -42,7 +49,7 @@ def __flattenTrainingData(trainList: typ.List[typ.List[np.ndarray]]) -> np.ndarr
     for lst in trainList:  # we can now remove the buckets by concatenating the lists of instance
         train += lst  # into one list of instances, flattening our data, & making it easier to work with
     
-    # transform the training & testing data into numpy arrays & free the List vars to be reused
+    # __transform the training & testing data into numpy arrays & free the List vars to be reused
     train = np.array(train)  # turn training data into a numpy array
     
     return train
@@ -51,12 +58,26 @@ def __flattenTrainingData(trainList: typ.List[typ.List[np.ndarray]]) -> np.ndarr
 def __formatForSciKit(data: np.ndarray) -> (np.ndarray, np.ndarray):
     # create the label array Y (the target of our training)
     # from all rows, pick the 0th column
+
     # BUG TypeError: list indices must be integers or slices, not tuple
-    flat = np.ravel(data[:, :1])  # get a list of all the labels as a list of lists & then flatten it
-    labels = np.array(flat)  # convert the label list to a numpy array
+    # ! the error is in the list slicing syntax
+    # + Data is a list of Instance objects.
+
+    try:
+        # + data[:, :1] get every row but only the first column
+        flat = np.ravel(data[:, :1])  # get a list of all the labels as a list of lists & then flatten it
+        labels = np.array(flat)  # convert the label list to a numpy array
+        # create the feature matrix X ()
+        # + data[:, 1:] get every row but drop the first column
+        ftrs = np.array(data[:, 1:])  # get everything BUT the labels/ids
     
-    # create the feature matrix X ()
-    ftrs = np.array(data[:, 1:])  # get everything BUT the labels/ids
+    except (TypeError, IndexError) as err:
+        lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+        msg = f'{str(err)}, line {lineNm}:\ndata = {data}\ndimensions = {data.ndim}'
+        log.error(msg)  # log the error
+        printError(msg)  # print message
+        traceback.print_stack()  # print stack trace
+        sys.exit(-1)  # exit on error; recovery not possible
     
     return ftrs, labels
 

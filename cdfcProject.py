@@ -1,11 +1,11 @@
 import cProfile
 import collections as collect
 import copy
-import logging as log
+# import logging as log
 import math
 import os
 import pickle
-import traceback
+# import traceback
 import tkinter as tk
 from pathlib import Path
 # from tkinter import messagebox
@@ -61,12 +61,11 @@ SYSOUT = sys.stdout
 K: typ.Final[int] = 10  # set the K for k fold cross validation
 ModelList = typ.Tuple[typ.List[float], typ.List[float], typ.List[float]]          # type hinting alias
 ModelTypes = typ.Union[KNeighborsClassifier, GaussianNB, DecisionTreeClassifier]  # type hinting alias
-ScalarsOut = typ.Tuple[np.ndarray, StandardScaler]
+
 ScalarsIn = typ.Union[None, StandardScaler]
 # ******************************************************************************************************************** #
 
 # * Next Steps
-# TODO get CDFC working & use it to reduce data
 # TODO add doc strings
 # TODO add more unit tests
 
@@ -94,6 +93,10 @@ class Instance:
             tqdm.write(str(err))
             traceback.print_stack()
             sys.exit(-1)  # exit on error; recovery not possible
+
+    def __array__(self) -> np.array:
+        """Converts an Instance to an Numpy array."""
+        return np.array([float(self.className)] + self.vList)
 
 
 def parseFile(train: np.ndarray):
@@ -345,7 +348,7 @@ def __discretization(data: np.ndarray) -> np.ndarray:
     return data
 
 
-def __transform(entries: np.ndarray, scalarPassed: ScalarsIn) -> ScalarsOut:
+def __transform(entries: np.ndarray, scalarPassed: ScalarsIn) -> typ.Tuple[np.ndarray, StandardScaler]:
     # NOTE: this should only ever be called if useNormalize is true!
 
     # remove the class IDs so they don't get normalized
@@ -360,20 +363,20 @@ def __transform(entries: np.ndarray, scalarPassed: ScalarsIn) -> ScalarsOut:
     # if we are dealing with training data, not testing data
     if scalarPassed is None:
 
-        # *** transform the data *** #
+        # *** __transform the data *** #
         scalar = StandardScaler()        # create a standard scalar object (this will make the mean 0 & the sd 1)
         scalar.fit(noIds)                # fit the scalar's distribution using the data
-        tData = scalar.transform(noIds)  # transform the data to fit the scalar's distribution
+        tData = scalar.transform(noIds)  # __transform the data to fit the scalar's distribution
         
         # since we are using normalize, perform a discrete transformation on the data
         tData = __discretization(tData)
 
-    # if we are dealing with testing data, we don't want to fit the scalar; just transform the fit
+    # if we are dealing with testing data, we don't want to fit the scalar; just __transform the fit
     else:
 
-        # *** transform the data *** #
+        # *** __transform the data *** #
         scalar = scalarPassed            # used the passed scalar object
-        tData = scalar.transform(noIds)  # transform the scalar using passed fit
+        tData = scalar.transform(noIds)  # __transform the scalar using passed fit
 
         # since we are using normalize, perform a discrete transformation on the data
         tData = __discretization(tData)
@@ -419,7 +422,7 @@ def terminals(classId: int, constants) -> typ.List[int]:
         
         # ****************** Check that valuesInClass & t-test worked as expected ****************** #
         try:
-            # transform into numpy arrays which are easier to test
+            # __transform into numpy arrays which are easier to test
             inside_of_class = np.array(inClass)
             not_inside_of_class = np.array(notIn)
             
@@ -590,7 +593,7 @@ def __fillBuckets(entries: np.ndarray) -> typ.List[typ.List[np.ndarray]]:
     return buckets
 
 
-def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
+def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, useNormalize: bool) -> typ.List[float]:
     
     # determine the type of model we are using for printing later
     if type(model) == KNeighborsClassifier:
@@ -604,8 +607,8 @@ def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
     oldR = 0                            # used to remember previous r in loop
     testingList = None                  # used to keep value for testing after a loop
     # TODO: try ot find a way to avoid a deepcopy of buckets
-    trainList = copy.deepcopy(buckets)  # make a copy of buckets so we don't override it
-    accuracy = []                       # this will store the details about the accuracy of our hypotheses
+    trainList: typ.List[typ.List[np.ndarray]] = copy.deepcopy(buckets)  # make a copy of buckets so we don't override it
+    accuracy: typ.List[float] = []      # this will store the details about the accuracy of our hypotheses
 
     # TODO pickle isn't making a file; why?
     # *** Open the Pickle Jar file *** #
@@ -645,9 +648,9 @@ def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
             oldR = r                             # save the current r value for then next loop
     
         # ********** Flatten the Training Data ********** #
-        train = __flattenTrainingData(trainList)  # remove buckets to create a single pool
+        train: np.ndarray = __flattenTrainingData(trainList)  # remove buckets to create a single pool
 
-        testing = np.array(testingList)  # turn testing data into a numpy array, testing doesn't need to be flattened
+        testing: np.ndarray = np.array(testingList)  # turn testing data into a numpy array, testing doesn't need to be flattened
 
         # ********** 3A Normalize the Training Data (if useNormalize is True) ********** #
         # this is also fitting the data to a distribution
@@ -679,7 +682,8 @@ def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
         
         SYSOUT.write(HDR + ' Transforming Training Data ......')                 # print
         SYSOUT.flush()
-        train = CDFC_Hypothesis.transform(train)                                 # transform data using the CDFC model
+        # ! this is creating a numpy array of the wrong dimension
+        train: np.array = CDFC_Hypothesis.runCDFC(train)                                 # __transform data using the CDFC model
         SYSOUT.write(OVERWRITE + ' Data Transformed '.ljust(50, '-') + SUCCESS)  # replace starting with complete
 
         # ********** 3C Train the Learning Algorithm ********** #
@@ -697,7 +701,7 @@ def __buildModel(buckets, model: ModelTypes, useNormalize) -> typ.List[float]:
             testing, scalar = __transform(testing, scalar)
     
         # ********** 3D.2 Reduce the Testing Data Using the CDFC Model ********** #
-        # + testing = CDFC_Hypothesis.transform(testing)  # use the cdfc model to reduce the data's size
+        # + testing = CDFC_Hypothesis.__transform(testing)  # use the cdfc model to reduce the data's size
     
         # format testing data for SciKit Learn
         ftrs, trueLabels = __formatForSciKit(testing)
@@ -779,7 +783,7 @@ def main() -> None:
 
     SYSOUT.write(f"{OVERWRITE} File {inPath.name} found ".ljust(60, '-') + SUCCESS)
 
-    # useNormalize = messagebox.askyesno('CDFC - Transformations', 'Do you want to transform the data before using it?', parent=parent)  # Yes / No
+    # useNormalize = messagebox.askyesno('CDFC - Transformations', 'Do you want to __transform the data before using it?', parent=parent)  # Yes / No
     useNormalize = True  # use during debugging to make runs faster
     
     # *** Read the file into a numpy 2d array *** #

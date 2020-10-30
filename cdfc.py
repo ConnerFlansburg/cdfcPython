@@ -21,7 +21,7 @@ from treelib.exceptions import NodeIDAbsentError
 from treelib import Tree as libTree
 from treelib import Node as Node
 from collections import defaultdict
-
+from cdfcFmt import printError
 import numpy as np
 from alive_progress import alive_bar, config_handler
 
@@ -37,7 +37,7 @@ BARCOLS = 25                                  # BARCOLS is the number of columns
 CROSSOVER_RATE: typ.Final = 0.8               # CROSSOVER_RATE is the chance that a candidate will reproduce
 ELITISM_RATE: typ.Final = 1                   # ELITISM_RATE is the elitism rate
 # GENERATIONS: typ.Final = 50                   # GENERATIONS is the number of generations the GP should run for
-GENERATIONS: typ.Final = 10                   # ! value for testing/debugging to increase speed
+GENERATIONS: typ.Final = 5                   # ! value for testing/debugging to increase speed
 # MAX_DEPTH: typ.Final = 8                      # MAX_DEPTH is the max depth trees are allowed to be & is used in grow/full
 MAX_DEPTH: typ.Final = 4                      # ! value for testing/debugging to make trees more readable
 MUTATION_RATE: typ.Final = 0.2                # MUTATION_RATE is the chance that a candidate will be mutated
@@ -82,9 +82,6 @@ log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w', format='%(level
 # statsPath = str(Path.cwd() / 'logs' / 'stats.log')          # set the file path that the profiled info will be stored at
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
-
-# noinspection PyMissingOrEmptyDocstring
-def printError(err): print("\033[91m {}\033[00m" .format(err))  # used for coloring error message red
 # ************************ End of Constants/Globals ************************ #
 
 # ********************** Namespaces/Structs & Objects ***********************
@@ -140,6 +137,10 @@ class Instance:
             printError(str(err))
             traceback.print_stack()           # print stack trace so we know how None is reaching Instance
             sys.exit(-1)                      # exit on error; recovery not possible
+    
+    def __array__(self) -> np.array:
+        """Converts an Instance to an Numpy array."""
+        return np.array([float(self.className)] + self.vList)
 
 
 rows: typ.List[Instance] = []  # this will store all of the records read in (the training dat) as a list of rows
@@ -164,7 +165,7 @@ class Tree(libTree):
         getLeft: Getter for left.
         getRight: Getter for right.
         getMiddle: Getter for middle.
-        runTree: Wrapper function for __runNode, and is used to transform data using the tree.
+        runTree: Wrapper function for __runNode, and is used to __transform data using the tree.
         __runNode: Helper function for runTree.
     """
     # typing alias for tree nodes. They will either have a terminal index (int) or an OP (str)
@@ -462,7 +463,7 @@ class Tree(libTree):
     # running a tree should return a single value
     # featureValues -- the values of the relevant features keyed by their index in the original data
     def runTree(self, featureValues: typ.Dict[int, float], classId: int) -> float:
-        """runTree is a wrapper for runNode & is used to transform provided data
+        """runTree is a wrapper for runNode & is used to __transform provided data
            by walking the decision tree
 
         Parameters:
@@ -477,7 +478,7 @@ class Tree(libTree):
         return self.__runNode(featureValues, self.getRoot(), classId)
     
     def __runNode(self, featureValues: typ.Dict[int, float], node: Node, classId: int) -> typ.Union[int, float]:
-        """runTree is a wrapper for runNode & is used to transform provided data
+        """runTree is a wrapper for runNode & is used to __transform provided data
            by walking the decision tree
 
         Parameters:
@@ -574,7 +575,7 @@ class ConstructedFeature:
         relevantFeatures ([int]): List of terminal characters relevant to the feature's class.
 
     Methods:
-        transform: Takes the original data & transforms it using the feature's decision tree.
+        __transform: Takes the original data & transforms it using the feature's decision tree.
     """
 
     def __init__(self, className: int, tree: Tree) -> None:
@@ -612,7 +613,7 @@ class Hypothesis:
             
         Methods:
             getFitness: Get the fitness score of the Hypothesis
-            transform: Transforms a dataset using the trees in the constructed features.
+            __transform: Transforms a dataset using the trees in the constructed features.
 
     """
 
@@ -705,9 +706,9 @@ class Hypothesis:
                     value = 1 - ((2*minSum) / addSum)           # capture the return value
             
             except RuntimeWarning as err1:
-                # log.error(str(err1))
-                # lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-                # print(str(err1) + f', line = {lineNm}')
+                log.error(str(err1))
+                lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+                print(str(err1) + f', line = {lineNm}')
                 value = 0                              # attempt recovery
 
             except Exception as err2:
@@ -799,7 +800,7 @@ class Hypothesis:
             v = []                               # this will hold the used features ids & values
             for i in rows:                       # loop over all instances
 
-                # get CF(v) for this instance (i is a Instance struct which is what transform needs)
+                # get CF(v) for this instance (i is a Instance struct which is what __transform needs)
                 cfv = feature.transform(i)  # needs the values for an instance
 
                 # get the values in this instance i of the used feature
@@ -844,7 +845,7 @@ class Hypothesis:
         # * the depth will be the same for all of them
 
         # *********  Distance Calculation ********* #
-        self.distance = Distance(self.transform())  # calculate the distance using the transformed values
+        self.distance = Distance(self.__transform())  # calculate the distance using the transformed values
 
         # ********* Final Calculation ********* #
         term1 = ALPHA*self.averageInfoGain
@@ -857,59 +858,72 @@ class Hypothesis:
         self._fitness = final
         return final
 
-    def transform(self, data: typ.Union[None, np.array] = None) -> np.array:
-        """transform transforms a dataset using the trees in the constructed features. This an entry point into cdfc.py
-           used by cdfcProject.py.
+    def runCDFC(self, data: np.array) -> np.array:
+        """runCDFC transforms a dataset using the trees in the constructed features, and is use by cdfcProject
+           to convert (reduce) data using class dependent feature construction.
         
-            Parameter:
-                data (np.array): A dataset that's been converted into a numpy array.
+        Parameter:
+            data (np.array): A dataset to be converted by the CDFC algorithm.
+        
+        Return:
+            transformedData (np.array): A dataset that has been converted by the algorithm.
+        """
+        
+        transformedData = []  # this will hold the new transformed dataset after as it's built
+        for d in data:        # loop over each row/instance in data
+            # we want to transform a row once, FOR EACH CF in a Hypothesis.
+            # This will hold the transformed values for each constructed feature until we have all of them.
+            values = []
+
+            # NOTE: here we want to create a np array version of an Instance object of the form
+            # +     (classID, values[]), for each row/instance
+            # for each row, convert that row using each constructed feature
+            for f in self.features:
+                values.append(f.transform(d))
+            
+            # NOTE: now we want to add the np array Instance to the array of all the transformed Instances
+            # create a pseudo instance representing the transformed values & add it to the new data set
+            transformedData.append(np.array(d.className, np.array(values)))
+            
+        return transformedData
+        
+    def __transform(self) -> np.array:
+        """__transform transforms a dataset using the trees in the constructed features. This is used internally
+           during training, and will be done over the Rows constant. This is produces data of a different format
+           then runCDFC.
             
             Return:
                 transformed (np.array): A new dataset, created by transforming the original one.
         """
     
-        # log.debug('Starting transform() method')
+        # log.debug('Starting __transform() method')
         
         transformed = []  # this will hold the transformed values
         
         # if data is None then we are transforming as part of the distance calculation
         # so we should use rows (the provided training data)
-        if data is None:
     
-            for r in rows:    # for each Instance
-                values = []   # this will hold the calculated values for all the constructed features
+        for r in rows:    # for each Instance
+            values = []   # this will hold the calculated values for all the constructed features
 
-                for f in self.features:            # transform the original input using each constructed feature
-                    values.append(f.transform(r))  # append the transformed values for a single CF to values
-                
-                # each Instance will hold the new values for an Instance & className, and
-                # transformed will hold all the instances for a hypothesis
-                vls = dict(zip(range(len(values)), values))  # create a dict of the values keyed by their index
-                transformed.append(Instance(r.className, vls))
-
-            # log.debug('Finished transform() method')
-
-            return transformed  # return the list of all instances
-
-        # if data is not None then we are predicting using an evolved model so we should use data
-        # (this will be testing data from cdfcProject.py)
-        else:
+            for f in self.features:            # __transform the original input using each constructed feature
+                values.append(f.transform(r))  # append the transformed values for a single CF to values
             
-            for d in data:   # for each Instance
-                values = []  # this will hold the calculated values for all the constructed features
-                instance: Instance = Instance(d[0], dict(zip(range(d[1:].size), d[1:])))
-                
-                for f in self.features:                   # transform the original input using each constructed feature
-                    values.append(f.transform(instance))  # append the transformed values for a single CF to values
-                
-                # each Instance will hold the new values for an Instance & className, and
-                # transformed will hold all the instances for a hypothesis
-                vls = dict(zip(range(len(values)), values))  # create a dict of the values keyed by their index
-                transformed.append(Instance(d[0], vls))
+            # each Instance will hold the new values for an Instance & className, and
+            # transformed will hold all the instances for a hypothesis
+            vls = dict(zip(range(len(values)), values))  # create a dict of the values keyed by their index
+            transformed.append(Instance(r.className, vls))
 
-            # log.debug('Finished transform() method')
+        # log.debug('Finished __transform() method')
 
-            return transformed  # return the list of all instances
+        return np.array(transformed)  # return the list of all instances
+
+    # ! testing purposes only!
+    def sanityCheck(self):
+        """Used in debugging to check a Hypothesis"""
+        log.debug('Starting Hypothesis Sanity Check...')
+        self.__transform()
+        log.debug('Population Hypothesis Check Passed')
 
 
 class Population:
@@ -1137,16 +1151,8 @@ def sanityCheckPop(hypothesis: typ.List[Hypothesis]):
     """Used in debugging to check a Population"""
     log.debug('Starting Population Sanity Check...')
     for h in hypothesis:
-        h.transform(rows)
+        h.sanityCheck()
     log.debug('Population Sanity Check Passed')
-
-
-# ! testing purposes only!
-def sanityCheckHyp(hyp: Hypothesis):
-    """Used in debugging to check a Hypothesis"""
-    log.debug('Starting Hypothesis Sanity Check...')
-    hyp.transform()
-    log.debug('Population Hypothesis Check Passed')
 
 
 # ! testing purposes only!
@@ -1221,7 +1227,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
     # create a new population with no hypotheses (made here crossover & mutate can access it)
     newPopulation = Population([], population.generation+1)
 
-    def mutate():
+    def mutate() -> None:
         """Finds a random node and builds a new sub-tree starting at it. Currently mutate
            uses the same grow & full methods as the initial population generation without
            an offset. This means that mutate trees will still obey the max depth rule.
@@ -1335,11 +1341,11 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             # print(f' evolving {pop}/{POPULATION_SIZE}...')  # update user on progress
             probability = random.uniform(0, 1)              # get a random number between 0 & 1
         
-            mutate()     # ! For Testing Only
+            # mutate()     # ! For Testing Only
             # crossover()  # ! For Testing Only
-            bar()        # ! For Testing Only
+            # bar()        # ! For Testing Only
         
-            ''''# ***************** Mutate ***************** #
+            # ***************** Mutate ***************** #
             if probability < MUTATION_RATE:  # if probability is less than mutation rate, mutate
                 bar.text('mutating...')      # update user
                 mutate()                     # perform mutation
@@ -1351,7 +1357,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
                 bar.text('crossing...')  # update user
                 crossover()              # perform crossover operation
                 bar()                    # update bar now that a candidate is finished
-            # ************* End of Crossover ************* #'''
+            # ************* End of Crossover ************* #
             
             # ****************** Elitism ****************** #
             # check that if latest hypothesis has a higher fitness than our current elite
