@@ -887,7 +887,7 @@ class Hypothesis:
             
         return transformedData
         
-    def __transform(self) -> np.array:
+    def __transform(self) -> typ.List[Instance]:
         """__transform transforms a dataset using the trees in the constructed features. This is used internally
            during training, and will be done over the Rows constant. This is produces data of a different format
            then runCDFC.
@@ -898,7 +898,7 @@ class Hypothesis:
     
         # log.debug('Starting __transform() method')
         
-        transformed = []  # this will hold the transformed values
+        transformed: typ.List[Instance] = []  # this will hold the transformed values
         
         # if data is None then we are transforming as part of the distance calculation
         # so we should use rows (the provided training data)
@@ -915,8 +915,8 @@ class Hypothesis:
             transformed.append(Instance(r.className, vls))
 
         # log.debug('Finished __transform() method')
-
-        return np.array(transformed)  # return the list of all instances
+        
+        return transformed  # return the list of all instances
 
     # ! testing purposes only!
     def sanityCheck(self):
