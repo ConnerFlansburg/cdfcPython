@@ -696,21 +696,24 @@ class Hypothesis:
                     
                     top: typ.Union[int, float] = min(i, j)  # get the top of the fraction
                     bottom: typ.Union[int, float] = i + j   # get the bottom of the fraction
+                    
                     minSum += top                           # the top of the fraction
                     # ! addsum is zero a lot of the time
                     addSum += bottom                        # the bottom of the fraction
             
-                if addSum == 0:  # BUG this attempts to divide by zero a lot; check that this is okay
-                    raise RuntimeWarning('ERROR: Czekanowski attempted to divide by zero')
+                # resolve 0/0 case
+                if addSum and minSum == 0:  # if the numerator & the denominator both 0, set to zero
+                    value = 0
+                
+                # resolve the n/0 case
+                elif addSum == 0:                        # if only the denominator is 0, set it to a small number
+                    addSum = pow(10, -6)                 # + Experiment with this value
+                    value = 1 - ((2 * minSum) / addSum)  # create the return value
+                
+                # the normal case
                 else:
-                    value = 1 - ((2*minSum) / addSum)           # capture the return value
+                    value = 1 - ((2 * minSum) / addSum)  # create the return value
             
-            except RuntimeWarning as err1:
-                log.error(str(err1))
-                lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-                print(str(err1) + f', line = {lineNm}')
-                value = 0                              # attempt recovery
-
             except Exception as err2:
                 lineNm = sys.exc_info()[-1].tb_lineno       # print line number error occurred on
                 log.error(str(err2))
