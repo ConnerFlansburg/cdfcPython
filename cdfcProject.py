@@ -9,7 +9,7 @@ import pickle
 import tkinter as tk
 from pathlib import Path
 # from tkinter import messagebox
-
+from alive_progress import alive_bar, config_handler
 from pyfiglet import Figlet
 from scipy import stats
 from sklearn.metrics import accuracy_score
@@ -64,6 +64,8 @@ ModelTypes = typ.Union[KNeighborsClassifier, GaussianNB, DecisionTreeClassifier]
 
 ScalarsIn = typ.Union[None, StandardScaler]
 # ******************************************************************************************************************** #
+config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', title_length=0, length=20)  # the global config for the loading bars
+# config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', force_tty=True, title_length=0, length=10)  # the global config for the loading bars
 
 # * Next Steps
 # TODO add doc strings
@@ -74,8 +76,15 @@ def printError(err): print("\033[91m {}\033[00m" .format(err))  # used for color
 
 
 class Instance:
-    # This class replace the older collect.namedtuple('Instance', ['className', 'values']) named tuple
-    # NOTE: a Instance IS an instance
+    """Instance is an instance, or row, within our data set. It represents a single
+       record of whatever we are measuring. This replaces the earlier row struct.
+
+    Variables:
+        className (int): The class id of the class that the record is in (this class ids start at 0).
+        attribute ({key: int, value: float}): This dictionary stores the features values in the
+                                                  instance, keyed by index (these start at 0)
+        vList ([float]): The list of the values stored in the dictionary (used to speed up iteration)
+    """
     
     def __init__(self, className: int, values: np.ndarray):
         # this stores the name of the class that the instance is in
@@ -83,7 +92,7 @@ class Instance:
         # this stores the values of the features, keyed by index, in the instance
         self.attributes: typ.Dict[int, float] = dict(zip(range(values.size), values))
         # this creates a list of the values stored in the dictionary for when iteration is wanted
-        self.vList: typ.List[float] = list(self.attributes.values())  # ? is this to expensive?
+        self.vList: typ.List[float] = values.tolist()
         
         try:  # check that all the feature values are valid
             if None in self.vList:  # if a None is in the list of feature values
@@ -99,8 +108,18 @@ class Instance:
         return np.array([float(self.className)] + self.vList)
 
 
-def parseFile(train: np.ndarray):
-    # TODO: review for bugs. Remember this parses bucket(s) now, not files
+def parseFile(train: np.ndarray) -> typ.Dict[any]:
+    """ parseFile takes in training data as a numpy array, and parses it for CDFC. This
+        involves getting the constants & creating the data structures that CDFC will need.
+    
+    Variables:
+        train (numpy array): numpy array created by reading in the file.
+ 
+    Return:
+        constants (dictionary): dictionary with the constants & data structures that CDFC needs.
+    """
+    
+    # + Remember this parses bucket(s) now, not files
     # *** the constants to be set * #
     INSTANCES_NUMBER: int = 0
     rows: typ.List[Instance] = []
@@ -147,7 +166,7 @@ def parseFile(train: np.ndarray):
         # *** Create a Dictionary of Attribute Values Keyed by the Attribute's Index *** #
         # ! check that this is working correctly
         attributeNames = range(len(line[1:]))  # create names for the attributes number from 0 to len()
-        attributeValues = line[1:]  # grab all the attribute values in this instance
+        attributeValues = line[1:]             # grab all the attribute values in this instance
         
         try:  # ++++ Do dictionary Creation & Modification Inside Try/Catch ++++
             if len(attributeValues) == len(attributeNames):  # check that the lengths of both names & values are equal
@@ -165,53 +184,52 @@ def parseFile(train: np.ndarray):
             # track how many unique/different class IDs there are & create dictionaries for
             # ? update() replaces old values so we have to loop over, can this be done faster?
             if name in ids:  # if we've found an instance in this class before
-                oldDict = CLASS_DICTS[name]  # get the old dictionary for the class
-                for att in oldDict.keys():  # we need to update every attribute value list so loop
+                oldDict = CLASS_DICTS[name]       # get the old dictionary for the class
+                for att in oldDict.keys():        # we need to update every attribute value list so loop
                     oldDict[att] += newDict[att]  # for each value list, concatenate the old & new lists
             
             # *** Insert the Dictionary into CLASS_DICTS *** #
             else:  # if this is the first instance in the class
                 CLASS_DICTS[name] = dict(newDict)  # insert the new dictionary using the key classID
-                ids.append(name)  # add classId to ids -- a list of unique classIDs
+                ids.append(name)                   # add classId to ids -- a list of unique classIDs
                 
-                log.debug(f'Parser created dictionary for classId {name}')  # ! for debugging
-                # tqdm.write(f'Parser created dictionary for classId {name}')  # ! for debugging
+                # log.debug(f'Parser created dictionary for classId {name}')  # ! for debugging
         
-        except IndexError:  # catch error thrown by dictionary indexing
+        except IndexError:                         # catch error thrown by dictionary indexing
             lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
             log.error(f'Parser encountered an Index Error on line {lineNm}. name={name}, line[0]={line[0]}')
             tqdm.write(f'ERROR: Parser encountered an Index Error on line {lineNm}. name={name}, line[0]={line[0]}')
-            sys.exit(-1)  # recovery impossible, exit
-        except AssertionError as err:  # catch the error thrown by names/value length check
+            sys.exit(-1)                           # recovery impossible, exit
+        except AssertionError as err:              # catch the error thrown by names/value length check
             lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
             tqdm.write(str(err) + f', line = {lineNm}')
-            sys.exit(-1)  # recovery impossible, exit
-        except Exception as err:  # catch any other error that might be thrown
+            sys.exit(-1)                           # recovery impossible, exit
+        except Exception as err:                   # catch any other error that might be thrown
             lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
             tqdm.write(str(err) + f', line = {lineNm}')
-            sys.exit(-1)  # recovery impossible, exit
+            sys.exit(-1)                           # recovery impossible, exit
         
         # ********* The Code Below is Used to Calculated Entropy  ********* #
         # this will count the number of times a class occurs in the provided data
         # dictionary[classId] = counter of times that class is found
         
-        if classToOccur.get(name):  # if we have encountered the class before
+        if classToOccur.get(name):      # if we have encountered the class before
             classToOccur[line[0]] += 1  # increment
         else:  # if this is the first time we've encountered the class
             classToOccur[line[0]] = 1  # set to 1
         # ****************************************************************** #
     
-    CLASS_IDS = ids  # this will collect all the feature names
+    CLASS_IDS = ids                           # this will collect all the feature names
     FEATURE_NUMBER = len(rows[0].attributes)  # get the number of features in the data set
-    POPULATION_SIZE = FEATURE_NUMBER * BETA  # set the pop size
-    LABEL_NUMBER = len(ids)  # get the number of classes in the data set
-    M = R * LABEL_NUMBER  # get the number of constructed features
+    POPULATION_SIZE = FEATURE_NUMBER * BETA   # set the pop size
+    LABEL_NUMBER = len(ids)                   # get the number of classes in the data set
+    M = R * LABEL_NUMBER                      # get the number of constructed features
     
     # ********* The Code Below is Used to Calculated Entropy  ********* #
     # loop over all classes
     for i in classToOccur.keys():
         pi = classToOccur[i] / INSTANCES_NUMBER  # compute p_i
-        ENTROPY_OF_S -= pi * math.log(pi, 2)  # calculation entropy summation
+        ENTROPY_OF_S -= pi * math.log(pi, 2)     # calculation entropy summation
     # ***************************************************************** #
 
     # this dictionary will hold the parsed constants that will be sent to cdfc
@@ -257,55 +275,55 @@ def valuesInClass(classId: int, attribute: int, constants) -> typ.Tuple[typ.List
     LABEL_NUMBER = constants['LABEL_NUMBER']
     CLASS_IDS = constants['CLASS_IDS']
     
-    inDict = CLASS_DICTS[classId]  # get the dictionary of attribute values for this class
+    inDict = CLASS_DICTS[classId]                 # get the dictionary of attribute values for this class
     inClass: typ.List[float] = inDict[attribute]  # now get feature/attribute values that appear in the class
     
     # ******************** get all the values from all the other dictionaries for this feature ******************** #
     classes = CLASS_IDS.copy()  # make a copy of the list of unique classIDs
-    classes.remove(classId)  # remove the class we're looking at from the list
-    out: typ.List[float] = []  # this is a temporary variable that will hold the out list while it's constructed
+    classes.remove(classId)     # remove the class we're looking at from the list
+    out: typ.List[float] = []   # this is a temporary variable that will hold the out list while it's constructed
     try:
-        if LABEL_NUMBER == 2:  # * get the other score
-            index = classes.pop(0)  # pop the first classId in the list (should be the only item in the list)
+        if LABEL_NUMBER == 2:          # * get the other score
+            index = classes.pop(0)     # pop the first classId in the list (should be the only item in the list)
             spam = CLASS_DICTS[index]  # get the dictionary for the other class
-            out = spam[attribute]  # get the feature/attribute values for the other class
-            assert len(classes) == 0  # if classes is not empty now, an error has occurred
+            out = spam[attribute]      # get the feature/attribute values for the other class
+            assert len(classes) == 0   # if classes is not empty now, an error has occurred
         
-        elif LABEL_NUMBER == 3:  # * get the other 2 scores
-            index = classes.pop(0)  # pop the first classId in the list (should only be 2 items in the list)
+        elif LABEL_NUMBER == 3:        # * get the other 2 scores
+            index = classes.pop(0)     # pop the first classId in the list (should only be 2 items in the list)
             spam = CLASS_DICTS[index]  # get the dictionary for the class
-            out = spam[attribute]  # get the feature/attribute values for the class
+            out = spam[attribute]      # get the feature/attribute values for the class
             
-            index = classes.pop(0)  # pop the 2nd classId in the list (should be the only item in the list)
+            index = classes.pop(0)     # pop the 2nd classId in the list (should be the only item in the list)
             spam = CLASS_DICTS[index]  # get the dictionary for the class
-            out += spam[attribute]  # get the feature/attribute values for the class
-            assert len(classes) == 0  # if classes is not empty now, an error has occurred
+            out += spam[attribute]     # get the feature/attribute values for the class
+            assert len(classes) == 0   # if classes is not empty now, an error has occurred
         
-        elif LABEL_NUMBER == 4:  # * get the other 3 scores
-            index = classes.pop(0)  # pop the first classId in the list (should only be 3 items in the list)
+        elif LABEL_NUMBER == 4:        # * get the other 3 scores
+            index = classes.pop(0)     # pop the first classId in the list (should only be 3 items in the list)
             spam = CLASS_DICTS[index]  # get the dictionary for the class
-            out = spam[attribute]  # get the feature/attribute values for the class
+            out = spam[attribute]      # get the feature/attribute values for the class
             
-            index = classes.pop(0)  # pop the 2nd classId in the list (should only be 2 items in the list)
+            index = classes.pop(0)     # pop the 2nd classId in the list (should only be 2 items in the list)
             spam = CLASS_DICTS[index]  # get the dictionary for the class
-            out += spam[attribute]  # get the feature/attribute values for the class
+            out += spam[attribute]     # get the feature/attribute values for the class
             
-            index = classes.pop(0)  # pop the 3rd classId in the list (should only be 1 items in the list)
+            index = classes.pop(0)     # pop the 3rd classId in the list (should only be 1 items in the list)
             spam = CLASS_DICTS[index]  # get the dictionary for the class
-            out += spam[attribute]  # get the feature/attribute values for the class
-            assert len(classes) == 0  # if classes is not empty now, an error has occurred
+            out += spam[attribute]     # get the feature/attribute values for the class
+            assert len(classes) == 0   # if classes is not empty now, an error has occurred
         
-        else:  # * if there's more than 4 classes
-            for i in CLASS_DICTS:  # loop over all the list of dicts
-                if i == classId:  # when we hit the dict that's in the class, skip
+        else:                          # * if there's more than 4 classes
+            for i in CLASS_DICTS:      # loop over all the list of dicts
+                if i == classId:       # when we hit the dict that's in the class, skip
                     continue
                 else:
-                    spam = CLASS_DICTS[i]  # get the dictionary for the class
+                    spam = CLASS_DICTS[i]   # get the dictionary for the class
                     out += spam[attribute]  # get the feature/attribute values for the class
         
-        notInClass: typ.List[float] = out  # set the attribute values that do not appear in the class using out
+        notInClass: typ.List[float] = out   # set the attribute values that do not appear in the class using out
     
-    except AssertionError as err:  # catches error thrown by the elif statements
+    except AssertionError as err:              # catches error thrown by the elif statements
         lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
         log.error(f'ValuesInClass found more classIds than expected. Unexpected class(es) found: {classes}\n'
                   + f'Label Number = {LABEL_NUMBER}, Classes = {classes}, Class Id = {classId}, line = {lineNm}')
@@ -349,6 +367,7 @@ def __discretization(data: np.ndarray) -> np.ndarray:
 
 
 def __transform(entries: np.ndarray, scalarPassed: ScalarsIn) -> typ.Tuple[np.ndarray, StandardScaler]:
+    
     # NOTE: this should only ever be called if useNormalize is true!
 
     # remove the class IDs so they don't get normalized
@@ -388,8 +407,6 @@ def __transform(entries: np.ndarray, scalarPassed: ScalarsIn) -> typ.Tuple[np.nd
     return entries, scalar
 
 
-# TODO change so terminals is done before calling cdfc & the result gets passed (as a dict?)
-# BUG is the Tree error coming from terminals setting something wrong?
 def terminals(classId: int, constants) -> typ.List[int]:
     """terminals creates the list of relevant terminals for a given class.
 
@@ -633,8 +650,10 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
 
     # *** Divide them into training & test data K times ***
     # loop over all the random index values
+
+    iteration: int = 0  # used to count iterations by the progress bar
     for r in range(K):  # len(r) = K so this will be done K times
-    
+        print(f'{HDR} Starting Fold {iteration}/{K}')
         # ********** Get the Training & Testing Data ********** #
         # the Rth bucket becomes our testing data, everything else becomes training data
         # this is done in order to prevent accidental overwrites
@@ -667,13 +686,10 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
             data = pickles[r]                                                    # read in from it
         else:                                                                    # if there wasn't a saved data object,
             constants = parseFile(train)                                         # parse the file to get the constants
-            # BUG check here that relevant & TERMINALS is being set correctly
-            # ! does the assignment below overwrite the old dict each time?
             relevant: typ.Dict[int, typ.List[int]] = {}                          # this will hold the relevant features found by terminals
             for classId in constants['CLASS_IDS']:                               # loop over all class ids and get the relevant features for each one
                 relevant[classId] = terminals(classId, constants)                # store the relevant features for a class using the classId as a key
             # sanityCheckDictionary(relevant)
-            # ! terminals contains no None values if this completes
             data = (constants, relevant)                                         # data[0] = constants to be set, data[1] = TERMINALS
             pickles[r] = data
 
@@ -682,8 +698,7 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
         
         SYSOUT.write(HDR + ' Transforming Training Data ......')                 # print
         SYSOUT.flush()
-        # ! this is creating a numpy array of the wrong dimension
-        train: np.array = CDFC_Hypothesis.runCDFC(train)                                 # __transform data using the CDFC model
+        train: np.array = CDFC_Hypothesis.runCDFC(train)                         # __transform data using the CDFC model
         SYSOUT.write(OVERWRITE + ' Data Transformed '.ljust(50, '-') + SUCCESS)  # replace starting with complete
 
         # ********** 3C Train the Learning Algorithm ********** #
@@ -701,7 +716,7 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
             testing, scalar = __transform(testing, scalar)
     
         # ********** 3D.2 Reduce the Testing Data Using the CDFC Model ********** #
-        # + testing = CDFC_Hypothesis.__transform(testing)  # use the cdfc model to reduce the data's size
+        testing = CDFC_Hypothesis.runCDFC(testing)  # use the cdfc model to reduce the data's size
     
         # format testing data for SciKit Learn
         ftrs, trueLabels = __formatForSciKit(testing)
@@ -710,6 +725,8 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
         labelPrediction = model.predict(ftrs)  # use model to predict labels
         # compute the accuracy score by comparing the actual labels with those predicted
         accuracy.append(accuracy_score(trueLabels, labelPrediction))
+        
+        iteration += 1  # update iteration
     
     if not wasPickle:  # if there wasn't a saved object, save
         try:  # *** Save the Features/Terminals using Pickle *** #
@@ -720,6 +737,8 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
         except FileNotFoundError:  # if the file wasn't found, and it couldn't be created
             log.error(f'Pickle could not open or create file {pth}')         # log the error & print it
             SYSOUT.write(f'\nPickle could not open or create file {pth}\n')  # to console, but continue
+
+    SYSOUT.write(HDR + ' K Fold Validation Complete '.ljust(50, '-') + SUCCESS)  # update user
     
     # *** Return Accuracy *** #
     return accuracy

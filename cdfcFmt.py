@@ -59,10 +59,6 @@ def __formatForSciKit(data: np.ndarray) -> (np.ndarray, np.ndarray):
     # create the label array Y (the target of our training)
     # from all rows, pick the 0th column
 
-    # BUG TypeError: list indices must be integers or slices, not tuple
-    # ! the error is in the list slicing syntax
-    # + Data is a list of Instance objects.
-
     try:
         # + data[:, :1] get every row but only the first column
         flat = np.ravel(data[:, :1])  # get a list of all the labels as a list of lists & then flatten it

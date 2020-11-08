@@ -121,13 +121,16 @@ class Instance:
         vList ([float]): The list of the values stored in the dictionary (used to speed up iteration)
     """
 
-    def __init__(self, className: int, values: typ.Dict[int, float]):
+    def __init__(self, className: int, values: typ.Dict[int, float], vlist: typ.Optional[typ.List[float]] = None):
         # this stores the name of the class that the instance is in
         self.className: int = className
         # this stores the values of the features, keyed by index, in the instance
         self.attributes: typ.Dict[int, float] = values
         # this creates a list of the values stored in the dictionary for when iteration is wanted
-        self.vList: typ.List[float] = list(self.attributes.values())  # ? is this to expensive?
+        if vlist is None:
+            self.vList: typ.List[float] = list(self.attributes.values())  # ? is this to expensive?
+        else:
+            self.vList: typ.List[float] = vlist
         
         try:                                  # check that all the feature values are valid
             if None in self.attributes.values():  # if a None is in the list of feature values
@@ -234,7 +237,7 @@ class Tree(libTree):
                         raise AssertionError('Left child was set incorrectly')
             # NOTE: KeyError indicates that the key (left, right, middle) doesn't exist,
             # +     AssertionError means it does exist & stores a None
-            except KeyError:  # ! This is getting raised
+            except KeyError:
                 lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
                 log.error(f'CheckTree raised a KeyError, on line {lineNm}')  # log the error
                 printError(f'CheckTree raised a KeyError, dict = {self.BRANCHES[n.identifier].items()}, on line {lineNm}')  # print message
@@ -260,7 +263,7 @@ class Tree(libTree):
         out = Path.cwd() / 'logs' / 'tree.log'  # create the file path
         self.save2file(out)
     
-    def addRoot(self) -> Node:  # ? is the bug in root creation somehow?
+    def addRoot(self) -> Node:
         """Adds a root node to the tree"""
         op = random.choice(OPS)
         root = self.create_node(tag=f'root: {op}', identifier=f'Tree {next(TreeCount)}', data=op)  # create a root node for the tree
@@ -274,10 +277,9 @@ class Tree(libTree):
 
         # update dictionary used by getLeft(), getRight(), & getMiddle()
         # store new Node ID at ParentId, 'left' (overwriting any old values)
-        # ! is the error in runNode because new.identifier is None? Or is the assignment failing
         self.BRANCHES[parent.identifier]['left'] = new.identifier
         
-        try:  # ! For Testing Only !! - attempt to access created entry
+        '''try:  # ! For Testing Only !! - attempt to access created entry
             self.BRANCHES[parent.identifier]['left']
         except KeyError:
             msg: str = f'Tree encountered an error in addLeft(), {parent}'
@@ -286,7 +288,7 @@ class Tree(libTree):
             printError(msg)  # print message
             printError(f'Error on line {lineNm}')
             traceback.print_stack()  # print stack trace
-            sys.exit(-1)  # exit on error; recovery not possible
+            sys.exit(-1)  # exit on error; recovery not possible'''
         
         return new
     
@@ -301,7 +303,7 @@ class Tree(libTree):
         # store new Node ID at ParentId, 'left' (overwriting any old values)
         self.BRANCHES[parent.identifier]['right'] = new.identifier
         
-        try:  # ! For Testing Only !! - attempt to access created entry
+        '''try:  # ! For Testing Only !! - attempt to access created entry
             self.BRANCHES[parent.identifier]['right']
         except KeyError:
             msg: str = f'Tree encountered an error in addRight(), {parent}'
@@ -310,7 +312,7 @@ class Tree(libTree):
             printError(msg)  # print message
             printError(f'Error on line {lineNm}')
             traceback.print_stack()  # print stack trace
-            sys.exit(-1)  # exit on error; recovery not possible
+            sys.exit(-1)  # exit on error; recovery not possible'''
         
         return new
     
@@ -324,7 +326,7 @@ class Tree(libTree):
         # update dictionary used by getLeft(), getRight(), & getMiddle()
         # store new Node ID at ParentId, 'left' (overwriting any old values)
         self.BRANCHES[parent.identifier]['middle'] = new.identifier
-        try:  # ! For Testing Only !! - attempt to access created entry
+        '''try:  # ! For Testing Only !! - attempt to access created entry
             self.BRANCHES[parent.identifier]['middle']
         except KeyError:
             msg: str = f'Tree encountered an error in addMiddle(), {parent}'
@@ -333,7 +335,7 @@ class Tree(libTree):
             printError(msg)  # print message
             printError(f'Error on line {lineNm}')
             traceback.print_stack()  # print stack trace
-            sys.exit(-1)  # exit on error; recovery not possible
+            sys.exit(-1)  # exit on error; recovery not possible'''
         
         return new
     
@@ -550,7 +552,6 @@ class Tree(libTree):
             else:                                     # if the node is not a terminal or a OP
                 raise TypeError(f'runNode could not parse data in tree, data ={node.data}')
         
-        # ! This error is getting hit
         except (TypeError, AssertionError) as err:                      # catch any exceptions
             self.sendToStdOut()                                         # record the tree
             lineNm = sys.exc_info()[-1].tb_lineno                       # get the line number of error
@@ -583,7 +584,6 @@ class ConstructedFeature:
         self.tree = tree                              # the root node of the constructed feature
         self.size = tree.size                         # the individual size (the size of the tree)
         self.relevantFeatures = TERMINALS[className]  # holds the indexes of the relevant features
-        # ! if tree sanity check passes then the constructed feature is fine & the error is somewhere else
         # sanityCheckCF(self)  # ! testing purposes only!
     
     '''def __str__(self):
@@ -631,11 +631,6 @@ class Hypothesis:
         for feature in features:
             k = feature.className
             self.idsToFeatures[k] = feature
-
-    '''def __str__(self):
-        """Used to print a Hypothesis."""
-        for ft in self.features:  # loop over every constructed feature
-            print(f'{ft}\n')      # and print every constructed feature'''
 
     @property
     def fitness(self) -> typ.Union[int, float]:
@@ -698,7 +693,6 @@ class Hypothesis:
                     bottom: typ.Union[int, float] = i + j   # get the bottom of the fraction
                     
                     minSum += top                           # the top of the fraction
-                    # ! addsum is zero a lot of the time
                     addSum += bottom                        # the bottom of the fraction
             
                 # resolve 0/0 case
@@ -707,7 +701,8 @@ class Hypothesis:
                 
                 # resolve the n/0 case
                 elif addSum == 0:                        # if only the denominator is 0, set it to a small number
-                    addSum = pow(10, -6)                 # + Experiment with this value
+                    addSum = -30                         # + Experiment with this value
+                    # pow(10, -6) causes overflow in line ~765
                     value = 1 - ((2 * minSum) / addSum)  # create the return value
                 
                 # the normal case
@@ -729,9 +724,6 @@ class Hypothesis:
     
             # log.debug('Starting Distance() method')
             
-            # NOTE these must be high/low enough that it is always reset
-            # NOTE these will be replaced when higher/lower values are found, they will NOT be added to
-            # TODO ^^^^ check this ^^^^
             Db: typ.Union[int, float] = 2  # this will hold the lowest distance Czekanowski found
             Dw: typ.Union[int, float] = 0  # this will hold the highest distance Czekanowski found
     
@@ -871,24 +863,32 @@ class Hypothesis:
         Return:
             transformedData (np.array): A dataset that has been converted by the algorithm.
         """
-        
-        transformedData = []  # this will hold the new transformed dataset after as it's built
-        for d in data:        # loop over each row/instance in data
-            # we want to transform a row once, FOR EACH CF in a Hypothesis.
+        # this is a type hint alias for the values list where: [classID(int), value(float), value(float), ...]
+        valueList = typ.List[typ.Union[int, float]]
+        # a list of values lists
+        transformedData: typ.List[valueList] = []  # this will hold the new transformed dataset after as it's built
+
+        # loop over each row/instance in data and transform each row using each constructed feature.
+        # We want to transform a row once, FOR EACH CF in a Hypothesis.
+        for d in data:
             # This will hold the transformed values for each constructed feature until we have all of them.
-            values = []
+            values: valueList = [d[0]]  # values[0] = class name(int), values[0:] = transformed values (float)
 
             # NOTE: here we want to create a np array version of an Instance object of the form
             # +     (classID, values[]), for each row/instance
-            # for each row, convert that row using each constructed feature
+            # for each row, convert that row using each constructed feature (where f is a constructed feature)
             for f in self.features:
-                values.append(f.transform(d))
+                # convert the numpy array to an instance & transform it
+                currentLine: float = f.transform(Instance(d[0], dict(zip(range(len(d[1:])), d[1:])), d[1:]))
+                # add the value of the transformation to the values list
+                values.append(currentLine)
             
-            # NOTE: now we want to add the np array Instance to the array of all the transformed Instances
-            # create a pseudo instance representing the transformed values & add it to the new data set
-            transformedData.append(np.array(d.className, np.array(values)))
-            
-        return transformedData
+            # NOTE: now we want to add the np array Instance to the array of all the transformed Instances to create
+            # a new data set
+            transformedData.append(values)
+
+        # convert the data set from a list of lists to a numpy array
+        return np.array([np.array(x) for x in transformedData])
         
     def __transform(self) -> typ.List[Instance]:
         """__transform transforms a dataset using the trees in the constructed features. This is used internally
@@ -915,7 +915,7 @@ class Hypothesis:
             # each Instance will hold the new values for an Instance & className, and
             # transformed will hold all the instances for a hypothesis
             vls = dict(zip(range(len(values)), values))  # create a dict of the values keyed by their index
-            transformed.append(Instance(r.className, vls))
+            transformed.append(Instance(r.className, vls, values))
 
         # log.debug('Finished __transform() method')
         
@@ -1105,10 +1105,11 @@ def createInitialPopulation() -> Population:
                 sys.exit(-1)                           # exit on error; recovery not possible
             # DEBUG if we pass this point we know that name is valid
             
-            tree = Tree()          # create an empty tree
-            root = tree.addRoot()  # create a root node for the tree
+            tree = Tree()   # create an empty tree
+            tree.addRoot()  # create a root node for the tree
             
-            # !!!!!!!!!!!!!!!!!!!!! Used for Testing Only !!!!!!!!!!!!!!!!!!!!! #
+            '''# !!!!!!!!!!!!!!!!!!!!! Used for Testing Only !!!!!!!!!!!!!!!!!!!!! #
+            root = tree.addRoot()  # create a root node for the tree
             if not (root.is_root()):  # + This does pass so root doesn't have parents
                 raise Exception('Root is not tree root')
             if root is not tree.getRoot():
@@ -1116,12 +1117,13 @@ def createInitialPopulation() -> Population:
             # __grow(name, root, tree)    # create tree using grow
             __full(name, root, tree)      # create tree using full
             tree.checkTree()
-            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
+            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #'''
             
-            '''if random.choice([True, False]):         # *** use grow *** #
+            if random.choice([True, False]):         # *** use grow *** #
                 __grow(name, tree.getRoot(), tree)   # create tree using grow
             else:                                    # *** use full *** #
-                __full(name, tree.getRoot(), tree)   # create tree using full'''
+                __full(name, tree.getRoot(), tree)   # create tree using full
+
             cf = ConstructedFeature(name, tree)                   # create constructed feature
             ftrs.append(cf)                                       # add the feature to the list of features
 
@@ -1137,7 +1139,7 @@ def createInitialPopulation() -> Population:
     hypothesis: typ.List[Hypothesis] = []
 
     # creat a number hypotheses equal to pop size
-    with alive_bar(POPULATION_SIZE, title="Initial Hypotheses") as bar:  # declare your expected total
+    with alive_bar(POPULATION_SIZE, title="Initial Hypotheses") as bar:
         for __ in range(POPULATION_SIZE):  # iterate as usual
             hyp = createHypothesis()       # create a Hypothesis
             # sanityCheckHyp(hyp)            # ! testing purposes only!
@@ -1222,7 +1224,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             sys.exit(-1)                            # exit on error; recovery not possible
         
         # log.debug('Finished Tournament method')
-        bar.text('found parent')  # ! for debugging
+        # bar.text('found parent')  # ! for debugging
         return first
         # ************ End of Tournament Selection ************* #
 
@@ -1243,7 +1245,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         randCF: ConstructedFeature = parent.features[randIndex]      # get a random Constructed Feature
         terminals = randCF.relevantFeatures                          # save the indexes of the relevant features
         tree: Tree = randCF.tree                                     # get the tree from the CF
-        tree.checkTree()     # ! For Testing purposes only !!
+        # tree.checkTree()     # ! For Testing purposes only !!
         # tree.sendToStdOut()  # ! For Testing purposes only !!
         node: Node = randCF.tree.getRandomNode()                     # get a random node from the CF's tree
         # *********************************************************** #
@@ -1267,7 +1269,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
                 __full(randCF.className, node, tree)       # tree is changed in place starting with node
         # *********************************************************** #
 
-        tree.checkTree()     # ! For Testing purposes only !!
+        # tree.checkTree()     # ! For Testing purposes only !!
         # tree.sendToStdOut()  # ! For Testing purposes only !!
         
         # overwrite old CF with the new one
@@ -1293,13 +1295,13 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         # Feature 1
         feature1: ConstructedFeature = random.choice(parent1.features)  # get a random feature from the parent
         tree1: Tree = feature1.tree                                     # get the tree
-        tree1.checkTree()        # ! For Testing Only !!
+        # tree1.checkTree()        # ! For Testing Only !!
         # tree1.sendToStdOut()     # ! For Testing Only !!
 
         # Feature 2
         feature2: ConstructedFeature = parent2.idsToFeatures[feature1.className]  # makes sure CFs are from/for the same class
         tree2: Tree = feature2.tree                                               # get the tree
-        tree2.checkTree()        # ! For Testing Only !!
+        # tree2.checkTree()        # ! For Testing Only !!
         # tree2.sendToStdOut()     # ! For Testing Only !!
     
         # *************** Find the Two Sub-Trees **************** #
@@ -1325,11 +1327,11 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         # print('Parent Tree 1:')
         # print('1st Swapped Tree:')
         # tree1.sendToStdOut()
-        tree1.checkTree()
+        # tree1.checkTree()
         # print('Parent Tree 2:')
         # print('2nd Swapped Tree:')
         # tree2.sendToStdOut()
-        tree2.checkTree()
+        # tree2.checkTree()
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
     
         # parent 1 & 2 are both hypotheses and should have been changed in place,
@@ -1414,28 +1416,26 @@ def cdfc(dataIn) -> Hypothesis:
     
     # *********************** Run the Algorithm *********************** #
 
-    currentPopulation = createInitialPopulation()     # run initialPop
-    # SYSOUT.write(HDR + ' Initial population generated '.ljust(50, '-') + SUCCESS)
-    # currentPopulation = createInitialPopulation()   # create initial population
+    currentPopulation = createInitialPopulation()     # run initialPop/create the initial population
+    SYSOUT.write(HDR + ' Initial population generated '.ljust(50, '-') + SUCCESS)
     elite = currentPopulation.candidateHypotheses[0]  # init elitism
 
     # loop, evolving each generation. This is where most of the work is done
     SYSOUT.write('\nStarting generations stage...\n')  # update user
     
     for gen in range(GENERATIONS):  # iterate as usual
-        print(f'{HDR} Starting Generation {gen}/{GENERATIONS}')
+        print(f'\n{HDR} Starting Generation {gen}/{GENERATIONS}')
         newPopulation, elite = evolve(currentPopulation, elite)  # generate a new population by evolving the old one
         # update currentPopulation to hold the new population
         # this is done in two steps to avoid potential namespace issues
         currentPopulation = newPopulation
 
-    SYSOUT.write(HDR + ' Final Generation Reached '.ljust(50, '-') + SUCCESS)  # update user
+    SYSOUT.write(HDR + ' Final Generation Reached \n'.ljust(50, '-') + SUCCESS)  # update user
     # ***************************************************************** #
 
     # ****************** Return the Best Hypothesis ******************* #
     log.debug('Finding best hypothesis')
 
-    # fitBar = tqdm(currentPopulation.candidateHypotheses, desc='Finding most fit hypothesis', unit='hyp', ncols=BARCOLS)
     bestHypothesis = max(currentPopulation.candidateHypotheses, key=lambda x: x.fitness)
     log.debug('Found best hypothesis, returning...')
     return bestHypothesis  # return the best hypothesis generated
