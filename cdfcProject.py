@@ -1,15 +1,15 @@
 import cProfile
 import collections as collect
 import copy
-# import logging as log
 import math
 import os
 import pickle
 # import traceback
 import tkinter as tk
 from pathlib import Path
+
 # from tkinter import messagebox
-from alive_progress import alive_bar, config_handler
+from alive_progress import config_handler
 from pyfiglet import Figlet
 from scipy import stats
 from sklearn.metrics import accuracy_score
@@ -51,7 +51,7 @@ statsPath = str(Path.cwd() / 'logs' / 'stats.log')  # set the file path that the
 # ********************************************* Constants used by Logger ********************************************* #
 # create the file path for the log file & configure the logger
 logPath = str(Path.cwd() / 'logs' / 'cdfc.log')
-log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
+log.basicConfig(level=log.ERROR, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
 # ******************************************** Constants used for Writing ******************************************** #
 HDR = '*' * 6
 SUCCESS = u' \u2713\n'+'\033[0m'     # print the checkmark & reset text color
@@ -61,18 +61,21 @@ SYSOUT = sys.stdout
 K: typ.Final[int] = 10  # set the K for k fold cross validation
 ModelList = typ.Tuple[typ.List[float], typ.List[float], typ.List[float]]          # type hinting alias
 ModelTypes = typ.Union[KNeighborsClassifier, GaussianNB, DecisionTreeClassifier]  # type hinting alias
-
 ScalarsIn = typ.Union[None, StandardScaler]
-# ******************************************************************************************************************** #
+# ****************************************** Configuration of Progress Bar ****************************************** #
 config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', title_length=0, length=20)  # the global config for the loading bars
 # config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', force_tty=True, title_length=0, length=10)  # the global config for the loading bars
+# ******************************************************************************************************************** #
+
+
+def printError(err):
+    """used for coloring error message red"""
+    print("\033[91m {}\033[00m" .format(err))
+
 
 # * Next Steps
 # TODO add doc strings
 # TODO add more unit tests
-
-
-def printError(err): print("\033[91m {}\033[00m" .format(err))  # used for coloring error message red
 
 
 class Instance:
@@ -92,16 +95,17 @@ class Instance:
         # this stores the values of the features, keyed by index, in the instance
         self.attributes: typ.Dict[int, float] = dict(zip(range(values.size), values))
         # this creates a list of the values stored in the dictionary for when iteration is wanted
-        self.vList: typ.List[float] = values.tolist()
+        self.vList: typ.List[float] = values.tolist()  # + this will be a list[float], ignore warnings
         
-        try:  # check that all the feature values are valid
-            if None in self.vList:  # if a None is in the list of feature values
-                raise Exception('Tried to create an Instance obj with a None feature value')
-        except Exception as err:
-            log.error(str(err))
-            tqdm.write(str(err))
-            traceback.print_stack()
-            sys.exit(-1)  # exit on error; recovery not possible
+        # ! For Debugging Only
+        # try:  # check that all the feature values are valid
+        #     if None in self.vList:  # if a None is in the list of feature values
+        #         raise Exception('Tried to create an Instance obj with a None feature value')
+        # except Exception as err:
+        #     log.error(str(err))
+        #     tqdm.write(str(err))
+        #     traceback.print_stack()
+        #     sys.exit(-1)  # exit on error; recovery not possible
 
     def __array__(self) -> np.array:
         """Converts an Instance to an Numpy array."""
@@ -146,7 +150,7 @@ def parseFile(train: np.ndarray) -> typ.Dict[any, any]:
             if np.isnan(name):  # if it isn't a number
                 raise Exception(f'ERROR: Parser expected an integer, got a NaN of value:{line[0]}')
             elif not (type(name) is int):  # if it is a number, but not an integer
-                # log.debug(f'Parser expected an integer class ID, got a float: {line[0]}')
+                log.debug(f'Parser expected an integer class ID, got a float: {line[0]}')
                 name = int(name)  # caste to int
         except ValueError:  # if casting failed
             lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
@@ -193,7 +197,7 @@ def parseFile(train: np.ndarray) -> typ.Dict[any, any]:
                 CLASS_DICTS[name] = dict(newDict)  # insert the new dictionary using the key classID
                 ids.append(name)                   # add classId to ids -- a list of unique classIDs
                 
-                # log.debug(f'Parser created dictionary for classId {name}')  # ! for debugging
+                log.debug(f'Parser created dictionary for classId {name}')  # ! for debugging
         
         except IndexError:                         # catch error thrown by dictionary indexing
             lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
@@ -244,13 +248,14 @@ def parseFile(train: np.ndarray) -> typ.Dict[any, any]:
         'ENTROPY_OF_S': ENTROPY_OF_S,
         'CLASS_DICTS': CLASS_DICTS,
     }
-    
-    try:
-        if not (type(constants) is dict):
-            raise Exception(f'parseFile set constants to something other than a dictionary')
-    except Exception as err:
-        SYSOUT.write(str(err) + f'\n constants = {constants}, \n feature num = {FEATURE_NUMBER}, \n'
-                                f'class ids = {CLASS_IDS}, \n pop size = {POPULATION_SIZE}, \n')
+
+    # ! For Debugging Only
+    # try:
+    #     if not (type(constants) is dict):
+    #         raise Exception(f'parseFile set constants to something other than a dictionary')
+    # except Exception as err:
+    #     SYSOUT.write(str(err) + f'\n constants = {constants}, \n feature num = {FEATURE_NUMBER}, \n'
+    #                             f'class ids = {CLASS_IDS}, \n pop size = {POPULATION_SIZE}, \n')
 
     SYSOUT.write(OVERWRITE + ' Global variables set '.ljust(50, '-') + SUCCESS)
     return constants
@@ -331,21 +336,22 @@ def valuesInClass(classId: int, attribute: int, constants) -> typ.Tuple[typ.List
         tqdm.write(str(err) + f'line{lineNm}')
         sys.exit(-1)
     # ************************************************************************************************************* #
-    
-    try:
-        if not inClass and not notInClass:
-            log.debug('The valuesInClass method has found that both inClass & notInClass are empty')
-            raise Exception('valuesInClass() found notInClass[] & inClass[] to be empty')
-        elif not inClass:     # if inClass is empty
-            log.debug('The valuesInClass method has found that inClass is empty')
-            raise Exception('valuesInClass() found inClass[] to be empty')
-        elif not notInClass:  # if notInClass is empty
-            log.debug('The valuesInClass method has found that notInClass is empty')
-            raise Exception('valuesInClass() found notInClass[] to be empty')
-    except Exception as err:
-        lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-        tqdm.write(str(err) + f', line = {lineNm}')
-        sys.exit(-1)  # exit on error; recovery not possible
+
+    # ! For Debugging Only
+    # try:
+    #     if not inClass and not notInClass:
+    #         log.debug('The valuesInClass method has found that both inClass & notInClass are empty')
+    #         raise Exception('valuesInClass() found notInClass[] & inClass[] to be empty')
+    #     elif not inClass:     # if inClass is empty
+    #         log.debug('The valuesInClass method has found that inClass is empty')
+    #         raise Exception('valuesInClass() found inClass[] to be empty')
+    #     elif not notInClass:  # if notInClass is empty
+    #         log.debug('The valuesInClass method has found that notInClass is empty')
+    #         raise Exception('valuesInClass() found notInClass[] to be empty')
+    # except Exception as err:
+    #     lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+    #     tqdm.write(str(err) + f', line = {lineNm}')
+    #     sys.exit(-1)  # exit on error; recovery not possible
     
     return inClass, notInClass  # return inClass & notInClass
 
@@ -419,7 +425,7 @@ def terminals(classId: int, constants) -> typ.List[int]:
                                    The list will have a length of FEATURE_NUMBER/2, and will
                                    hold the indexes of the features.
     """
-    # log.debug('Starting terminals() method')
+    log.debug('Starting terminals() method')
     
     FEATURE_NUMBER = constants['FEATURE_NUMBER']
     
@@ -438,48 +444,49 @@ def terminals(classId: int, constants) -> typ.List[int]:
         tValue, pValue = stats.ttest_ind(inClass, notIn, equal_var=False)
         
         # ****************** Check that valuesInClass & t-test worked as expected ****************** #
-        try:
-            # __transform into numpy arrays which are easier to test
-            inside_of_class = np.array(inClass)
-            not_inside_of_class = np.array(notIn)
-            
-            # *** Check if pValue is 1 *** #
-            if pValue == 1:  # if pValue is 1 then inClass & notIn are the same. Relevancy should be zero
-                log.debug(f'pValue is 1 (inClass & notIn share the same mean), feature {i} should be ignored')
-            
-            # *** Check that inClass is not empty *** #
-            if not inClass:
-                log.error(f'inClass was empty, ninClass={inClass}, notIn={notIn}, classId={classId}, attribute={i}')
-                raise Exception(f'ERROR: inClass was empty,'
-                                f'\ninClass={inClass}, notIn={notIn}, classId={classId}, attribute={i}')
-            # + if inClass is empty tValue is inaccurate, don't run other checks + #
-            
-            # *** Check that inClass & notIn aren't equal *** #
-            elif np.array_equal(inside_of_class, not_inside_of_class):
-                log.error(f'inClass & notIn are equal, inClass{inside_of_class}, notIn{not_inside_of_class}')
-                raise Exception(f'inClass & notIn are equal, inClass{inside_of_class}, '
-                                f'notIn{not_inside_of_class}')
-            
-            # *** Check that inClass & notIn aren't equivalent *** #
-            elif np.array_equiv(inside_of_class, not_inside_of_class):
-                log.error(f'inClass & notIn are equivalent (but not equal, their shapes are different), '
-                          f'inClass{inside_of_class}, notIn{not_inside_of_class}')
-                raise Exception(f'inClass & notIn are equivalent, inClass{inside_of_class}, '
-                                f'notIn{not_inside_of_class}')
-            
-            # *** Check that tValue was set & is a finite number  *** #
-            elif tValue is None or math.isnan(tValue) or math.isinf(tValue):
-                log.error(f'tValue computation failed, expected a finite number got {tValue}')
-                raise Exception(f'ERROR: tValue computation failed, expected a finite number got {tValue}')
-            
-            # *** Check that pValue was set & is a number  *** #
-            elif pValue is None or math.isnan(pValue) or math.isinf(pValue):
-                log.error(f'pValue computation failed, expected a finite number got {pValue}')
-                raise Exception(f'ERROR: pValue computation failed, expected a finite number got {pValue}')
+        # ! For Debugging Only
+        # try:
+        #     # __transform into numpy arrays which are easier to test
+        #     inside_of_class = np.array(inClass)
+        #     not_inside_of_class = np.array(notIn)
+        #
+        #     # *** Check if pValue is 1 *** #
+        #     if pValue == 1:  # if pValue is 1 then inClass & notIn are the same. Relevancy should be zero
+        #         log.debug(f'pValue is 1 (inClass & notIn share the same mean), feature {i} should be ignored')
+        #
+        #     # *** Check that inClass is not empty *** #
+        #     if not inClass:
+        #         log.error(f'inClass was empty, ninClass={inClass}, notIn={notIn}, classId={classId}, attribute={i}')
+        #         raise Exception(f'ERROR: inClass was empty,'
+        #                         f'\ninClass={inClass}, notIn={notIn}, classId={classId}, attribute={i}')
+        #     # + if inClass is empty tValue is inaccurate, don't run other checks + #
+        #
+        #     # *** Check that inClass & notIn aren't equal *** #
+        #     elif np.array_equal(inside_of_class, not_inside_of_class):
+        #         log.error(f'inClass & notIn are equal, inClass{inside_of_class}, notIn{not_inside_of_class}')
+        #         raise Exception(f'inClass & notIn are equal, inClass{inside_of_class}, '
+        #                         f'notIn{not_inside_of_class}')
+        #
+        #     # *** Check that inClass & notIn aren't equivalent *** #
+        #     elif np.array_equiv(inside_of_class, not_inside_of_class):
+        #         log.error(f'inClass & notIn are equivalent (but not equal, their shapes are different), '
+        #                   f'inClass{inside_of_class}, notIn{not_inside_of_class}')
+        #         raise Exception(f'inClass & notIn are equivalent, inClass{inside_of_class}, '
+        #                         f'notIn{not_inside_of_class}')
+        #
+        #     # *** Check that tValue was set & is a finite number  *** #
+        #     elif tValue is None or math.isnan(tValue) or math.isinf(tValue):
+        #         log.error(f'tValue computation failed, expected a finite number got {tValue}')
+        #         raise Exception(f'ERROR: tValue computation failed, expected a finite number got {tValue}')
+        #
+        #     # *** Check that pValue was set & is a number  *** #
+        #     elif pValue is None or math.isnan(pValue) or math.isinf(pValue):
+        #         log.error(f'pValue computation failed, expected a finite number got {pValue}')
+        #         raise Exception(f'ERROR: pValue computation failed, expected a finite number got {pValue}')
         
-        except Exception as err:
-            tqdm.write(str(err))
-            sys.exit(-1)  # exit on error; recovery not possible
+        # except Exception as err:
+        #     tqdm.write(str(err))
+        #     sys.exit(-1)  # exit on error; recovery not possible
         # ******************************************************************************************* #
         
         # calculate relevancy for a single feature (if the mean is the same for inClass & notIn, pValue=1)
@@ -494,21 +501,22 @@ def terminals(classId: int, constants) -> typ.List[int]:
                 relevancy: float = np.divide(np.absolute(tValue), pValue)  # set relevancy using t-value/p-value
                 
                 # *************************** Check that division worked *************************** #
-                if math.isinf(relevancy):  # check for n/0
-                    log.error(
-                        f'Relevancy is infinite; some non-zero was divided by 0 -- tValue={tValue} pValue={pValue}')
-                    raise Exception(f'ERROR: relevancy is infinite, tValue={tValue} pValue={pValue}')
-                
-                elif math.isnan(relevancy):  # check for 0/0
-                    log.error(f'Relevancy is infinite; 0/0 -- tValue={tValue} pValue={pValue}')
-                    raise Exception(f'ERROR: relevancy is NaN (0/0), tValue={tValue} pValue={pValue}')
-                if pValue == 1:
-                    log.error('pValue is 1, but was not caught by if pValue >= 0.05')
-                    raise Exception('ERROR: pValue is 1, but was not caught by if pValue >= 0.05')
+                # ! For Debugging Only
+                # if math.isinf(relevancy):  # check for n/0
+                #     log.error(
+                #         f'Relevancy is infinite; some non-zero was divided by 0 -- tValue={tValue} pValue={pValue}')
+                #     raise Exception(f'ERROR: relevancy is infinite, tValue={tValue} pValue={pValue}')
+                #
+                # elif math.isnan(relevancy):  # check for 0/0
+                #     log.error(f'Relevancy is infinite; 0/0 -- tValue={tValue} pValue={pValue}')
+                #     raise Exception(f'ERROR: relevancy is NaN (0/0), tValue={tValue} pValue={pValue}')
+                # if pValue == 1:
+                #     log.error('pValue is 1, but was not caught by if pValue >= 0.05')
+                #     raise Exception('ERROR: pValue is 1, but was not caught by if pValue >= 0.05')
                 # ********************************************************************************** #
                 
-                else:  # if division worked
-                    scores.append(Score(i, relevancy))  # add relevancy score to the list of scores
+                # if division worked, add relevancy score to the list of scores
+                scores.append(Score(i, relevancy))
             
             except Exception as err:
                 tqdm.write(str(err))
@@ -524,17 +532,18 @@ def terminals(classId: int, constants) -> typ.List[int]:
         terminalSet.append(i.Attribute)  # add the attribute number to the terminal set
     
     # ************************* Test if terminalSet is empty ************************* #
-    try:
-        if not terminalSet:      # if terminalSet is empty
-            log.error('Terminals calculation failed: terminalSet is empty')
-            raise Exception('ERROR: Terminals calculation failed: terminalSet is empty')
-        if None in terminalSet:  # if terminalSet contains a None
-            log.error('Terminals calculation failed: terminalSet contains a None')
-            raise Exception('ERROR: Terminals calculation failed: terminalSet contains a None')
-    except Exception as err:
-        lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-        tqdm.write(f'{str(err)}, line = {lineNm}')
-        sys.exit(-1)  # exit on error; recovery not possible
+    # ! For Debugging Only
+    # try:
+    #     if not terminalSet:      # if terminalSet is empty
+    #         log.error('Terminals calculation failed: terminalSet is empty')
+    #         raise Exception('ERROR: Terminals calculation failed: terminalSet is empty')
+    #     if None in terminalSet:  # if terminalSet contains a None
+    #         log.error('Terminals calculation failed: terminalSet contains a None')
+    #         raise Exception('ERROR: Terminals calculation failed: terminalSet contains a None')
+    # except Exception as err:
+    #     lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+    #     tqdm.write(f'{str(err)}, line = {lineNm}')
+    #     sys.exit(-1)  # exit on error; recovery not possible
     # ********************************************************************************* #
     
     log.debug('Finished terminals() method')

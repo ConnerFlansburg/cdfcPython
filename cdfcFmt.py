@@ -1,13 +1,13 @@
+import logging as log
 import sys
+import traceback
 import typing as typ
 from tkinter import filedialog
+
 # from pprint import pprint
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import logging as log
-import traceback
-
 
 # console formatting strings
 HDR = '*' * 6

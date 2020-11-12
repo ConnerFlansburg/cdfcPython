@@ -12,20 +12,23 @@ import logging as log
 import math
 import random
 import sys
+import traceback
 import typing as typ
 import warnings
-from pathlib import Path
-import traceback
-from pprint import pprint
-from treelib.exceptions import NodeIDAbsentError
-from treelib import Tree as libTree
-from treelib import Node as Node
 from collections import defaultdict
-from cdfcFmt import printError
+from pathlib import Path
+from pprint import pprint
+
 import numpy as np
 from alive_progress import alive_bar, config_handler
+from treelib import Node as Node
+from treelib import Tree as libTree
+from treelib.exceptions import NodeIDAbsentError
+
+from cdfcFmt import printError
 
 # ! Next Steps
+# TODO set value in n/0 case
 # TODO performance enhancements
 
 # TODO check copyright on imported packages
@@ -37,7 +40,7 @@ BARCOLS = 25                                  # BARCOLS is the number of columns
 CROSSOVER_RATE: typ.Final = 0.8               # CROSSOVER_RATE is the chance that a candidate will reproduce
 ELITISM_RATE: typ.Final = 1                   # ELITISM_RATE is the elitism rate
 # GENERATIONS: typ.Final = 50                   # GENERATIONS is the number of generations the GP should run for
-GENERATIONS: typ.Final = 5                   # ! value for testing/debugging to increase speed
+GENERATIONS: typ.Final = 5                    # ! value for testing/debugging to increase speed
 # MAX_DEPTH: typ.Final = 8                      # MAX_DEPTH is the max depth trees are allowed to be & is used in grow/full
 MAX_DEPTH: typ.Final = 4                      # ! value for testing/debugging to make trees more readable
 MUTATION_RATE: typ.Final = 0.2                # MUTATION_RATE is the chance that a candidate will be mutated
@@ -65,21 +68,21 @@ OVERWRITE = '\r' + '\033[32m' + HDR  # overwrite previous text & set the text co
 SYSOUT = sys.stdout
 # ++++++++++++++++++++++++++++++++++++++++++++ #
 # +++++++++++++++ configurations & file paths +++++++++++++++ #
-sys.setrecursionlimit(10000)                                 # set the recursion limit for the program
+sys.setrecursionlimit(10000)                                  # set the recursion limit for the program
 
-np.seterr(divide='ignore')                                   # suppress divide by zero warnings from numpy
+np.seterr(divide='ignore')                                    # suppress divide by zero warnings from numpy
 suppressMessage = 'invalid value encountered in true_divide'  # suppress the divide by zero error from Python
 warnings.filterwarnings('ignore', message=suppressMessage)
 
 config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', title_length=0, length=20)  # the global config for the loading bars
 # config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', force_tty=True, title_length=0, length=10)  # the global config for the loading bars
 
-logPath = str(Path.cwd() / 'logs' / 'cdfc.log')              # create the file path for the log file & configure the logger
-log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
+logPath = str(Path.cwd() / 'logs' / 'cdfc.log')               # create the file path for the log file & configure the logger
+log.basicConfig(level=log.ERROR, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
 # log.basicConfig(level=log.ERROR, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
 
-# profiler = cProfile.Profile()                               # create a profiler to profile cdfc during testing
-# statsPath = str(Path.cwd() / 'logs' / 'stats.log')          # set the file path that the profiled info will be stored at
+# profiler = cProfile.Profile()                                 # create a profiler to profile cdfc during testing
+# statsPath = str(Path.cwd() / 'logs' / 'stats.log')            # set the file path that the profiled info will be stored at
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
 # ************************ End of Constants/Globals ************************ #
@@ -132,7 +135,7 @@ class Instance:
         else:
             self.vList: typ.List[float] = vlist
         
-        try:                                  # check that all the feature values are valid
+        try:                                      # check that all the feature values are valid
             if None in self.attributes.values():  # if a None is in the list of feature values
                 raise Exception('Tried to create an Instance obj with a None feature value')
         except Exception as err:
@@ -278,17 +281,18 @@ class Tree(libTree):
         # update dictionary used by getLeft(), getRight(), & getMiddle()
         # store new Node ID at ParentId, 'left' (overwriting any old values)
         self.BRANCHES[parent.identifier]['left'] = new.identifier
-        
-        '''try:  # ! For Testing Only !! - attempt to access created entry
-            self.BRANCHES[parent.identifier]['left']
-        except KeyError:
-            msg: str = f'Tree encountered an error in addLeft(), {parent}'
-            lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
-            log.error(msg)  # log the error
-            printError(msg)  # print message
-            printError(f'Error on line {lineNm}')
-            traceback.print_stack()  # print stack trace
-            sys.exit(-1)  # exit on error; recovery not possible'''
+
+        # ! For Testing Only !! - attempt to access created entry
+        # try:
+        #     self.BRANCHES[parent.identifier]['left']
+        # except KeyError:
+        #     msg: str = f'Tree encountered an error in addLeft(), {parent}'
+        #     lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+        #     log.error(msg)  # log the error
+        #     printError(msg)  # print message
+        #     printError(f'Error on line {lineNm}')
+        #     traceback.print_stack()  # print stack trace
+        #     sys.exit(-1)  # exit on error; recovery not possible
         
         return new
     
@@ -302,17 +306,18 @@ class Tree(libTree):
         # update dictionary used by getLeft(), getRight(), & getMiddle()
         # store new Node ID at ParentId, 'left' (overwriting any old values)
         self.BRANCHES[parent.identifier]['right'] = new.identifier
-        
-        '''try:  # ! For Testing Only !! - attempt to access created entry
-            self.BRANCHES[parent.identifier]['right']
-        except KeyError:
-            msg: str = f'Tree encountered an error in addRight(), {parent}'
-            lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
-            log.error(msg)  # log the error
-            printError(msg)  # print message
-            printError(f'Error on line {lineNm}')
-            traceback.print_stack()  # print stack trace
-            sys.exit(-1)  # exit on error; recovery not possible'''
+
+        # ! For Testing Only !! - attempt to access created entry
+        # try:
+        #     self.BRANCHES[parent.identifier]['right']
+        # except KeyError:
+        #     msg: str = f'Tree encountered an error in addRight(), {parent}'
+        #     lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+        #     log.error(msg)  # log the error
+        #     printError(msg)  # print message
+        #     printError(f'Error on line {lineNm}')
+        #     traceback.print_stack()  # print stack trace
+        #     sys.exit(-1)  # exit on error; recovery not possible
         
         return new
     
@@ -326,16 +331,17 @@ class Tree(libTree):
         # update dictionary used by getLeft(), getRight(), & getMiddle()
         # store new Node ID at ParentId, 'left' (overwriting any old values)
         self.BRANCHES[parent.identifier]['middle'] = new.identifier
-        '''try:  # ! For Testing Only !! - attempt to access created entry
-            self.BRANCHES[parent.identifier]['middle']
-        except KeyError:
-            msg: str = f'Tree encountered an error in addMiddle(), {parent}'
-            lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
-            log.error(msg)  # log the error
-            printError(msg)  # print message
-            printError(f'Error on line {lineNm}')
-            traceback.print_stack()  # print stack trace
-            sys.exit(-1)  # exit on error; recovery not possible'''
+        # ! For Testing Only !! - attempt to access created entry
+        # try:
+        #     self.BRANCHES[parent.identifier]['middle']
+        # except KeyError:
+        #     msg: str = f'Tree encountered an error in addMiddle(), {parent}'
+        #     lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+        #     log.error(msg)  # log the error
+        #     printError(msg)  # print message
+        #     printError(f'Error on line {lineNm}')
+        #     traceback.print_stack()  # print stack trace
+        #     sys.exit(-1)  # exit on error; recovery not possible
         
         return new
     
@@ -495,15 +501,16 @@ class Tree(libTree):
             
             if node.data in OPS:  # if the node is an OP
                 # *************************** Error Checking *************************** #
-                lftNone: bool = self.getLeft(node) is None                          # is left None?
-                rgtNone: bool = self.getRight(node) is None                         # is right None?
-                xor: bool = (lftNone and not rgtNone) or (not lftNone and rgtNone)  # exclusive or
-                if xor:                                             # if one child is None, but not both
-                    raise AssertionError(f'runNode found a node in OPS with 1 \'None\' child,\n\t node = {node}')
-                if lftNone and rgtNone:                             # if both children are None
-                    raise AssertionError(f'runNode found a node in OPS with 2 \'None\' children,\n\t node = {node}')
-                if node.data == 'if' and self.getMiddle(node) is None:  # if the OP is IF and it has no middle
-                    raise AssertionError('runNode found a node with a IF OP and no middle node')
+                # ! For Debugging Only
+                # lftNone: bool = self.getLeft(node) is None                          # is left None?
+                # rgtNone: bool = self.getRight(node) is None                         # is right None?
+                # xor: bool = (lftNone and not rgtNone) or (not lftNone and rgtNone)  # exclusive or
+                # if xor:                                             # if one child is None, but not both
+                #     raise AssertionError(f'runNode found a node in OPS with 1 \'None\' child,\n\t node = {node}')
+                # if lftNone and rgtNone:                             # if both children are None
+                #     raise AssertionError(f'runNode found a node in OPS with 2 \'None\' children,\n\t node = {node}')
+                # if node.data == 'if' and self.getMiddle(node) is None:  # if the OP is IF and it has no middle
+                #     raise AssertionError('runNode found a node with a IF OP and no middle node')
                 # ************ Determine Which OP is Stored & Run Recursion ************ #
                 left: Node = self.getLeft(node)  # get the left child (all OPS wil have a left)
                 right: Node = self.getRight(node)  # get the right child (all OPS wil have a right)
@@ -539,12 +546,13 @@ class Tree(libTree):
 
             elif node.data in TERMINALS[classId]:     # if the node is a terminal
                 # *************************** Error Checking *************************** #
-                if math.isnan(node.data):             # if the value stored is a NaN
-                    msg: str = f'NaN stored in tree. Expected a class ID, OPS value, or number, got {node.data}'
-                    raise TypeError(f'ERROR: {msg}')  # raise TypeError
-
-                if featureValues[node.data] is None:  # if the value stored is a None
-                    raise TypeError(f'featureValues contained a None at index {node.data}')
+                # ! For Debugging Only
+                # if math.isnan(node.data):             # if the value stored is a NaN
+                #     msg: str = f'NaN stored in tree. Expected a class ID, OPS value, or number, got {node.data}'
+                #     raise TypeError(f'ERROR: {msg}')  # raise TypeError
+                #
+                # if featureValues[node.data] is None:  # if the value stored is a None
+                #     raise TypeError(f'featureValues contained a None at index {node.data}')
                 # ************************ Return Terminal Value ************************ #
                 return featureValues[node.data]       # if the terminal is valid, return it
                 # *********************************************************************** #
@@ -585,10 +593,6 @@ class ConstructedFeature:
         self.size = tree.size                         # the individual size (the size of the tree)
         self.relevantFeatures = TERMINALS[className]  # holds the indexes of the relevant features
         # sanityCheckCF(self)  # ! testing purposes only!
-    
-    '''def __str__(self):
-        """Used to print a Constructed Feature."""
-        print(f'Class ID: {self.className}, \n{self.tree}')'''
 
     def transform(self, instance: Instance) -> float:
         """Takes an instance, transforms it using the decision tree, and return the value computed."""
@@ -642,27 +646,28 @@ class Hypothesis:
     def getFitness(self) -> float:
         """getFitness uses several helper functions to calculate the fitness of a Hypothesis"""
     
-        # log.debug('Starting getFitness() method')
+        log.debug('Starting getFitness() method')
         
         def __Czekanowski(Vi: typ.List[float], Vj: typ.List[float]) -> float:
             
-            # log.debug('Starting Czekanowski() method')
+            log.debug('Starting Czekanowski() method')
 
             # ************************** Error checking ************************** #
-            try:
-                if len(Vi) != len(Vj):
-                    log.error(f'In Czekanowski Vi[d] & Vi[d] are not equal Vi = {Vi}, Vj = {Vj}')
-                    raise Exception(f'ERROR: In Czekanowski Vi[d] & Vi[d] are not equal Vi = {Vi}, Vj = {Vj}')
-                if None in Vi:
-                    log.error(f'In Czekanowski Vi ({Vi}) was found to be a \'None type\'')
-                    raise Exception(f'ERROR: In Czekanowski Vi ({Vi}) was found to be a \'None type\'')
-                if None in Vj:
-                    log.error(f'In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
-                    raise Exception(f'ERROR: In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
-            except Exception as err:
-                lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-                printError(str(err) + f', line = {lineNm}')
-                sys.exit(-1)  # recovery impossible, exit with an error
+            # ! For Debugging Only
+            # try:
+            #     if len(Vi) != len(Vj):
+            #         log.error(f'In Czekanowski Vi[d] & Vi[d] are not equal Vi = {Vi}, Vj = {Vj}')
+            #         raise Exception(f'ERROR: In Czekanowski Vi[d] & Vi[d] are not equal Vi = {Vi}, Vj = {Vj}')
+            #     if None in Vi:
+            #         log.error(f'In Czekanowski Vi ({Vi}) was found to be a \'None type\'')
+            #         raise Exception(f'ERROR: In Czekanowski Vi ({Vi}) was found to be a \'None type\'')
+            #     if None in Vj:
+            #         log.error(f'In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
+            #         raise Exception(f'ERROR: In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
+            # except Exception as err:
+            #     lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+            #     printError(str(err) + f', line = {lineNm}')
+            #     sys.exit(-1)  # recovery impossible, exit with an error
             # ******************************************************************** #
 
             minSum: typ.Union[int, float] = 0
@@ -676,17 +681,18 @@ class Hypothesis:
                 for i, j in zip(Vi, Vj):                    # zip Vi & Vj so that we can iterate in parallel
                     
                     # **************************************** Error Checking **************************************** #
-                    if Vi == [None, None] and Vj == [None, None]:
-                        log.error(f'In Czekanowski Vj ({Vj}) & Vi ({Vi}) was found to be a \'None type\'')
-                        raise Exception(f'ERROR: In Czekanowski Vj ({Vj}) & Vi ({Vi}) was found to be a \'None type\'')
-                    
-                    elif Vj == [None, None]:
-                        log.error(f'In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
-                        raise Exception(f'ERROR: In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
-                    
-                    elif Vi == [None, None]:
-                        log.error(f'In Czekanowski Vi ({Vi}) was found to be a \'None type\'')
-                        raise Exception(f'ERROR: In Czekanowski Vi ({Vi}) was found to be a \'None type\'')
+                    # ! For Debugging Only
+                    # if Vi == [None, None] and Vj == [None, None]:
+                    #     log.error(f'In Czekanowski Vj ({Vj}) & Vi ({Vi}) was found to be a \'None type\'')
+                    #     raise Exception(f'ERROR: In Czekanowski Vj ({Vj}) & Vi ({Vi}) was found to be a \'None type\'')
+                    #
+                    # elif Vj == [None, None]:
+                    #     log.error(f'In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
+                    #     raise Exception(f'ERROR: In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
+                    #
+                    # elif Vi == [None, None]:
+                    #     log.error(f'In Czekanowski Vi ({Vi}) was found to be a \'None type\'')
+                    #     raise Exception(f'ERROR: In Czekanowski Vi ({Vi}) was found to be a \'None type\'')
                     # ************************************************************************************************ #
                     
                     top: typ.Union[int, float] = min(i, j)  # get the top of the fraction
@@ -701,6 +707,7 @@ class Hypothesis:
                 
                 # resolve the n/0 case
                 elif addSum == 0:                        # if only the denominator is 0, set it to a small number
+                    # TODO find better value
                     addSum = -30                         # + Experiment with this value
                     # pow(10, -6) causes overflow in line ~765
                     value = 1 - ((2 * minSum) / addSum)  # create the return value
@@ -715,14 +722,14 @@ class Hypothesis:
                 printError(str(err2) + f', line = {lineNm}')
                 sys.exit(-1)                                # recovery impossible, exit with error
 
-            # log.debug('Finished Czekanowski() method')
+            log.debug('Finished Czekanowski() method')
             
             return value
 
         def Distance(values: typ.List[Instance]):
             """"Distance calculates the distance value of the Hypothesis"""
     
-            # log.debug('Starting Distance() method')
+            log.debug('Starting Distance() method')
             
             Db: typ.Union[int, float] = 2  # this will hold the lowest distance Czekanowski found
             Dw: typ.Union[int, float] = 0  # this will hold the highest distance Czekanowski found
@@ -751,14 +758,14 @@ class Hypothesis:
             Db *= (1 / len(values))  # multiply by 1/|S|
             Dw *= (1 / len(values))  # multiply by 1/|S|
 
-            # log.debug('Finished Distance() method')
+            log.debug('Finished Distance() method')
             
             return 1 / (1 + math.pow(math.e, -5*(Db - Dw)))
 
         def __entropy(partition: typ.List[Instance]) -> float:
             """Calculates the entropy of a Hypothesis"""
             
-            # log.debug('Starting entropy() method')
+            log.debug('Starting entropy() method')
             
             p: typ.Dict[int, int] = {}   # p[classId] = number of instances in the class in the partition sv
             for i in partition:          # for instance i in a partition sv
@@ -774,14 +781,14 @@ class Hypothesis:
                 pi = p[c] / len(partition)
                 calc -= pi * math.log(pi, 2)
 
-            # log.debug('Finished entropy() method')
+            log.debug('Finished entropy() method')
 
             return calc
 
         def __conditionalEntropy(feature: ConstructedFeature) -> float:
             """Calculates the entropy of a Hypothesis"""
     
-            # log.debug('Starting conditionalEntropy() method')
+            log.debug('Starting conditionalEntropy() method')
 
             # this is a feature struct that will be used to store feature values
             # with their indexes/IDs in CFs
@@ -812,7 +819,7 @@ class Hypothesis:
             for e in partition.keys():
                 s += (len(partition[e])/INSTANCES_NUMBER) * __entropy(partition[e])
 
-            # log.debug('Finished conditionalEntropy() method')
+            log.debug('Finished conditionalEntropy() method')
 
             return s  # s holds the conditional entropy value
 
@@ -849,7 +856,7 @@ class Hypothesis:
         final = term1 + term2 - term3
         # ********* Finish Calculation ********* #
 
-        # log.debug('Finished getFitness() method')
+        log.debug('Finished getFitness() method')
         self._fitness = final
         return final
 
@@ -899,7 +906,7 @@ class Hypothesis:
                 transformed (np.array): A new dataset, created by transforming the original one.
         """
     
-        # log.debug('Starting __transform() method')
+        log.debug('Starting __transform() method')
         
         transformed: typ.List[Instance] = []  # this will hold the transformed values
         
@@ -917,7 +924,7 @@ class Hypothesis:
             vls = dict(zip(range(len(values)), values))  # create a dict of the values keyed by their index
             transformed.append(Instance(r.className, vls, values))
 
-        # log.debug('Finished __transform() method')
+        log.debug('Finished __transform() method')
         
         return transformed  # return the list of all instances
 
@@ -1108,15 +1115,15 @@ def createInitialPopulation() -> Population:
             tree = Tree()   # create an empty tree
             tree.addRoot()  # create a root node for the tree
             
-            '''# !!!!!!!!!!!!!!!!!!!!! Used for Testing Only !!!!!!!!!!!!!!!!!!!!! #
-            root = tree.addRoot()  # create a root node for the tree
-            if not (root.is_root()):  # + This does pass so root doesn't have parents
-                raise Exception('Root is not tree root')
-            if root is not tree.getRoot():
-                raise Exception('Root is not equal to tree root')
-            # __grow(name, root, tree)    # create tree using grow
-            __full(name, root, tree)      # create tree using full
-            tree.checkTree()
+            # !!!!!!!!!!!!!!!!!!!!! Used for Testing Only !!!!!!!!!!!!!!!!!!!!! #
+            # root = tree.addRoot()  # create a root node for the tree
+            # if not (root.is_root()):  # + This does pass so root doesn't have parents
+            #     raise Exception('Root is not tree root')
+            # if root is not tree.getRoot():
+            #     raise Exception('Root is not equal to tree root')
+            # # __grow(name, root, tree)    # create tree using grow
+            # __full(name, root, tree)      # create tree using full
+            # tree.checkTree()
             # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #'''
             
             if random.choice([True, False]):         # *** use grow *** #
@@ -1124,8 +1131,8 @@ def createInitialPopulation() -> Population:
             else:                                    # *** use full *** #
                 __full(name, tree.getRoot(), tree)   # create tree using full
 
-            cf = ConstructedFeature(name, tree)                   # create constructed feature
-            ftrs.append(cf)                                       # add the feature to the list of features
+            cf = ConstructedFeature(name, tree)      # create constructed feature
+            ftrs.append(cf)                          # add the feature to the list of features
 
             size += size
             
@@ -1203,9 +1210,9 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             randomIndex = random.choice(range(len(candidates)))   # get a random index value
             candidate: Hypothesis = candidates.pop(randomIndex)   # get the hypothesis at the random index
             # we pop here to avoid getting duplicates. The index uses candidates current size so it will be in range
-            # log.debug('Making getFitness method call in Tournament')
+            log.debug('Making getFitness method call in Tournament')
             fitness = candidate.getFitness()                      # get that hypothesis's fitness score
-            # log.debug('Finished getFitness method call in Tournament')
+            log.debug('Finished getFitness method call in Tournament')
 
             if first is None:      # if first has not been set,
                 first = candidate  # then  set it
@@ -1223,7 +1230,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             print(f'{str(err2)}, line = {lineNm2}')
             sys.exit(-1)                            # exit on error; recovery not possible
         
-        # log.debug('Finished Tournament method')
+        log.debug('Finished Tournament method')
         # bar.text('found parent')  # ! for debugging
         return first
         # ************ End of Tournament Selection ************* #
@@ -1345,10 +1352,11 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         for pop in range(POPULATION_SIZE):
             # print(f' evolving {pop}/{POPULATION_SIZE}...')  # update user on progress
             probability = random.uniform(0, 1)              # get a random number between 0 & 1
-        
-            # mutate()     # ! For Testing Only
-            # crossover()  # ! For Testing Only
-            # bar()        # ! For Testing Only
+
+            # ! For Testing Only
+            # mutate()
+            # crossover()
+            # bar()
         
             # ***************** Mutate ***************** #
             if probability < MUTATION_RATE:  # if probability is less than mutation rate, mutate
