@@ -26,7 +26,7 @@ import numpy as np
 from alive_progress import alive_bar, config_handler
 
 # ! Next Steps
-# TODO fix runNode error
+# TODO performance enhancements
 
 # TODO check copyright on imported packages
 # TODO add testing functions

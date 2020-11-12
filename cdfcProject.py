@@ -108,7 +108,7 @@ class Instance:
         return np.array([float(self.className)] + self.vList)
 
 
-def parseFile(train: np.ndarray) -> typ.Dict[any]:
+def parseFile(train: np.ndarray) -> typ.Dict[any, any]:
     """ parseFile takes in training data as a numpy array, and parses it for CDFC. This
         involves getting the constants & creating the data structures that CDFC will need.
     
