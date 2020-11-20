@@ -1,4 +1,13 @@
-import cProfile
+"""
+cdfcProject.py serves as the primary entry point into the project for wrapper main.py. It reads in CSV files, parses
+them, creates constants, trains the models, creates & trains cdfc, and exports data. The primary purpose of cdfcProject
+is to coordinate all other files in the project.
+
+Authors/Contributors: Dr. Dimitrios Diochnos, Conner Flansburg
+
+Github Repo: https://github.com/brom94/cdfcPython.git
+"""
+
 import collections as collect
 import copy
 import math
@@ -20,34 +29,13 @@ from sklearn.tree import DecisionTreeClassifier
 from tqdm import tqdm
 
 from cdfc import cdfc
-from cdfcFmt import *
-from cdfcFmt import __buildAccuracyFrame, __accuracyFrameToLatex, __formatForSciKit, __flattenTrainingData
+from formatting import *
+from formatting import __buildAccuracyFrame, __accuracyFrameToLatex, __formatForSciKit, __flattenTrainingData
+from objects import WrapperInstance as Instance
 
-'''
-                                       CSVs should be of the form
-
-           |  label/id   |   attribute 1   |   attribute 2   |   attribute 3   |   attribute 4   | ... |   attribute k   |
---------------------------------------------------------------------------------------------------------------------------
-instance 1 | class value | attribute value | attribute value | attribute value | attribute value | ... | attribute value |
---------------------------------------------------------------------------------------------------------------------------
-instance 2 | class value | attribute value | attribute value | attribute value | attribute value | ... | attribute value |
---------------------------------------------------------------------------------------------------------------------------
-instance 3 | class value | attribute value | attribute value | attribute value | attribute value | ... | attribute value |
---------------------------------------------------------------------------------------------------------------------------
-instance 4 | class value | attribute value | attribute value | attribute value | attribute value | ... | attribute value |
---------------------------------------------------------------------------------------------------------------------------
-    ...    |    ...      |      ...        |       ...       |       ...       |       ...       | ... |       ...       |
---------------------------------------------------------------------------------------------------------------------------
-instance n | class value | attribute value | attribute value | attribute value | attribute value | ... | attribute value |
---------------------------------------------------------------------------------------------------------------------------
-
-'''
 # ********************************************* Constants used by Parser ********************************************* #
 BETA: typ.Final = 2              # BETA is a constant used to calculate the pop size
 R: typ.Final = 2                 # R is the ratio of number of CFs to the number of classes (features/classes)
-# ******************************************** Constants used by Profiler ******************************************** #
-profiler = cProfile.Profile()                       # create a profiler to profile cdfc during testing
-statsPath = str(Path.cwd() / 'logs' / 'stats.log')  # set the file path that the profiled info will be stored at
 # ********************************************* Constants used by Logger ********************************************* #
 # create the file path for the log file & configure the logger
 logPath = str(Path.cwd() / 'logs' / 'cdfc.log')
@@ -76,40 +64,6 @@ def printError(err):
 # * Next Steps
 # TODO add doc strings
 # TODO add more unit tests
-
-
-class Instance:
-    """Instance is an instance, or row, within our data set. It represents a single
-       record of whatever we are measuring. This replaces the earlier row struct.
-
-    Variables:
-        className (int): The class id of the class that the record is in (this class ids start at 0).
-        attribute ({key: int, value: float}): This dictionary stores the features values in the
-                                                  instance, keyed by index (these start at 0)
-        vList ([float]): The list of the values stored in the dictionary (used to speed up iteration)
-    """
-    
-    def __init__(self, className: int, values: np.ndarray):
-        # this stores the name of the class that the instance is in
-        self.className: int = className
-        # this stores the values of the features, keyed by index, in the instance
-        self.attributes: typ.Dict[int, float] = dict(zip(range(values.size), values))
-        # this creates a list of the values stored in the dictionary for when iteration is wanted
-        self.vList: typ.List[float] = values.tolist()  # + this will be a list[float], ignore warnings
-        
-        # ! For Debugging Only
-        # try:  # check that all the feature values are valid
-        #     if None in self.vList:  # if a None is in the list of feature values
-        #         raise Exception('Tried to create an Instance obj with a None feature value')
-        # except Exception as err:
-        #     log.error(str(err))
-        #     tqdm.write(str(err))
-        #     traceback.print_stack()
-        #     sys.exit(-1)  # exit on error; recovery not possible
-
-    def __array__(self) -> np.array:
-        """Converts an Instance to an Numpy array."""
-        return np.array([float(self.className)] + self.vList)
 
 
 def parseFile(train: np.ndarray) -> typ.Dict[any, any]:
@@ -852,8 +806,8 @@ def main() -> None:
     # *** Exit *** #
     SYSOUT.write('\nExiting')
     sys.exit(0)  # close program
+
+
+if __name__ == 'main':
     
-
-if __name__ == "__main__":
-
     main()

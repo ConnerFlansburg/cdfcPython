@@ -1,9 +1,0 @@
-DEBUG - 241: CACHEDIR=C:\Users\conne\.matplotlib
-DEBUG - 1436: Using fontManager instance from C:\Users\conne\.matplotlib\fontlist-v330.json
-DEBUG - 272: Loaded backend module://backend_interagg version unknown.
-DEBUG - 174: Parser created dictionary for classId 1
-DEBUG - 174: Parser created dictionary for classId 0
-DEBUG - 520: Finished terminals() method
-DEBUG - 520: Finished terminals() method
-DEBUG - 1149: Starting mutation
-ERROR - 479: runNode found a node in OPS with 2 'None' children, node = Node(tag=root: times, identifier=Root, data=times), line = 424

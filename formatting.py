@@ -1,3 +1,12 @@
+"""
+formatting.py is a library of data formatting & reshaping utilities used by both cdfc & cdfcProject.
+It should only be called from within the project.
+
+Authors/Contributors: Dr. Dimitrios Diochnos, Conner Flansburg
+
+Github Repo: https://github.com/brom94/cdfcPython.git
+"""
+
 import logging as log
 import sys
 import traceback
