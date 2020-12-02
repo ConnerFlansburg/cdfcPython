@@ -161,10 +161,10 @@ class Hypothesis:
     
         log.debug('Starting getFitness() method')
         
-        def __Czekanowski(Vi: typ.List[float], Vj: typ.List[float]) -> float:
+        def __Czekanowski(Vi: typ.List[float], Vj: typ.List[float]) -> typ.Union[float, int]:
             
             log.debug('Starting Czekanowski() method')
-
+            
             # ************************** Error checking ************************** #
             # ! For Debugging Only
             # try:
@@ -183,57 +183,48 @@ class Hypothesis:
             #     sys.exit(-1)  # recovery impossible, exit with an error
             # ******************************************************************** #
 
-            minSum: typ.Union[int, float] = 0
-            addSum: typ.Union[int, float] = 0
+            top: typ.Union[int, float] = 0
+            bottom: typ.Union[int, float] = 0
             
             # + range(len(self.features)) loops over the number of features the hypothesis has.
             # + Vi & Vj are lists of the instances from the original data, that have been transformed
-            # + by the hypothesis.
-            try:
+            # + by the hypothesis. We want to loop over them in parallel because that we will compare
+            # + feature 1 in Vi with feature 1 in Vj
 
-                for i, j in zip(Vi, Vj):                    # zip Vi & Vj so that we can iterate in parallel
-                    
-                    # **************************************** Error Checking **************************************** #
-                    # ! For Debugging Only
-                    # if Vi == [None, None] and Vj == [None, None]:
-                    #     log.error(f'In Czekanowski Vj ({Vj}) & Vi ({Vi}) was found to be a \'None type\'')
-                    #     raise Exception(f'ERROR: In Czekanowski Vj ({Vj}) & Vi ({Vi}) was found to be a \'None type\'')
-                    #
-                    # elif Vj == [None, None]:
-                    #     log.error(f'In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
-                    #     raise Exception(f'ERROR: In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
-                    #
-                    # elif Vi == [None, None]:
-                    #     log.error(f'In Czekanowski Vi ({Vi}) was found to be a \'None type\'')
-                    #     raise Exception(f'ERROR: In Czekanowski Vi ({Vi}) was found to be a \'None type\'')
-                    # ************************************************************************************************ #
-                    
-                    top: typ.Union[int, float] = min(i, j)  # get the top of the fraction
-                    bottom: typ.Union[int, float] = i + j   # get the bottom of the fraction
-                    
-                    minSum += top                           # the top of the fraction
-                    addSum += bottom                        # the bottom of the fraction
-            
+            for i, j in zip(Vi, Vj):                    # zip Vi & Vj so that we can iterate in parallel
+                
+                # **************************************** Error Checking **************************************** #
+                # ! For Debugging Only
+                # if Vi == [None, None] and Vj == [None, None]:
+                #     log.error(f'In Czekanowski Vj ({Vj}) & Vi ({Vi}) was found to be a \'None type\'')
+                #     raise Exception(f'ERROR: In Czekanowski Vj ({Vj}) & Vi ({Vi}) was found to be a \'None type\'')
+                #
+                # elif Vj == [None, None]:
+                #     log.error(f'In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
+                #     raise Exception(f'ERROR: In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
+                #
+                # elif Vi == [None, None]:
+                #     log.error(f'In Czekanowski Vi ({Vi}) was found to be a \'None type\'')
+                #     raise Exception(f'ERROR: In Czekanowski Vi ({Vi}) was found to be a \'None type\'')
+                # ************************************************************************************************ #
+                
+                top += min(i, j)    # get the top of the fraction
+                bottom += (i + j)   # get the bottom of the fraction
+            # exit loop
+        
+            try:  # attempt division
+                
+                value = 1 - ((2 * top) / bottom)  # create the return value
+
+            except ZeroDivisionError:
                 # resolve 0/0 case
-                if addSum and minSum == 0:  # if the numerator & the denominator both 0, set to zero
+                if top == 0:                          # if the numerator & the denominator both 0, set to zero
                     value = 0
-                
                 # resolve the n/0 case
-                elif addSum == 0:                        # if only the denominator is 0, set it to a small number
-                    # TODO find better value
-                    addSum = 0.01     # + Experiment with this value
-                    # pow(10, -6) causes overflow in line ~765
-                    value = 1 - ((2 * minSum) / addSum)  # create the return value
-                
-                # the normal case
-                else:
-                    value = 1 - ((2 * minSum) / addSum)  # create the return value
-            
-            except Exception as err2:
-                lineNm = sys.exc_info()[-1].tb_lineno       # print line number error occurred on
-                log.error(str(err2))
-                printError(str(err2) + f', line = {lineNm}')
-                sys.exit(-1)                                # recovery impossible, exit with error
+                else:                                    # if only the denominator is 0, set it to a small number
+                    # BUG: pow(10, -6) was causing overflow error
+                    bottom = pow(10, -6)                 # + Experiment with this value
+                    value = 1 - ((2 * top) / bottom)     # create the return value
 
             log.debug('Finished Czekanowski() method')
             
