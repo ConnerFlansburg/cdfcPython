@@ -36,6 +36,7 @@ from objects import WrapperInstance as Instance
 # ********************************************* Constants used by Parser ********************************************* #
 BETA: typ.Final = 2              # BETA is a constant used to calculate the pop size
 R: typ.Final = 2                 # R is the ratio of number of CFs to the number of classes (features/classes)
+PASSED_FUNCTION = "Euclidean"    # PASSED_FUNCTION is the distance function that was passed (defaults to Euclidean)
 # ********************************************* Constants used by Logger ********************************************* #
 # create the file path for the log file & configure the logger
 logPath = str(Path.cwd() / 'logs' / 'cdfc.log')
@@ -83,6 +84,7 @@ def parseFile(train: np.ndarray) -> typ.Dict[any, any]:
     rows: typ.List[Instance] = []
     ENTROPY_OF_S: int = 0  # * used in entropy calculation * #
     CLASS_DICTS = {}
+    DISTANCE_FUNCTION = PASSED_FUNCTION
     # *** (the rest are set after the loop) *** #
     
     classes = []  # this will hold classIds and how often they occur
@@ -201,6 +203,7 @@ def parseFile(train: np.ndarray) -> typ.Dict[any, any]:
         'rows': rows,
         'ENTROPY_OF_S': ENTROPY_OF_S,
         'CLASS_DICTS': CLASS_DICTS,
+        'DISTANCE_FUNCTION': DISTANCE_FUNCTION,
     }
 
     # ! For Debugging Only
@@ -590,7 +593,7 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
     trainList: typ.List[typ.List[np.ndarray]] = copy.deepcopy(buckets)  # make a copy of buckets so we don't override it
     accuracy: typ.List[float] = []      # this will store the details about the accuracy of our hypotheses
 
-    # TODO pickle isn't making a file; why?
+    # TODO: change pickle name so that it won't read in "pickles" from different data sets
     # *** Open the Pickle Jar file *** #
     pth = Path.cwd() / 'jar' / 'features'  # create the file path
     try:
@@ -747,7 +750,7 @@ def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> ModelList:
     return knnAccuracy, dtAccuracy, nbAccuracy
 
 
-def main() -> None:
+def run(fnc: str) -> None:
     SYSOUT.write(Figlet(font='larry3d').renderText('C D f C'))  # formatted start up message
     SYSOUT.write("Program Initialized Successfully\n")
     
@@ -755,6 +758,9 @@ def main() -> None:
     parent.overrideredirect(1)  # Avoid it appearing and then disappearing quickly
     parent.withdraw()           # Hide the window
 
+    global PASSED_FUNCTION
+    PASSED_FUNCTION = fnc  # set the passed functions value
+    
     SYSOUT.write('\nGetting File...\n')
     try:
         inPath = Path(filedialog.askopenfilename(parent=parent))  # prompt user for file path
@@ -803,11 +809,9 @@ def main() -> None:
     SYSOUT.write(OVERWRITE + ' Export Successful '.ljust(50, '-') + SUCCESS)
     SYSOUT.write('Dataframe converted to LaTeX & Exported\n')
     
-    # *** Exit *** #
-    SYSOUT.write('\nExiting')
-    sys.exit(0)  # close program
+    return
 
 
-if __name__ == 'main':
+if __name__ == "__main__":
     
-    main()
+    run()

@@ -15,7 +15,7 @@ import sys
 import typing as typ
 import warnings
 from pathlib import Path
-
+import Distances as Dst
 import numpy as np
 from alive_progress import alive_bar, config_handler
 from treelib import Node as Node
@@ -32,6 +32,7 @@ from objects import cdfcInstance as Instance
 # TODO add testing functions
 
 # **************************** Constants/Globals **************************** #
+DISTANCE_FUNCTION = "euclidean"               # DISTANCE_FUNCTION is the distance function that should be used
 ALPHA: typ.Final = 0.8                        # ALPHA is the fitness weight alpha
 BARCOLS = 25                                  # BARCOLS is the number of columns for the progress bar to print
 CROSSOVER_RATE: typ.Final = 0.8               # CROSSOVER_RATE is the chance that a candidate will reproduce
@@ -161,75 +162,6 @@ class Hypothesis:
     
         log.debug('Starting getFitness() method')
         
-        def __Czekanowski(Vi: typ.List[float], Vj: typ.List[float]) -> typ.Union[float, int]:
-            
-            log.debug('Starting Czekanowski() method')
-            
-            # ************************** Error checking ************************** #
-            # ! For Debugging Only
-            # try:
-            #     if len(Vi) != len(Vj):
-            #         log.error(f'In Czekanowski Vi[d] & Vi[d] are not equal Vi = {Vi}, Vj = {Vj}')
-            #         raise Exception(f'ERROR: In Czekanowski Vi[d] & Vi[d] are not equal Vi = {Vi}, Vj = {Vj}')
-            #     if None in Vi:
-            #         log.error(f'In Czekanowski Vi ({Vi}) was found to be a \'None type\'')
-            #         raise Exception(f'ERROR: In Czekanowski Vi ({Vi}) was found to be a \'None type\'')
-            #     if None in Vj:
-            #         log.error(f'In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
-            #         raise Exception(f'ERROR: In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
-            # except Exception as err:
-            #     lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-            #     printError(str(err) + f', line = {lineNm}')
-            #     sys.exit(-1)  # recovery impossible, exit with an error
-            # ******************************************************************** #
-
-            top: typ.Union[int, float] = 0
-            bottom: typ.Union[int, float] = 0
-            
-            # + range(len(self.features)) loops over the number of features the hypothesis has.
-            # + Vi & Vj are lists of the instances from the original data, that have been transformed
-            # + by the hypothesis. We want to loop over them in parallel because that we will compare
-            # + feature 1 in Vi with feature 1 in Vj
-
-            for i, j in zip(Vi, Vj):                    # zip Vi & Vj so that we can iterate in parallel
-                
-                # **************************************** Error Checking **************************************** #
-                # ! For Debugging Only
-                # if Vi == [None, None] and Vj == [None, None]:
-                #     log.error(f'In Czekanowski Vj ({Vj}) & Vi ({Vi}) was found to be a \'None type\'')
-                #     raise Exception(f'ERROR: In Czekanowski Vj ({Vj}) & Vi ({Vi}) was found to be a \'None type\'')
-                #
-                # elif Vj == [None, None]:
-                #     log.error(f'In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
-                #     raise Exception(f'ERROR: In Czekanowski Vj ({Vj}) was found to be a \'None type\'')
-                #
-                # elif Vi == [None, None]:
-                #     log.error(f'In Czekanowski Vi ({Vi}) was found to be a \'None type\'')
-                #     raise Exception(f'ERROR: In Czekanowski Vi ({Vi}) was found to be a \'None type\'')
-                # ************************************************************************************************ #
-                
-                top += min(i, j)    # get the top of the fraction
-                bottom += (i + j)   # get the bottom of the fraction
-            # exit loop
-        
-            try:  # attempt division
-                
-                value = 1 - ((2 * top) / bottom)  # create the return value
-
-            except ZeroDivisionError:
-                # resolve 0/0 case
-                if top == 0:                          # if the numerator & the denominator both 0, set to zero
-                    value = 0
-                # resolve the n/0 case
-                else:                                    # if only the denominator is 0, set it to a small number
-                    # BUG: pow(10, -6) was causing overflow error
-                    bottom = pow(10, -6)                 # + Experiment with this value
-                    value = 1 - ((2 * top) / bottom)     # create the return value
-
-            log.debug('Finished Czekanowski() method')
-            
-            return value
-
         def Distance(values: typ.List[Instance]):
             """"Distance calculates the distance value of the Hypothesis"""
     
@@ -250,8 +182,9 @@ class Hypothesis:
                         continue                            # if vi & vj have the same values, skip
             
                     else:                                         # if vi & vj are valid
-                        
-                        dist = __Czekanowski(vi.vList, vj.vList)  # compute the distance using the values
+    
+                        # compute the distance using the values and the passed function
+                        dist = Dst.computeDistance(DISTANCE_FUNCTION, vi.vList, vj.vList)
                         
                         if dist > Dw:                             # replace the max if the current value is higher
                             Dw = dist
@@ -911,10 +844,12 @@ def cdfc(dataIn) -> Hypothesis:
     global ENTROPY_OF_S  # * used in entropy calculation * #
     global CLASS_DICTS
     global TERMINALS
+    global DISTANCE_FUNCTION
     
     # Read the values in the dictionary into the constants
     FEATURE_NUMBER = values['FEATURE_NUMBER']
     CLASS_IDS = values['CLASS_IDS']
+    DISTANCE_FUNCTION = values['DISTANCE_FUNCTION']
     # POPULATION_SIZE = values['POPULATION_SIZE']
     POPULATION_SIZE = 10
     INSTANCES_NUMBER = values['INSTANCES_NUMBER']
