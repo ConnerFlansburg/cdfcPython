@@ -188,6 +188,17 @@ class Hypothesis:
             self.__newFitness()    # set the fitness score
         return self._fitness       # either way return fitness
     
+    # TODO Check if I need to call this anywhere (like after mutation or crossover)
+    def updateFitness(self) -> float:
+        """
+        This should be used instead of __newFitness in order to force a new fitness calculation
+        
+        :return: Fitness value of a Hypothesis.
+        :rtype: float
+        """
+        
+        return self.__newFitness()
+    
     def __newFitness(self) -> float:
         """
         __newFitness uses several helper functions to calculate the fitness of a Hypothesis. This
@@ -834,6 +845,10 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         
         # overwrite old CF with the new one
         parent.features[randIndex] = ConstructedFeature(randCF.className, randCF.tree)
+        
+        # TODO is this needed?
+        parent.updateFitness()  # force an update of the fitness score
+        
         # add the mutated parent to the new pop (appending is needed because parent is a copy NOT a reference)
         newPopulation.candidateHypotheses.append(parent)
     
@@ -894,6 +909,10 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         # tree2.checkTree()
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
     
+        # TODO is this needed?
+        parent1.updateFitness()  # force an update of the fitness score
+        parent2.updateFitness()  # force an update of the fitness score
+        
         # parent 1 & 2 are both hypotheses and should have been changed in place,
         # but they refer to a copy made in tournament so add them to the new pop
         newPopulation.candidateHypotheses.append(parent1)
