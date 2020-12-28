@@ -13,13 +13,16 @@ import scipy.spatial.distance as sp
 
 
 def computeDistance(func: str, Vi: typ.List[float], Vj: typ.List[float]) -> typ.Union[float, int]:
-    """Computes the distance using the provided distance function.
-    
-       func (str): Lowercase string name of the function to use.
-       
-       Vi (list[float]): First 1d vector
-       
-       Vj (list[float]): Second 1d vector
+    """ Computes the distance using the provided distance function.
+
+    :param func: Lowercase string name of the function to use.
+    :type func: str
+    :param Vi: First 1d vector
+    :type Vi: typ.List[float]
+    :param Vj: Second 1d vector
+    :type Vj: typ.List[float]
+    :return: vector of distance values
+    :rtype: typ.Union[float, int]
     """
     
     if func == "czekanowski":  # if the function provided was Czekanowski,
@@ -38,17 +41,34 @@ def computeDistance(func: str, Vi: typ.List[float], Vj: typ.List[float]) -> typ.
 def __Euclidean(Vi: typ.List[float], Vj: typ.List[float]) -> typ.Union[float, int]:
     """ Used to by computeDistance to calculate the Euclidean distance.
     
+    :param Vi: First 1d vector
+    :type Vi: typ.List[float]
+    :param Vj: Second 1d vector
+    :type Vj: typ.List[float]
+    :return: vector of distance values
+    :rtype: typ.Union[float, int]
     """
     
     # convert the vectors to numpy arrays
-    Ai: np.ndarray = np.ndarray(Vi)
-    Aj = np.ndarray(Vj)
+    Ai: np.array = np.array(Vi)
+    Aj = np.array(Vj)
     
     # compute the distance & return
     return np.linalg.norm(Ai - Aj)
 
 
 def __Czekanowski(Vi: typ.List[float], Vj: typ.List[float]) -> typ.Union[float, int]:
+    """ Used to by computeDistance to calculate the Czekanowski distance.
+
+    :param Vi: First 1d vector
+    :type Vi: typ.List[float]
+    :param Vj: Second 1d vector
+    :type Vj: typ.List[float]
+    :return: vector of distance values
+    :rtype: typ.Union[float, int]
+    """
+    
+    
     log.debug('Starting Czekanowski() method')
     
     # ************************** Error checking ************************** #

@@ -42,7 +42,6 @@ import cProfile
 import pstats
 from pathlib import Path
 import sys
-
 import cdfcProject as cdfc
 
 # ******************************************** Constants used by Profiler ******************************************** #
@@ -50,35 +49,45 @@ profiler = cProfile.Profile()                       # create a profiler to profi
 statsPath = str(Path.cwd() / 'logs' / 'stats.log')  # set the file path that the profiled info will be stored at
 # ******************************************** Parsing Command Line Flags ******************************************** #
 argumentParser = argparse.ArgumentParser()  # create the argument parser
+
+# Distance Function Flag
 argumentParser.add_argument("-f", "--function", required=False, help="the distance function that should be used",
-                            choices=['Correlation', 'Czekanowski', 'Euclidean'], default='Euclidean')
+                            choices=['correlation', 'czekanowski', 'euclidean'], default='euclidean', type=str)
+
+# cProfile Flag
 argumentParser.add_argument("-s", "--stats", required=False, help="run the program with cProfile",
                             action='store_true', default=False)  # if found set to True, otherwise set False
+
+# cProfile Ordering Flag
 argumentParser.add_argument("-o", "--order", required=False, help="how the cProfile report should be sorted",
-                            choices=['ncalls', 'tottime', 'percall', 'cumtime'], default='ncalls')
+                            choices=['ncalls', 'tottime', 'percall', 'cumtime'], default='ncalls', type=str)
 # ******************************************************************************************************************** #
 
 if __name__ == "__main__":
     
-    # parse the arguments into a dictionary keyed by name of flag
-    args = vars(argumentParser.parse_args())
+    # parse the arguments into a namespace
+    provided = argumentParser.parse_args()
     
-    if args.get('stats'):                                         # if the stats flag was set
+    if provided.stats:               # if the stats flag was set
+        
         print('Starting Profiler')
+        
         # * Run the Profiler * #
-        profiler.enable()                                         # start collecting profiling info
-        cdfc.run(args.get('function'))                            # run cdfc
-        profiler.disable()                                        # stop collecting profiling info
+        profiler.enable()            # start collecting profiling info
+        cdfc.run(provided.function)  # run cdfc
+        profiler.create_stats()
         print('Profiler Finished')
+        
         # * Sort & Export the Report * #
-        stats = pstats.Stats(profiler).sort_stats(args['order'])  # sort the report
-        print(stats)
-        # BUG: this is printing byte code to a file/is not human-readable
-        stats.dump_stats(statsPath)                               # save report to file
-        print('Profiler Exported to log/stats.log')
+        with open(statsPath, 'w') as file:                   # open file to write to
+            stats = pstats.Stats(profiler, stream=file)      # create the report streamer
+            stats.sort_stats(provided.order)                 # sort the report
+            stats.print_stats()                              # print the report to the file
+            print(f'Profiler Exported to {str(statsPath)}')  # print the stats file location
 
         # *** Exit *** #
         sys.stdout.write('\nExiting')
-        sys.exit(0)  # close program
-    else:                                                         # otherwise just run cdfc
-        cdfc.run(args.get('function'))
+        sys.exit(0)                   # close program
+
+    else:                             # otherwise just run cdfc
+        cdfc.run(provided.function)

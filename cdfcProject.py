@@ -36,7 +36,7 @@ from objects import WrapperInstance as Instance
 # ********************************************* Constants used by Parser ********************************************* #
 BETA: typ.Final = 2              # BETA is a constant used to calculate the pop size
 R: typ.Final = 2                 # R is the ratio of number of CFs to the number of classes (features/classes)
-PASSED_FUNCTION = "Euclidean"    # PASSED_FUNCTION is the distance function that was passed (defaults to Euclidean)
+PASSED_FUNCTION = None           # PASSED_FUNCTION is the distance function that was passed (defaults to Euclidean)
 # ********************************************* Constants used by Logger ********************************************* #
 # create the file path for the log file & configure the logger
 logPath = str(Path.cwd() / 'logs' / 'cdfc.log')
@@ -47,7 +47,8 @@ SUCCESS = u' \u2713\n'+'\033[0m'     # print the checkmark & reset text color
 OVERWRITE = '\r' + '\033[32m' + HDR  # overwrite previous text & set the text color to green
 SYSOUT = sys.stdout
 # ****************************************** Constants used by Type Hinting ****************************************** #
-K: typ.Final[int] = 10  # set the K for k fold cross validation
+# ! change back to 10 after testing
+K: typ.Final[int] = 3  # set the K for k fold cross validation
 ModelList = typ.Tuple[typ.List[float], typ.List[float], typ.List[float]]          # type hinting alias
 ModelTypes = typ.Union[KNeighborsClassifier, GaussianNB, DecisionTreeClassifier]  # type hinting alias
 ScalarsIn = typ.Union[None, StandardScaler]
@@ -84,7 +85,6 @@ def parseFile(train: np.ndarray) -> typ.Dict[any, any]:
     rows: typ.List[Instance] = []
     ENTROPY_OF_S: int = 0  # * used in entropy calculation * #
     CLASS_DICTS = {}
-    DISTANCE_FUNCTION = PASSED_FUNCTION
     # *** (the rest are set after the loop) *** #
     
     classes = []  # this will hold classIds and how often they occur
@@ -203,7 +203,6 @@ def parseFile(train: np.ndarray) -> typ.Dict[any, any]:
         'rows': rows,
         'ENTROPY_OF_S': ENTROPY_OF_S,
         'CLASS_DICTS': CLASS_DICTS,
-        'DISTANCE_FUNCTION': DISTANCE_FUNCTION,
     }
 
     # ! For Debugging Only
@@ -655,11 +654,11 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
             relevant: typ.Dict[int, typ.List[int]] = {}                          # this will hold the relevant features found by terminals
             for classId in constants['CLASS_IDS']:                               # loop over all class ids and get the relevant features for each one
                 relevant[classId] = terminals(classId, constants)                # store the relevant features for a class using the classId as a key
-            # sanityCheckDictionary(relevant)
+            # __sanityCheckDictionary(relevant)
             data = (constants, relevant)                                         # data[0] = constants to be set, data[1] = TERMINALS
             pickles[r] = data
 
-        CDFC_Hypothesis = cdfc(data)                                             # now that we have our train & test data create our hypothesis
+        CDFC_Hypothesis = cdfc(data, PASSED_FUNCTION)                            # now that we have our train & test data create our hypothesis
         SYSOUT.write(OVERWRITE + ' CDFC Trained '.ljust(50, '-') + SUCCESS)      # replace starting with complete
         
         SYSOUT.write(HDR + ' Transforming Training Data ......')                 # print
@@ -711,11 +710,22 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
 
 
 # ! for testing purposes only!
-def sanityCheckDictionary(d: typ.Dict[int, typ.List[int]]):
+def __sanityCheckDictionary(d: typ.Dict[int, typ.List[int]]) -> None:
+    """ A Sanity check for the dictionary that cdfcProject will send to cdfc.
+        This is used in testing only, and checks that the dictionary is non-empty.
+    
+    :param d: dictionary to be tested.
+    :type d: dict
+    :return: either raises an exception or returns None if dictionary is non-empty.
+    :rtype: None
+    """
+
     log.debug('Starting Dictionary Sanity Check...')
+    
     try:
         if None in d.values():
             raise Exception('ERROR: buildModel() created a relevant value dictionary that includes \'None\'')
+    
     except Exception as err:
         lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
         msg = f'{str(err)}, line = {lineNm}'  # create the error/log message
@@ -723,10 +733,22 @@ def sanityCheckDictionary(d: typ.Dict[int, typ.List[int]]):
         tqdm.write(msg)
         traceback.print_stack()
         sys.exit(-1)  # exit on error; recovery not possible
+    
     log.debug('Dictionary Sanity Check Passed')
 
 
 def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> ModelList:
+    """ __runSciKitModels builds the non-CDFC models & returns the
+        constructed models as a list.
+    
+    :param entries: the parsed input file
+    :type entries: np.ndarray
+    :param useNormalize: a flag that is true if the data should be normalized
+    :type useNormalize: bool
+    :return: the constructed models
+    :rtype: typ.List[typ.List[float]]
+    """
+    
     # NOTE adding more models requires updating the Models type at top of file
     # hdr, overWrite, & success are just used to format string for the console
     # accuracy is a float list, each value is the accuracy for a single run
@@ -751,6 +773,15 @@ def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> ModelList:
 
 
 def run(fnc: str) -> None:
+    """ run is the entry point for main.py. It prompts the user for a file, parses it, builds the required models,
+    formats the data frames, and general coordinates the other models with CDFC.
+    
+    :param fnc: the distance function to be used. It should be provided via command line flags (see main.py).
+    :type fnc: str
+    :return: run either crashes or returns a None on a success.
+    :rtype: None
+    """
+    
     SYSOUT.write(Figlet(font='larry3d').renderText('C D f C'))  # formatted start up message
     SYSOUT.write("Program Initialized Successfully\n")
     
@@ -758,8 +789,18 @@ def run(fnc: str) -> None:
     parent.overrideredirect(1)  # Avoid it appearing and then disappearing quickly
     parent.withdraw()           # Hide the window
 
+    # *** set the passed functions value *** #
+    # NOTE: for some reason just passing the fnc string was causing a key error
     global PASSED_FUNCTION
-    PASSED_FUNCTION = fnc  # set the passed functions value
+    
+    if fnc == "correlation":    # use the Correlation function
+        PASSED_FUNCTION = "correlation"
+    elif fnc == "czekanowski":  # use the Czekanowski function
+        PASSED_FUNCTION = "czekanowski"
+    elif fnc == "euclidean":    # use the Euclidean function
+        PASSED_FUNCTION = "euclidean"
+    else:                       # default to the Euclidean function
+        PASSED_FUNCTION = "euclidean"
     
     SYSOUT.write('\nGetting File...\n')
     try:
@@ -814,4 +855,4 @@ def run(fnc: str) -> None:
 
 if __name__ == "__main__":
     
-    run()
+    run("euclidean")

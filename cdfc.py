@@ -25,10 +25,13 @@ from objects import Tree
 from objects import cdfcInstance as Instance
 
 # ! Next Steps
-# TODO set value in n/0 case
+# TODO update comments on new code
+# TODO add exceptions to comments
+# TODO change docstrings to be parse-able
 # TODO performance enhancements
 
 # TODO check copyright on imported packages
+# TODO set value in n/0 case
 # TODO add testing functions
 
 # **************************** Constants/Globals **************************** #
@@ -87,18 +90,20 @@ rows: typ.List[Instance] = []  # this will store all of the records read in (the
 
 
 class ConstructedFeature:
-    """Constructed Feature is used to represent a single constructed feature in
-       a hypothesis. It contains the tree representation of the feature along
-       with additional information about the feature.
+    """
+    Constructed Feature is used to represent a single constructed feature in
+    a hypothesis. It contains the tree representation of the feature along
+    with additional information about the feature.
 
-    Variables:
-        className (int): Class id of the class that the feature is meant to distinguish.
-        tree (Tree): Constructed feature's binary decision tree.
-        size (int): Number of nodes in the tree
-        relevantFeatures ([int]): List of terminal characters relevant to the feature's class.
-
-    Methods:
-        __transform: Takes the original data & transforms it using the feature's decision tree.
+    :var className: Class id of the class that the feature is meant to distinguish.
+    :type className: int
+    :var tree: Constructed feature's binary decision tree.
+    :type tree: Tree
+    :var size: Number of nodes in the tree
+    :type size: int
+    :var relevantFeatures: List of terminal characters relevant to the feature's class.
+    :type relevantFeatures: list[int]
+    
     """
 
     def __init__(self, className: int, tree: Tree) -> None:
@@ -109,7 +114,14 @@ class ConstructedFeature:
         # sanityCheckCF(self)  # ! testing purposes only!
 
     def transform(self, instance: Instance) -> float:
-        """Takes an instance, transforms it using the decision tree, and return the value computed."""
+        """
+        Takes an instance, transforms it using the decision tree, and return the value computed.
+        
+        :param instance: Instance to be transformed.
+        :type instance: Instance
+        :return: The new value computed by running the tree's operations on the provided instance.
+        :rtype: float
+        """
         
         # Send the tree a list of all the attribute values in a single instance
         featureValues: typ.Dict[int, float] = instance.attributes
@@ -117,17 +129,25 @@ class ConstructedFeature:
 
 
 class Hypothesis:
-    """Hypothesis is a single hypothesis (a GP individual), and will contain a list of constructed features. It
-       should have the same number of constructed features for every class id, and should have at least one for
-       each class id.
-       
-        Variables:
-            features ([ConstructedFeature]): List of the constructed features for this hypothesis.
-            size (int): Sum of the constructed feature's sizes.
-            fitness (int or float): Calculated fitness score.
-            distance (int or float): Calculated distance value.
-            averageInfoGain (int or float): Average of every features info gain.
-            maxInfoGain (int or float): Largest info gain for any feature.
+    """
+    Hypothesis is a single hypothesis (a GP individual), and will contain a list of constructed features. It
+    should have the same number of constructed features for every class id, and should have at least one for
+    each class id.
+    
+    :var features: List of the constructed features for this hypothesis.
+    :var size: Sum of the constructed feature's sizes.
+    :var fitness: Calculated fitness score.
+    :var distance: Calculated distance value.
+    :var averageInfoGain: Average of every features info gain.
+    :var maxInfoGain: Largest info gain for any feature.
+    :type features: list[ConstructedFeature]
+    :type size: int
+    :type fitness: float
+    :type distance: float
+    :type averageInfoGain: float
+    :type maxInfoGain: float
+        
+     
             
         Methods:
             getFitness: Get the fitness score of the Hypothesis
@@ -152,18 +172,36 @@ class Hypothesis:
 
     @property
     def fitness(self) -> typ.Union[int, float]:
-        """Getter for fitness."""
+        """
+        Getter for fitness.
+        
+        :return: Hypothesis's fitness.
+        :rtype: float or int
+        """
         if self._fitness is None:  # if fitness isn't set
             self.getFitness()      # run fitness to set it
         return self._fitness       # either way return fitness
     
     def getFitness(self) -> float:
-        """getFitness uses several helper functions to calculate the fitness of a Hypothesis"""
+        """
+        getFitness uses several helper functions to calculate the fitness of a Hypothesis
+        
+        :return: Fitness value of a Hypothesis.
+        :rtype: float
+        """
     
         log.debug('Starting getFitness() method')
         
-        def Distance(values: typ.List[Instance]):
-            """"Distance calculates the distance value of the Hypothesis"""
+        # TODO why was Czk called?
+        def Distance(values: typ.List[Instance]) -> float:
+            """"
+            Distance calculates the distance value of the Hypothesis
+            
+            :param values: List of the instances who's distance we wish to compute.
+            :type values: list
+            :return: Distance value calculated using the chosen distance function.
+            :rtype: float
+            """
     
             log.debug('Starting Distance() method')
             
@@ -201,7 +239,14 @@ class Hypothesis:
             return 1 / (1 + math.pow(math.e, -5*(Db - Dw)))
 
         def __entropy(partition: typ.List[Instance]) -> float:
-            """Calculates the entropy of a Hypothesis"""
+            """
+            Calculates the entropy of a Hypothesis
+            
+            :param partition: A section of the input data.
+            :type partition: list
+            :return: Entropy value of the partition.
+            :rtype: float
+            """
             
             log.debug('Starting entropy() method')
             
@@ -224,7 +269,14 @@ class Hypothesis:
             return calc
 
         def __conditionalEntropy(feature: ConstructedFeature) -> float:
-            """Calculates the entropy of a Hypothesis"""
+            """
+            Calculates the entropy of a Hypothesis
+            
+            :param feature: Constructed feature who's conditional entropy is needed.
+            :type feature: ConstructedFeature
+            :return: Entropy value of the passed feature.
+            :rtype: float
+            """
     
             log.debug('Starting conditionalEntropy() method')
 
@@ -299,15 +351,16 @@ class Hypothesis:
         return final
 
     def runCDFC(self, data: np.array) -> np.array:
-        """runCDFC transforms a dataset using the trees in the constructed features, and is use by cdfcProject
-           to convert (reduce) data using class dependent feature construction.
-        
-        Parameter:
-            data (np.array): A dataset to be converted by the CDFC algorithm.
-        
-        Return:
-            transformedData (np.array): A dataset that has been converted by the algorithm.
         """
+        runCDFC transforms a dataset using the trees in the constructed features, and is use by cdfcProject
+        to convert (reduce) data using class dependent feature construction.
+        
+        :param data: A dataset to be converted by the CDFC algorithm.
+        :type data: np.array
+        :return: A dataset that has been converted by the algorithm.
+        :rtype: np.array
+        """
+
         # this is a type hint alias for the values list where: [classID(int), value(float), value(float), ...]
         valueList = typ.List[typ.Union[int, float]]
         # a list of values lists
@@ -336,12 +389,13 @@ class Hypothesis:
         return np.array([np.array(x) for x in transformedData])
         
     def __transform(self) -> typ.List[Instance]:
-        """__transform transforms a dataset using the trees in the constructed features. This is used internally
-           during training, and will be done over the Rows constant. This is produces data of a different format
-           then runCDFC.
+        """
+        __transform transforms a dataset using the trees in the constructed features. This is used internally
+        during training, and will be done over the Rows constant. This is produces data of a different format
+        then runCDFC.
             
-            Return:
-                transformed (np.array): A new dataset, created by transforming the original one.
+        :return: A new dataset, created by transforming the original one.
+        :rtype: list
         """
     
         log.debug('Starting __transform() method')
@@ -375,28 +429,40 @@ class Hypothesis:
 
 
 class Population:
-    """Population is a list of Hypothesis, and a generation number. It is largely
-       just a namespace.
+    """
+    Population is a list of Hypothesis, and a generation number. It is largely
+    just a namespace.
     
-        Variables:
-            candidateHypotheses ([Hypothesis]): list of hypotheses
-            generationNumber (int): current generation number.
+    :var candidateHypotheses: list of hypotheses
+    :type candidateHypotheses: list
+    :var generationNumber: current generation number
+    :type generationNumber: int
     """
 
-    def __init__(self, candidates: typ.List[Hypothesis], generationNumber: int) -> None:
-        self.candidateHypotheses: typ.List[Hypothesis] = candidates  # a list of all the candidate hypotheses
-        self.generation = generationNumber     # this is the number of this generation
+    def __init__(self, candidateHypotheses: typ.List[Hypothesis], generationNumber: int) -> None:
+        # a list of all the candidate hypotheses
+        self.candidateHypotheses: typ.List[Hypothesis] = candidateHypotheses
+        # this is the number of this generation
+        self.generation = generationNumber
 # ***************** End of Namespaces/Structs & Objects ******************* #
 
 
 def __grow(classId: int, node: Node, tree: Tree) -> Node:
-    """Grow creates a tree or sub-tree starting at the Node node, and using the Grow method.
-       If node is a root Node, grow will build a tree, otherwise grow will build a sub-tree
-       starting at node. Grow assumes that node's data has already been set & makes all
-       changes in place.
+    """
+    Grow creates a tree or sub-tree starting at the Node node, and using the Grow method.
+    If node is a root Node, grow will build a tree, otherwise grow will build a sub-tree
+    starting at node. Grow assumes that node's data has already been set & makes all
+    changes in place.
 
-       NOTE: During testing whatever calls grow should use this sanity check after building
-             it to check for errors: sanityCheckTree(newTree)
+    NOTE: During testing whatever calls grow should use this sanity check after building
+          it to check for errors: sanityCheckTree(newTree)
+          
+    :param classId: ID of the class that the tree should identify.
+    :type classId: int
+    :param node: The root node of the subtree __grow will create.
+    :type node: Node
+    :param tree: Tree that __grow is building or adding to.
+    :type tree: Tree
     """
     
     coin = random.choice(['OP', 'TERM']) == 'TERM'  # flip a coin & decide OP or TERM
@@ -454,13 +520,21 @@ def __grow(classId: int, node: Node, tree: Tree) -> Node:
 
 
 def __full(classId: int, node: Node, tree: Tree):
-    """Full creates a tree or sub-tree starting at the Node node, and using the Full method.
-       If node is a root Node, full will build a tree, otherwise full will build a sub-tree
-       starting at node. Full assumes that node's data has already been set & makes all
-       changes in place.
+    """
+    Full creates a tree or sub-tree starting at the Node node, and using the Full method.
+    If node is a root Node, full will build a tree, otherwise full will build a sub-tree
+    starting at node. Full assumes that node's data has already been set & makes all
+    changes in place.
       
-       NOTE: During testing whatever calls full should use this sanity check after building
-             it to check for errors: sanityCheckTree(newTree)
+    NOTE: During testing whatever calls full should use this sanity check after building
+          it to check for errors: sanityCheckTree(newTree)
+    
+    :param classId: ID of the class that the tree should identify.
+    :type classId: int
+    :param node: The root node of the subtree __full will create.
+    :type node: Node
+    :param tree: Tree that __full is building or adding to.
+    :type tree: Tree
     """
     
     # *************************** Max Depth Reached *************************** #
@@ -513,10 +587,21 @@ def __full(classId: int, node: Node, tree: Tree):
 
 
 def createInitialPopulation() -> Population:
-    """Creates the initial population by calling createHypothesis() the needed number of times"""
+    """
+    Creates the initial population by calling createHypothesis() the needed number of times
+    
+    :return: The initial population.
+    :rtype: Population
+    """
     
     def createHypothesis() -> Hypothesis:
-        """Helper function that creates a single hypothesis"""
+        """
+        Helper function that creates a single hypothesis
+        
+        :return: A new hypothesis
+        :rtype: Hypothesis
+        """
+        
         # given a list of trees, create a hypothesis
         # NOTE this will make 1 tree for each feature, and 1 CF for each class
 
@@ -622,21 +707,32 @@ def sanityCheckTree(tree: Tree, classId):
 
 
 def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, Hypothesis]:
-    """evolve is used by CDFC during the evolution step to create the next generation of the algorithm.
-       This is done by randomly choosing between mutation & crossover based on the mutation rate.
+    """
+    evolve is used by CDFC during the evolution step to create the next generation of the algorithm.
+    This is done by randomly choosing between mutation & crossover based on the mutation rate.
     
-        Parameter:
-            population (Population): Population to be evolved.
-            elite (Hypothesis): Highest scoring Hypothesis created so far.
-            
-        Functions:
-            tournament: Finds Constructed Features to be mutated/crossover-ed.
-            mutate: Performs the mutation operation.
-            crossover: Performs the crossover operation.
+    Functions:
+        tournament: Finds Constructed Features to be mutated/crossover-ed.
+        mutate: Performs the mutation operation.
+        crossover: Performs the crossover operation.
+        
+    :param population: Population to be evolved.
+    :type population: Population
+    :param elite: Highest scoring Hypothesis created so far.
+    :type elite: Hypothesis
+    :return: A new population (index 0) and the new elite (index 1).
+    :rtype: tuple
     """
 
     def __tournament(p: Population) -> Hypothesis:
-        """Used by evolution to selection the parent(s)"""
+        """
+        Used by evolution to selection the parent(s)
+        
+        :param p: The current population of hypotheses.
+        :type p: Population
+        :return: The best hypothesis that tournament found.
+        :rtype: Hypothesis
+        """
 
         # **************** Tournament Selection **************** #
         candidates: typ.List[Hypothesis] = copy.deepcopy(p.candidateHypotheses)  # copy to avoid overwriting
@@ -676,9 +772,10 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
     newPopulation = Population([], population.generation+1)
 
     def mutate() -> None:
-        """Finds a random node and builds a new sub-tree starting at it. Currently mutate
-           uses the same grow & full methods as the initial population generation without
-           an offset. This means that mutate trees will still obey the max depth rule.
+        """
+        Finds a random node and builds a new sub-tree starting at it. Currently mutate
+        uses the same grow & full methods as the initial population generation without
+        an offset. This means that mutate trees will still obey the max depth rule.
         """
         
         log.debug('Starting mutation')
@@ -818,17 +915,19 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
     return newPopulation, elite
 
 
-def cdfc(dataIn) -> Hypothesis:
-    """cdfc is the 'main' of cdfc.py. It is called by cdfcProject which passes dataIn.
-       It then creates an initial population & evolves several hypotheses. After going
-       through a set amount ofr generations it returns a Hypothesis object.
-       
-       Parameters:
-           dataIn (tuple): Index 0 contains the values of the global constants that cdfc needs,
-                           and index 1 contains the TERMINALS dictionary.
-           
-       Return:
-           bestHypothesis: Hypothesis with the highest fitness score.
+def cdfc(dataIn, distanceFunction) -> Hypothesis:
+    """
+    cdfc is the 'main' of cdfc.py. It is called by cdfcProject which passes dataIn.
+    It then creates an initial population & evolves several hypotheses. After going
+    through a set amount ofr generations it returns a Hypothesis object.
+
+    :param dataIn: Index 0 contains the values of the global constants that cdfc needs, and
+                   index 1 contains the TERMINALS dictionary.
+    :type dataIn: tuple
+    :param distanceFunction:
+    :type distanceFunction
+    :return: Hypothesis with the highest fitness score.
+    :rtype: Hypothesis
     """
 
     values = dataIn[0]
@@ -849,7 +948,9 @@ def cdfc(dataIn) -> Hypothesis:
     # Read the values in the dictionary into the constants
     FEATURE_NUMBER = values['FEATURE_NUMBER']
     CLASS_IDS = values['CLASS_IDS']
-    DISTANCE_FUNCTION = values['DISTANCE_FUNCTION']
+    DISTANCE_FUNCTION = distanceFunction
+    # ! during testing we are just using Euclidean distance, so ignore any passed value
+    DISTANCE_FUNCTION = 'euclidean'
     # POPULATION_SIZE = values['POPULATION_SIZE']
     POPULATION_SIZE = 10
     INSTANCES_NUMBER = values['INSTANCES_NUMBER']
