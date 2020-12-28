@@ -11,10 +11,8 @@ import logging as log
 import sys
 import traceback
 import typing as typ
-from tkinter import filedialog
 
 # from pprint import pprint
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -27,33 +25,32 @@ SYSOUT = sys.stdout
 ModelList = typ.Tuple[typ.List[float], typ.List[float], typ.List[float]]  # type hinting alias
 
 
-# noinspection PyMissingOrEmptyDocstring
-def printError(err): print("\033[91m {}\033[00m" .format(err))  # used for coloring error message red
-
-
-def __createPlot(df):
-    # *** Create the Plot *** #
-    outlierSymbol = dict(markerfacecolor='tab:red', marker='D')  # change the outliers to be red diamonds
-    medianSymbol = dict(linewidth=2.5, color='tab:green')        # change the medians to be green
-    meanSymbol = dict(linewidth=2.5, color='tab:blue')           # change the means to be blue
-    fig1 = df.boxplot(showmeans=True,                            # create boxplot, store it in fig1, & show the means
-                      meanline=True,                             # show mean as a mean line
-                      flierprops=outlierSymbol,                  # set the outlier properties
-                      medianprops=medianSymbol,                  # set the median properties
-                      meanprops=meanSymbol)                      # set the mean properties
-    fig1.set_title("Accuracy")                                   # set the title of the plot
-    fig1.set_xlabel("Accuracy Ratio")                            # set the label of the x-axis
-    fig1.set_ylabel("Model Type")                                # set the label of the y-axis
-    # *** Save the Plot as an Image *** #
-    # create a list of file formats that the plot may be saved as
-    images = [('Image Files', ['.jpeg', '.jpg', '.png', '.tiff', '.tif', '.bmp'])]
-    # ask the user where they want to save the plot
-    out = filedialog.asksaveasfilename(defaultextension='.png', filetypes=images)
-    # save the plot to the location provided by the user
-    plt.savefig(out)
+def printError(message: str) -> None:
+    """
+    printError is used for coloring error messages red.
+    
+    :param message: The message to be printed.
+    :type message: str
+    
+    :return: printError does not return, but rather prints to the console.
+    :rtype: None
+    """
+    print("\033[91m {}\033[00m" .format(message))
 
 
 def __flattenTrainingData(trainList: typ.List[typ.List[np.ndarray]]) -> np.ndarray:
+    """
+    __flattenTrainingData reduces the dimension of the provided training data. These additional
+    dimensions are added during cross fold validation and are not needed by other routines/functions.
+    This function turns a list of lists of NumPy arrays into a NumPy n-dimensional array.
+    
+    :param trainList: The current training data.
+    :type trainList: List[List[np.ndarray]]
+    
+    :return: The reduced training data.
+    :rtype: np.ndarray
+    """
+    
     train = []  # currently training is a list of lists of lists because of the buckets.
     for lst in trainList:  # we can now remove the buckets by concatenating the lists of instance
         train += lst  # into one list of instances, flattening our data, & making it easier to work with
@@ -65,9 +62,19 @@ def __flattenTrainingData(trainList: typ.List[typ.List[np.ndarray]]) -> np.ndarr
 
 
 def __formatForSciKit(data: np.ndarray) -> (np.ndarray, np.ndarray):
+    """
+    __formatForSciKit takes the input data and converts it into a form that can
+    be understood by the sklearn package.
+    
+    :param data: The input data, from a read in CSV.
+    :type data: np.ndarray
+    
+    :return: The input file in a form parsable by sklearn.
+    :rtype: tuple[np.ndarray, np.ndarray]
+    """
+    
     # create the label array Y (the target of our training)
     # from all rows, pick the 0th column
-
     try:
         # + data[:, :1] get every row but only the first column
         flat = np.ravel(data[:, :1])  # get a list of all the labels as a list of lists & then flatten it
@@ -87,7 +94,20 @@ def __formatForSciKit(data: np.ndarray) -> (np.ndarray, np.ndarray):
     return ftrs, labels
 
 
-def __buildAccuracyFrame(modelsTuple: ModelList, K) -> pd.DataFrame:
+def __buildAccuracyFrame(modelsTuple: ModelList, K: int) -> pd.DataFrame:
+    """
+    __buildAccuracyFrame creates the Panda dataframe used by __accuracyFrameToLatex.
+    
+    :param modelsTuple: The results of the classification models (KNN, Decision Tree, Naive Bayes)
+    :param K: The number of "buckets" (folds) used in K Fold Cross Validation.
+    
+    :type modelsTuple: ModelList
+    :type K: int
+    
+    :return: pd.DataFrame
+    :rtype: pd.DataFrame
+    """
+    
     SYSOUT.write("Creating accuracy dataframe...\n")  # update user
     
     # get the models from the tuple
@@ -95,34 +115,48 @@ def __buildAccuracyFrame(modelsTuple: ModelList, K) -> pd.DataFrame:
     dtAccuracy = modelsTuple[1]
     nbAccuracy = modelsTuple[2]
     
-    SYSOUT.write(HDR + ' Creating dictionary ......')
+    # SYSOUT.write(HDR + ' Creating dictionary ......')
     # use accuracy data to create a dictionary. This will become the frame
     accuracyList = {'KNN': knnAccuracy, 'Decision Tree': dtAccuracy, 'Naive Bayes': nbAccuracy}
-    SYSOUT.write(OVERWRITE + ' Dictionary created '.ljust(50, '-') + SUCCESS)
+    # SYSOUT.write(OVERWRITE + ' Dictionary created '.ljust(50, '-') + SUCCESS)
     
-    SYSOUT.write(HDR + ' Creating labels ......')
+    # SYSOUT.write(HDR + ' Creating labels ......')
     # this will create labels for each instance ("fold") of the model, of the form "Fold i"
     rowList = [["Fold {}".format(i) for i in range(1, K + 1)]]
-    SYSOUT.write(OVERWRITE + ' Labels created successfully '.ljust(50, '-') + SUCCESS)
+    # SYSOUT.write(OVERWRITE + ' Labels created successfully '.ljust(50, '-') + SUCCESS)
     
-    SYSOUT.write(HDR + ' Creating dataframe ......')
+    # SYSOUT.write(HDR + ' Creating dataframe ......')
     # create the dataframe. It will be used both by the latex & the plot exporter
     df = pd.DataFrame(accuracyList, columns=['KNN', 'Decision Tree', 'Naive Bayes'], index=rowList)
-    SYSOUT.write(OVERWRITE + ' Dataframe created successfully '.ljust(50, '-') + SUCCESS)
+    # SYSOUT.write(OVERWRITE + ' Dataframe created successfully '.ljust(50, '-') + SUCCESS)
     
-    SYSOUT.write('Accuracy Dataframe created without error\n')  # update user
+    # SYSOUT.write('Accuracy Dataframe created without error\n')  # update user
     
     return df
 
 
-def __accuracyFrameToLatex(modelsTuple: typ.Tuple[typ.List[float], typ.List[float], typ.List[float]],
-                           df: pd.DataFrame) -> pd.DataFrame:
+def __accuracyFrameToLatex(modelsTuple: ModelList, df: pd.DataFrame) -> pd.DataFrame:
+    """
+    __accuracyFrameToLatex modifies a Panda dataframe, making it ready to be
+    converted to Latex. It returns the modified dataframe, and does not convert
+    it to Latex (so frame.to_latex() must still be called).
+    
+    :param modelsTuple: The results of the classification models (KNN, Decision Tree, Naive Bayes)
+    :param df: The Panda dataframe to be converted.
+    
+    :type modelsTuple: ModelList
+    :type df: pd.DataFrame
+    
+    :return: pd.DataFrame
+    :rtype: pd.DataFrame
+    """
+    
     SYSOUT.write("\nConverting frame to LaTeX...\n")  # update user
     SYSOUT.write(HDR + ' Transposing dataframe')  # update user
     SYSOUT.flush()  # no newline, so buffer must be flushed to console
     
     # transposing passes a copy, so as to avoid issues with plot (should we want it)
-    frame = df.transpose()  # update user
+    frame: pd.DataFrame = df.transpose()  # update user
     
     SYSOUT.write(OVERWRITE + ' Dataframe transposed '.ljust(50, '-') + SUCCESS)
     

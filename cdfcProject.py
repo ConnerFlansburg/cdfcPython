@@ -18,6 +18,7 @@ import tkinter as tk
 from pathlib import Path
 
 # from tkinter import messagebox
+from tkinter import filedialog
 from alive_progress import config_handler
 from pyfiglet import Figlet
 from scipy import stats
@@ -56,11 +57,6 @@ ScalarsIn = typ.Union[None, StandardScaler]
 config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', title_length=0, length=20)  # the global config for the loading bars
 # config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', force_tty=True, title_length=0, length=10)  # the global config for the loading bars
 # ******************************************************************************************************************** #
-
-
-def printError(err):
-    """used for coloring error message red"""
-    print("\033[91m {}\033[00m" .format(err))
 
 
 # * Next Steps
@@ -575,7 +571,20 @@ def __fillBuckets(entries: np.ndarray) -> typ.List[typ.List[np.ndarray]]:
     return buckets
 
 
+# TODO check what this function is doing & update docstring
 def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, useNormalize: bool) -> typ.List[float]:
+    """
+    __buildModel
+    
+    :param buckets:
+    :type buckets:
+    :param model: model that will make use of the feature reduction done by CDFC
+    :type model: ModelTypes
+    :param useNormalize: should the original data be normalized
+    :type useNormalize: bool
+    :return: the classifications of the instances
+    :rtype: typ.List[float]
+    """
     
     # determine the type of model we are using for printing later
     if type(model) == KNeighborsClassifier:
@@ -711,8 +720,9 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
 
 # ! for testing purposes only!
 def __sanityCheckDictionary(d: typ.Dict[int, typ.List[int]]) -> None:
-    """ A Sanity check for the dictionary that cdfcProject will send to cdfc.
-        This is used in testing only, and checks that the dictionary is non-empty.
+    """
+    A Sanity check for the dictionary that cdfcProject will send to cdfc.
+    This is used in testing only, and checks that the dictionary is non-empty.
     
     :param d: dictionary to be tested.
     :type d: dict
@@ -738,8 +748,9 @@ def __sanityCheckDictionary(d: typ.Dict[int, typ.List[int]]) -> None:
 
 
 def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> ModelList:
-    """ __runSciKitModels builds the non-CDFC models & returns the
-        constructed models as a list.
+    """
+    __runSciKitModels builds the non-CDFC models & returns the
+    constructed models as a list.
     
     :param entries: the parsed input file
     :type entries: np.ndarray
@@ -773,7 +784,8 @@ def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> ModelList:
 
 
 def run(fnc: str) -> None:
-    """ run is the entry point for main.py. It prompts the user for a file, parses it, builds the required models,
+    """
+    run is the entry point for main.py. It prompts the user for a file, parses it, builds the required models,
     formats the data frames, and general coordinates the other models with CDFC.
     
     :param fnc: the distance function to be used. It should be provided via command line flags (see main.py).

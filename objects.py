@@ -52,14 +52,16 @@ TreeCount = countTrees()  # create a generator for tree count
 
 
 class WrapperInstance:
-    """Instance is an instance, or row, within our data set. It represents a single
-       record of whatever we are measuring. This replaces the earlier row struct.
-
-    Variables:
-        className (int): The class id of the class that the record is in (this class ids start at 0).
-        attribute ({key: int, value: float}): This dictionary stores the features values in the
-                                                  instance, keyed by index (these start at 0)
-        vList ([float]): The list of the values stored in the dictionary (used to speed up iteration)
+    """
+    Instance is an instance, or row, within our data set. It represents a single
+    record of whatever we are measuring. This replaces the earlier row struct.
+    
+    :var className: The class id of the class that the record is in (this class ids start at 0).
+    :var attributes: This dictionary stores the features values in the instance, keyed by index (these start at 0)
+    :var vList: The list of the values stored in the dictionary (used to speed up iteration)
+    :type className: int
+    :type attributes: dict
+    :type vList: list
     """
     
     def __init__(self, className: int, values: np.ndarray):
@@ -86,26 +88,28 @@ class WrapperInstance:
 
 
 class cdfcInstance:
-    """Instance is an instance, or row, within our data set. It represents a single
-       record of whatever we are measuring. This replaces the earlier row struct.
+    """
+    Instance is an instance, or row, within our data set. It represents a single
+    record of whatever we are measuring. This replaces the earlier row struct.
 
-    Variables:
-        className (int): The class id of the class that the record is in (this class ids start at 0).
-        attribute ({key: int, value: float}): This dictionary stores the features values in the
-                                                  instance, keyed by index (these start at 0)
-        vList ([float]): The list of the values stored in the dictionary (used to speed up iteration)
+    :var className: The class id of the class that the record is in (this class ids start at 0).
+    :var attributes: This dictionary stores the features values in the instance, keyed by index (these start at 0)
+    :var vList: The list of the values stored in the dictionary (used to speed up iteration)
+    :type className: int
+    :type attributes: dict
+    :type vList: list
     """
     
-    def __init__(self, className: int, values: typ.Dict[int, float], vlist: typ.Optional[typ.List[float]] = None):
+    def __init__(self, className: int, attributes: typ.Dict[int, float], vList: typ.Optional[typ.List[float]] = None):
         # this stores the name of the class that the instance is in
         self.className: int = className
         # this stores the values of the features, keyed by index, in the instance
-        self.attributes: typ.Dict[int, float] = values
+        self.attributes: typ.Dict[int, float] = attributes
         # this creates a list of the values stored in the dictionary for when iteration is wanted
-        if vlist is None:
+        if vList is None:
             self.vList: typ.List[float] = list(self.attributes.values())  # ? is this to expensive?
         else:
-            self.vList: typ.List[float] = vlist
+            self.vList: typ.List[float] = vList
         
         try:  # check that all the feature values are valid
             if None in self.attributes.values():  # if a None is in the list of feature values
@@ -125,11 +129,6 @@ class Tree(libTree):
     """Tree is a binary tree data structure that is used to represent a
        constructed feature
 
-    Variables:
-        left: Left child of the tree. This will be a tree object.
-        right: Right child of the tree. This will be a tree object.
-        data: Will either be a terminal character or a function name.
-
     Methods:
         addLeft: Creates a left child.
         addRight: Creates a right child.
@@ -142,6 +141,13 @@ class Tree(libTree):
         getMiddle: Getter for middle.
         runTree: Wrapper function for __runNode, and is used to __transform data using the tree.
         __runNode: Helper function for runTree.
+        
+    :var left: Left child of the tree.
+    :var right: Right child of the tree.
+    :var data: Will either be a terminal character or a function name.
+    :type left: Tree
+    :type right: Tree
+    :type data: str
     """
     # typing alias for tree nodes. They will either have a terminal index (int) or an OP (str)
     TREE_DATA = typ.Union[int, str]
@@ -318,9 +324,11 @@ class Tree(libTree):
         return new
     
     def addSubTree(self, parent: Node, branch: str, subtree: "Tree"):
-        """Adds a subtree as a child of parent. This will also update the BRANCHES
-           dictionary & should overwrite any old values. This shouldn't delete
-           values from the old tree's dictionary as subtree is a copy"""
+        """
+        Adds a subtree as a child of parent. This will also update the BRANCHES dictionary
+        & should overwrite any old values. This shouldn't delete values from the old tree's
+        dictionary as subtree is a copy
+        """
         
         try:
             self.BRANCHES[parent.identifier][branch] = subtree.root  # add the subtree root to the dictionary
@@ -444,33 +452,39 @@ class Tree(libTree):
     # featureValues -- the values of the relevant features keyed by their index in the original data
     def runTree(self, featureValues: typ.Dict[int, float], classId: int,
                 terminals: typ.Dict[int, typ.List[int]]) -> float:
-        """runTree is a wrapper for runNode & is used to __transform provided data
-           by walking the decision tree
+        """
+        runTree is a wrapper for runNode & is used to __transform provided data
+        by walking the decision tree
 
-        Parameters:
-            featureValues ({key: int, value: float}): The dictionary mapping feature ids to
-                                                      their values (in the current instance).
-            classId (int): Class ID the tree is meant to classify.
-            terminals (typ.Dict[int, typ.List[int]]): The dictionary that maps class ids to their relevant features.
-
-        Returns:
-            (float): The final value that the decision tree creates given the provided data.
+        :param featureValues: The dictionary mapping feature ids to their values (in the current instance).
+        :param classId: The class the tree is meant to identify (this is used to find the terminal values).
+        :param terminals: The dictionary that maps class ids to their relevant features.
+        :type featureValues: dict
+        :type classId: The value of a terminal, or the value computed by one or more operations.
+        :type terminals: dict
+        
+        :returns: The final value that the decision tree creates given the provided data.
+        :rtype: float
         """
         
         return self.__runNode(featureValues, self.getRoot(), classId, terminals)
     
     def __runNode(self, featureValues: typ.Dict[int, float], node: Node,
                   classId: int, terminals: typ.Dict[int, typ.List[int]]) -> typ.Union[int, float]:
-        """runTree is a wrapper for runNode & is used to __transform provided data
-           by walking the decision tree
-
-        Parameters:
-            featureValues ({key: int, value: float}): The dictionary mapping feature ids to
-                                                      their values (in the current instance).
-            terminals (typ.Dict[int, typ.List[int]]): The dictionary that maps class ids to their relevant features.
-
-        Returns:
-            (float): The value of a terminal, or the value computed by one or more operations.
+        """
+        __runNode is used to transform provided data by walking the decision tree.
+        
+        :param featureValues: The dictionary mapping feature ids to their values (in the current instance).
+        :param node: The node being examined (this is used during recursion).
+        :param classId: The class the tree is meant to identify (this is used to find the terminal values).
+        :param terminals: The dictionary that maps class ids to their relevant features.
+        :type featureValues: dict
+        :type node: Node
+        :type classId: The value of a terminal, or the value computed by one or more operations.
+        :type terminals: dict
+        
+        :returns: The transformed value.
+        :rtype: float
         """
         
         try:

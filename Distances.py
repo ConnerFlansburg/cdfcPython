@@ -68,7 +68,6 @@ def __Czekanowski(Vi: typ.List[float], Vj: typ.List[float]) -> typ.Union[float, 
     :rtype: typ.Union[float, int]
     """
     
-    
     log.debug('Starting Czekanowski() method')
     
     # ************************** Error checking ************************** #
