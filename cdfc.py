@@ -96,17 +96,19 @@ class ConstructedFeature:
     with additional information about the feature.
 
     :var className: Class id of the class that the feature is meant to distinguish.
-    :type className: int
     :var tree: Constructed feature's binary decision tree.
-    :type tree: Tree
     :var size: Number of nodes in the tree
-    :type size: int
     :var relevantFeatures: List of terminal characters relevant to the feature's class.
+    
+    :type className: int
+    :type tree: Tree
+    :type size: int
     :type relevantFeatures: list[int]
     
     """
 
     def __init__(self, className: int, tree: Tree) -> None:
+        """Constructor for the ConstructedFeature object"""
         self.className = className                    # the name of the class this tree is meant to distinguish
         self.tree = tree                              # the root node of the constructed feature
         self.size = tree.size                         # the individual size (the size of the tree)
@@ -119,6 +121,7 @@ class ConstructedFeature:
         
         :param instance: Instance to be transformed.
         :type instance: Instance
+        
         :return: The new value computed by running the tree's operations on the provided instance.
         :rtype: float
         """
@@ -140,6 +143,7 @@ class Hypothesis:
     :var distance: Calculated distance value.
     :var averageInfoGain: Average of every features info gain.
     :var maxInfoGain: Largest info gain for any feature.
+    
     :type features: list[ConstructedFeature]
     :type size: int
     :type fitness: float
@@ -149,9 +153,9 @@ class Hypothesis:
         
      
             
-        Methods:
-            getFitness: Get the fitness score of the Hypothesis
-            __transform: Transforms a dataset using the trees in the constructed features.
+    Methods:
+        getFitness: Get the fitness score of the Hypothesis
+        __transform: Transforms a dataset using the trees in the constructed features.
 
     """
 
@@ -163,6 +167,7 @@ class Hypothesis:
     # + averageInfoGain & maxInfoGain must be low enough that they will always be overwritten + #
     
     def __init__(self, features: typ.List[ConstructedFeature], size: int) -> None:
+        """Constructor for the Hypothesis object"""
         self.features: typ.List[ConstructedFeature] = features      # a list of all the constructed features
         self.size: int = size                                       # the number of nodes in all the cfs
         self.idsToFeatures: typ.Dict[int, ConstructedFeature] = {}  # key all the CFs by their class ids
@@ -173,18 +178,21 @@ class Hypothesis:
     @property
     def fitness(self) -> typ.Union[int, float]:
         """
-        Getter for fitness.
+        Getter for fitness & a wrapper for getFitness() which calculates the fitness value.
         
         :return: Hypothesis's fitness.
         :rtype: float or int
         """
+        
         if self._fitness is None:  # if fitness isn't set
-            self.getFitness()      # run fitness to set it
+            self.__newFitness()    # set the fitness score
         return self._fitness       # either way return fitness
     
-    def getFitness(self) -> float:
+    def __newFitness(self) -> float:
         """
-        getFitness uses several helper functions to calculate the fitness of a Hypothesis
+        __newFitness uses several helper functions to calculate the fitness of a Hypothesis. This
+        should only be called by it's wrapper function fitness(). This is because __newFitness will
+        calculate a new fitness value everytime it's called, even if the fitness already has a value
         
         :return: Fitness value of a Hypothesis.
         :rtype: float
@@ -192,13 +200,13 @@ class Hypothesis:
     
         log.debug('Starting getFitness() method')
         
-        # TODO why was Czk called?
         def Distance(values: typ.List[Instance]) -> float:
             """"
             Distance calculates the distance value of the Hypothesis
             
             :param values: List of the instances who's distance we wish to compute.
             :type values: list
+            
             :return: Distance value calculated using the chosen distance function.
             :rtype: float
             """
@@ -244,6 +252,7 @@ class Hypothesis:
             
             :param partition: A section of the input data.
             :type partition: list
+            
             :return: Entropy value of the partition.
             :rtype: float
             """
@@ -274,6 +283,7 @@ class Hypothesis:
             
             :param feature: Constructed feature who's conditional entropy is needed.
             :type feature: ConstructedFeature
+            
             :return: Entropy value of the passed feature.
             :rtype: float
             """
@@ -357,6 +367,7 @@ class Hypothesis:
         
         :param data: A dataset to be converted by the CDFC algorithm.
         :type data: np.array
+
         :return: A dataset that has been converted by the algorithm.
         :rtype: np.array
         """
@@ -434,16 +445,20 @@ class Population:
     just a namespace.
     
     :var candidateHypotheses: list of hypotheses
-    :type candidateHypotheses: list
     :var generationNumber: current generation number
+    
+    :type candidateHypotheses: list
     :type generationNumber: int
     """
 
     def __init__(self, candidateHypotheses: typ.List[Hypothesis], generationNumber: int) -> None:
+        """Constructor for the Population object"""
+        
         # a list of all the candidate hypotheses
         self.candidateHypotheses: typ.List[Hypothesis] = candidateHypotheses
         # this is the number of this generation
         self.generation = generationNumber
+
 # ***************** End of Namespaces/Structs & Objects ******************* #
 
 
@@ -454,14 +469,15 @@ def __grow(classId: int, node: Node, tree: Tree) -> Node:
     starting at node. Grow assumes that node's data has already been set & makes all
     changes in place.
 
-    NOTE: During testing whatever calls grow should use this sanity check after building
-          it to check for errors: sanityCheckTree(newTree)
-          
+    NOTE:
+    During testing whatever calls grow should use the sanity check sanityCheckTree(newTree)
+
     :param classId: ID of the class that the tree should identify.
-    :type classId: int
     :param node: The root node of the subtree __grow will create.
-    :type node: Node
     :param tree: Tree that __grow is building or adding to.
+
+    :type classId: int
+    :type node: Node
     :type tree: Tree
     """
     
@@ -526,14 +542,15 @@ def __full(classId: int, node: Node, tree: Tree):
     starting at node. Full assumes that node's data has already been set & makes all
     changes in place.
       
-    NOTE: During testing whatever calls full should use this sanity check after building
-          it to check for errors: sanityCheckTree(newTree)
+    NOTE:
+    During testing whatever calls full should use the sanity check sanityCheckTree(newTree)
     
     :param classId: ID of the class that the tree should identify.
-    :type classId: int
     :param node: The root node of the subtree __full will create.
-    :type node: Node
     :param tree: Tree that __full is building or adding to.
+    
+    :type classId: int
+    :type node: Node
     :type tree: Tree
     """
     
@@ -588,7 +605,7 @@ def __full(classId: int, node: Node, tree: Tree):
 
 def createInitialPopulation() -> Population:
     """
-    Creates the initial population by calling createHypothesis() the needed number of times
+    Creates the initial population by calling createHypothesis() the needed number of times.
     
     :return: The initial population.
     :rtype: Population
@@ -717,9 +734,11 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         crossover: Performs the crossover operation.
         
     :param population: Population to be evolved.
-    :type population: Population
     :param elite: Highest scoring Hypothesis created so far.
+    
+    :type population: Population
     :type elite: Hypothesis
+    
     :return: A new population (index 0) and the new elite (index 1).
     :rtype: tuple
     """
@@ -730,6 +749,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         
         :param p: The current population of hypotheses.
         :type p: Population
+        
         :return: The best hypothesis that tournament found.
         :rtype: Hypothesis
         """
@@ -743,7 +763,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             candidate: Hypothesis = candidates.pop(randomIndex)   # get the hypothesis at the random index
             # we pop here to avoid getting duplicates. The index uses candidates current size so it will be in range
             log.debug('Making getFitness method call in Tournament')
-            fitness = candidate.getFitness()                      # get that hypothesis's fitness score
+            fitness = candidate.fitness                           # get that hypothesis's fitness score
             log.debug('Finished getFitness method call in Tournament')
 
             if first is None:      # if first has not been set,
@@ -907,8 +927,8 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             
             # ****************** Elitism ****************** #
             # check that if latest hypothesis has a higher fitness than our current elite
-            newHypothFitness = newPopulation.candidateHypotheses[-1].getFitness()
-            if newHypothFitness > elite.getFitness():
+            newHypothFitness = newPopulation.candidateHypotheses[-1].fitness
+            if newHypothFitness > elite.fitness:
                 elite = newPopulation.candidateHypotheses[-1]
             # ************** End of Elitism *************** #
 
@@ -923,9 +943,11 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
 
     :param dataIn: Index 0 contains the values of the global constants that cdfc needs, and
                    index 1 contains the TERMINALS dictionary.
-    :type dataIn: tuple
     :param distanceFunction:
+    
+    :type dataIn: tuple
     :type distanceFunction
+    
     :return: Hypothesis with the highest fitness score.
     :rtype: Hypothesis
     """
