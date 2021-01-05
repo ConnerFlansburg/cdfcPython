@@ -59,6 +59,7 @@ class WrapperInstance:
     :var className: The class id of the class that the record is in (this class ids start at 0).
     :var attributes: This dictionary stores the features values in the instance, keyed by index (these start at 0)
     :var vList: The list of the values stored in the dictionary (used to speed up iteration)
+    
     :type className: int
     :type attributes: dict
     :type vList: list
@@ -95,6 +96,7 @@ class cdfcInstance:
     :var className: The class id of the class that the record is in (this class ids start at 0).
     :var attributes: This dictionary stores the features values in the instance, keyed by index (these start at 0)
     :var vList: The list of the values stored in the dictionary (used to speed up iteration)
+    
     :type className: int
     :type attributes: dict
     :type vList: list
@@ -145,6 +147,7 @@ class Tree(libTree):
     :var left: Left child of the tree.
     :var right: Right child of the tree.
     :var data: Will either be a terminal character or a function name.
+    
     :type left: Tree
     :type right: Tree
     :type data: str
@@ -459,6 +462,7 @@ class Tree(libTree):
         :param featureValues: The dictionary mapping feature ids to their values (in the current instance).
         :param classId: The class the tree is meant to identify (this is used to find the terminal values).
         :param terminals: The dictionary that maps class ids to their relevant features.
+        
         :type featureValues: dict
         :type classId: The value of a terminal, or the value computed by one or more operations.
         :type terminals: dict
@@ -478,6 +482,7 @@ class Tree(libTree):
         :param node: The node being examined (this is used during recursion).
         :param classId: The class the tree is meant to identify (this is used to find the terminal values).
         :param terminals: The dictionary that maps class ids to their relevant features.
+        
         :type featureValues: dict
         :type node: Node
         :type classId: The value of a terminal, or the value computed by one or more operations.

@@ -16,11 +16,13 @@ def computeDistance(func: str, Vi: typ.List[float], Vj: typ.List[float]) -> typ.
     """ Computes the distance using the provided distance function.
 
     :param func: Lowercase string name of the function to use.
-    :type func: str
     :param Vi: First 1d vector
-    :type Vi: typ.List[float]
     :param Vj: Second 1d vector
+    
+    :type func: str
+    :type Vi: typ.List[float]
     :type Vj: typ.List[float]
+    
     :return: vector of distance values
     :rtype: typ.Union[float, int]
     """
@@ -42,9 +44,11 @@ def __Euclidean(Vi: typ.List[float], Vj: typ.List[float]) -> typ.Union[float, in
     """ Used to by computeDistance to calculate the Euclidean distance.
     
     :param Vi: First 1d vector
-    :type Vi: typ.List[float]
     :param Vj: Second 1d vector
+    
+    :type Vi: typ.List[float]
     :type Vj: typ.List[float]
+    
     :return: vector of distance values
     :rtype: typ.Union[float, int]
     """
@@ -61,9 +65,11 @@ def __Czekanowski(Vi: typ.List[float], Vj: typ.List[float]) -> typ.Union[float, 
     """ Used to by computeDistance to calculate the Czekanowski distance.
 
     :param Vi: First 1d vector
-    :type Vi: typ.List[float]
     :param Vj: Second 1d vector
+    
+    :type Vi: typ.List[float]
     :type Vj: typ.List[float]
+    
     :return: vector of distance values
     :rtype: typ.Union[float, int]
     """

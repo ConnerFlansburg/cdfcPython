@@ -766,16 +766,20 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         """
 
         # **************** Tournament Selection **************** #
-        candidates: typ.List[Hypothesis] = copy.deepcopy(p.candidateHypotheses)  # copy to avoid overwriting
+        # TODO try to find a way to avoid the deep copy here
+        # get a list including every valid index in candidateHypotheses
+        positions: typ.List[int] = list(range(len(p.candidateHypotheses)))
         first = None  # the tournament winner
         score = 0     # the winning score
         for i in range(TOURNEY):  # compare TOURNEY number of random hypothesis
-            randomIndex = random.choice(range(len(candidates)))   # get a random index value
-            candidate: Hypothesis = candidates.pop(randomIndex)   # get the hypothesis at the random index
-            # we pop here to avoid getting duplicates. The index uses candidates current size so it will be in range
-            log.debug('Making getFitness method call in Tournament')
-            fitness = candidate.fitness                           # get that hypothesis's fitness score
-            log.debug('Finished getFitness method call in Tournament')
+            
+            randomIndex = random.choice(positions)   # choose a random index in p.candidateHypotheses
+            
+            positions.remove(randomIndex)  # remove the chosen value from the list of indexes (avoids duplicates)
+            
+            candidate: Hypothesis = p.candidateHypotheses[randomIndex]   # get the hypothesis at the random index
+
+            fitness = candidate.fitness                                  # get that hypothesis's fitness score
 
             if first is None:      # if first has not been set,
                 first = candidate  # then  set it

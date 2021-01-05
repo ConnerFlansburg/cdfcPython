@@ -577,11 +577,13 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
     __buildModel
     
     :param buckets:
-    :type buckets:
     :param model: model that will make use of the feature reduction done by CDFC
-    :type model: ModelTypes
     :param useNormalize: should the original data be normalized
+    
+    :type buckets:
+    :type model: ModelTypes
     :type useNormalize: bool
+    
     :return: the classifications of the instances
     :rtype: typ.List[float]
     """
@@ -726,6 +728,7 @@ def __sanityCheckDictionary(d: typ.Dict[int, typ.List[int]]) -> None:
     
     :param d: dictionary to be tested.
     :type d: dict
+    
     :return: either raises an exception or returns None if dictionary is non-empty.
     :rtype: None
     """
@@ -753,9 +756,11 @@ def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> ModelList:
     constructed models as a list.
     
     :param entries: the parsed input file
-    :type entries: np.ndarray
     :param useNormalize: a flag that is true if the data should be normalized
+    
+    :type entries: np.ndarray
     :type useNormalize: bool
+    
     :return: the constructed models
     :rtype: typ.List[typ.List[float]]
     """
@@ -790,6 +795,7 @@ def run(fnc: str) -> None:
     
     :param fnc: the distance function to be used. It should be provided via command line flags (see main.py).
     :type fnc: str
+    
     :return: run either crashes or returns a None on a success.
     :rtype: None
     """
