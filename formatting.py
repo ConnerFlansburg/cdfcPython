@@ -22,8 +22,6 @@ SUCCESS = u' \u2713\n'
 OVERWRITE = '\r' + HDR
 SYSOUT = sys.stdout
 
-ModelList = typ.Tuple[typ.List[float], typ.List[float], typ.List[float]]  # type hinting alias
-
 
 def printError(message: str) -> None:
     """
@@ -38,7 +36,7 @@ def printError(message: str) -> None:
     print("\033[91m {}\033[00m" .format(message))
 
 
-def __flattenTrainingData(trainList: typ.List[typ.List[np.ndarray]]) -> np.ndarray:
+def flattenTrainingData(trainList: typ.List[typ.List[np.ndarray]]) -> np.ndarray:
     """
     __flattenTrainingData reduces the dimension of the provided training data. These additional
     dimensions are added during cross fold validation and are not needed by other routines/functions.
@@ -61,7 +59,7 @@ def __flattenTrainingData(trainList: typ.List[typ.List[np.ndarray]]) -> np.ndarr
     return train
 
 
-def __formatForSciKit(data: np.ndarray) -> (np.ndarray, np.ndarray):
+def formatForSciKit(data: np.ndarray) -> (np.ndarray, np.ndarray):
     """
     __formatForSciKit takes the input data and converts it into a form that can
     be understood by the sklearn package.
@@ -94,102 +92,57 @@ def __formatForSciKit(data: np.ndarray) -> (np.ndarray, np.ndarray):
     return ftrs, labels
 
 
-def __buildAccuracyFrame(modelsTuple: ModelList, K: int) -> pd.DataFrame:
+def buildAccuracyFrame(accuracyScores: typ.List[float], K: int, learningModel: str) -> pd.DataFrame:
     """
     __buildAccuracyFrame creates the Panda dataframe used by __accuracyFrameToLatex.
     
-    :param modelsTuple: The results of the classification models (KNN, Decision Tree, Naive Bayes)
+    :param accuracyScores: The accuracy list created by __buildModel() in cdfcProject
     :param K: The number of "buckets" (folds) used in K Fold Cross Validation.
+    :param learningModel:
     
-    :type modelsTuple: ModelList
+    :type accuracyScores:
     :type K: int
+    :type learningModel: str
     
     :return: pd.DataFrame
     :rtype: pd.DataFrame
     """
     
-    SYSOUT.write("Creating accuracy dataframe...\n")  # update user
+    # *** Build the Labels *** #
+    # this will create labels for each bucket ("fold") of the model, of the form "Fold i Accuracy"
+    columnList = [f"Fold {i} Accuracy" for i in range(1, K + 1)]
     
-    # get the models from the tuple
-    knnAccuracy = modelsTuple[0]
-    dtAccuracy = modelsTuple[1]
-    nbAccuracy = modelsTuple[2]
+    # this will create the labels for stats we will calculate and add them to the end of columnList
+    stats: typ.List[str] = ["min", "median", "mean", "max"]
+    columnList += stats
     
-    # SYSOUT.write(HDR + ' Creating dictionary ......')
-    # use accuracy data to create a dictionary. This will become the frame
-    accuracyList = {'KNN': knnAccuracy, 'Decision Tree': dtAccuracy, 'Naive Bayes': nbAccuracy}
-    # SYSOUT.write(OVERWRITE + ' Dictionary created '.ljust(50, '-') + SUCCESS)
+    # *** Calculate the Statistics *** #
+    mn = min(accuracyScores)
+    median = np.median(accuracyScores)
+    mean = np.mean(accuracyScores)
+    mx = max(accuracyScores)
     
-    # SYSOUT.write(HDR + ' Creating labels ......')
-    # this will create labels for each instance ("fold") of the model, of the form "Fold i"
-    rowList = [["Fold {}".format(i) for i in range(1, K + 1)]]
-    # SYSOUT.write(OVERWRITE + ' Labels created successfully '.ljust(50, '-') + SUCCESS)
+    # put the calculated stats into a list
+    statsList = [mn, median, mean, mx]
+    accuracyScores += statsList  # add the stats to the accuracy scores
+
+    # *** Build the Dataframe *** #
+    try:
+        # create the dataframe
+        df = pd.DataFrame(accuracyScores, index=columnList, columns=[f'{learningModel} Accuracy'])
     
-    # SYSOUT.write(HDR + ' Creating dataframe ......')
-    # create the dataframe. It will be used both by the latex & the plot exporter
-    df = pd.DataFrame(accuracyList, columns=['KNN', 'Decision Tree', 'Naive Bayes'], index=rowList)
-    # SYSOUT.write(OVERWRITE + ' Dataframe created successfully '.ljust(50, '-') + SUCCESS)
+        # format the dataframe
+        df *= 100         # turn the decimal into a percent
+        df = df.round(1)  # round to 1 decimal place
+        df = df.T         # transpose the dataframe, making it ready for latex
     
-    # SYSOUT.write('Accuracy Dataframe created without error\n')  # update user
+    except Exception as err:
+        lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+        msg: str = f'ERROR is formatting.py, line {lineNm}\n{str(err)}'  # create the message
+        printError(msg)  # print the message
+        print(f'columnList = {columnList}\nstatsList = {statsList}')  # print objects/data
+        print(f'accuracyScores = {accuracyScores}')
+        printError(traceback.format_exc())  # print stack trace
+        sys.exit(-1)  # exit on error; recovery not possible
     
     return df
-
-
-def __accuracyFrameToLatex(modelsTuple: ModelList, df: pd.DataFrame) -> pd.DataFrame:
-    """
-    __accuracyFrameToLatex modifies a Panda dataframe, making it ready to be
-    converted to Latex. It returns the modified dataframe, and does not convert
-    it to Latex (so frame.to_latex() must still be called).
-    
-    :param modelsTuple: The results of the classification models (KNN, Decision Tree, Naive Bayes)
-    :param df: The Panda dataframe to be converted.
-    
-    :type modelsTuple: ModelList
-    :type df: pd.DataFrame
-    
-    :return: pd.DataFrame
-    :rtype: pd.DataFrame
-    """
-    
-    SYSOUT.write("\nConverting frame to LaTeX...\n")  # update user
-    SYSOUT.write(HDR + ' Transposing dataframe')  # update user
-    SYSOUT.flush()  # no newline, so buffer must be flushed to console
-    
-    # transposing passes a copy, so as to avoid issues with plot (should we want it)
-    frame: pd.DataFrame = df.transpose()  # update user
-    
-    SYSOUT.write(OVERWRITE + ' Dataframe transposed '.ljust(50, '-') + SUCCESS)
-    
-    # get the models from the tuple
-    knnAccuracy = modelsTuple[0]
-    dtAccuracy = modelsTuple[1]
-    nbAccuracy = modelsTuple[2]
-    
-    SYSOUT.write(HDR + ' Calculating statistics...')  # update user
-    SYSOUT.flush()  # no newline, so buffer must be flushed to console
-    
-    mn = [min(knnAccuracy), min(dtAccuracy), min(nbAccuracy)]  # create the new min,
-    median = [np.median(knnAccuracy), np.median(dtAccuracy), np.median(nbAccuracy)]  # median,
-    mean = [np.mean(knnAccuracy), np.mean(dtAccuracy), np.mean(nbAccuracy)]  # mean,
-    mx = [max(knnAccuracy), max(dtAccuracy), max(nbAccuracy)]  # & max columns
-    
-    SYSOUT.write(OVERWRITE + ' Statistics calculated '.ljust(50, '-') + SUCCESS)  # update user
-    
-    SYSOUT.write(HDR + ' Adding statistics to dataframe...')  # update user
-    SYSOUT.flush()  # no newline, so buffer must be flushed to console
-    
-    frame['min'] = mn  # add the min,
-    frame['median'] = median  # median,
-    frame['mean'] = mean  # mean,
-    frame['max'] = mx  # & max columns to the dataframe
-    
-    SYSOUT.write(OVERWRITE + ' Statistics added to dataframe '.ljust(50, '-') + SUCCESS)  # update user
-    SYSOUT.write(HDR + ' Converting dataframe to percentages...')  # update user
-    SYSOUT.flush()  # no newline, so buffer must be flushed to console
-    
-    frame *= 100  # turn the decimal into a percent
-    frame = frame.round(1)  # round to 1 decimal place
-    
-    SYSOUT.write(OVERWRITE + ' Converted dataframe values to percentages '.ljust(50, '-') + SUCCESS)  # update user
-    
-    return frame

@@ -27,11 +27,9 @@ from objects import cdfcInstance as Instance
 # ! Next Steps
 # TODO update comments on new code
 # TODO add exceptions to comments
-# TODO change docstrings to be parse-able
 # TODO performance enhancements
 
 # TODO check copyright on imported packages
-# TODO set value in n/0 case
 # TODO add testing functions
 
 # **************************** Constants/Globals **************************** #
@@ -40,10 +38,10 @@ ALPHA: typ.Final = 0.8                        # ALPHA is the fitness weight alph
 BARCOLS = 25                                  # BARCOLS is the number of columns for the progress bar to print
 CROSSOVER_RATE: typ.Final = 0.8               # CROSSOVER_RATE is the chance that a candidate will reproduce
 ELITISM_RATE: typ.Final = 1                   # ELITISM_RATE is the elitism rate
-# GENERATIONS: typ.Final = 50                   # GENERATIONS is the number of generations the GP should run for
-GENERATIONS: typ.Final = 5                    # ! value for testing/debugging to increase speed
-# MAX_DEPTH: typ.Final = 8                      # MAX_DEPTH is the max depth trees are allowed to be & is used in grow/full
-MAX_DEPTH: typ.Final = 4                      # ! value for testing/debugging to make trees more readable
+GENERATIONS: typ.Final = 50                   # GENERATIONS is the number of generations the GP should run for
+# GENERATIONS: typ.Final = 25                    # ! value for testing/debugging to increase speed
+MAX_DEPTH: typ.Final = 8                      # MAX_DEPTH is the max depth trees are allowed to be & is used in grow/full
+# MAX_DEPTH: typ.Final = 5                      # ! value for testing/debugging to make trees more readable
 MUTATION_RATE: typ.Final = 0.2                # MUTATION_RATE is the chance that a candidate will be mutated
 # ! changes here must also be made in the tree object, and the grow & full functions ! #
 OPS: typ.Final = ['add', 'subtract',          # OPS is the list of valid operations on the tree
@@ -66,6 +64,7 @@ CLASS_DICTS: CL_DICTION = {}                  # CLASS_DICTS is a list of dicts (
 HDR = '*' * 6
 SUCCESS = u' \u2713\n'+'\033[0m'     # print the checkmark & reset text color
 OVERWRITE = '\r' + '\033[32m' + HDR  # overwrite previous text & set the text color to green
+NO_OVERWRITE = '\033[32m' + HDR      # NO_OVERWRITE colors lines green that don't use overwrite
 SYSOUT = sys.stdout
 # ++++++++++++++++++++++++ configurations & file paths ++++++++++++++++++++++++ #
 sys.setrecursionlimit(10000)                                  # set the recursion limit for the program
@@ -183,21 +182,23 @@ class Hypothesis:
         :return: Hypothesis's fitness.
         :rtype: float or int
         """
+
+        # self._fitness = self.__newFitness()  # ! This is used to test if fitness is being calculated correctly
         
-        if self._fitness is None:  # if fitness isn't set
-            self.__newFitness()    # set the fitness score
-        return self._fitness       # either way return fitness
+        if self._fitness is None:                # if fitness isn't set
+            self._fitness = self.__newFitness()  # set the fitness score
+        return self._fitness                     # either way return fitness
     
     # TODO Check if I need to call this anywhere (like after mutation or crossover)
-    def updateFitness(self) -> float:
+    def updateFitness(self) -> None:
         """
         This should be used instead of __newFitness in order to force a new fitness calculation
-        
-        :return: Fitness value of a Hypothesis.
-        :rtype: float
+
         """
         
-        return self.__newFitness()
+        self._fitness = self.__newFitness()  # set the fitness score
+        
+        return
     
     def __newFitness(self) -> float:
         """
@@ -695,12 +696,10 @@ def createInitialPopulation() -> Population:
     hypothesis: typ.List[Hypothesis] = []
 
     # creat a number hypotheses equal to pop size
-    with alive_bar(POPULATION_SIZE, title="Initial Hypotheses") as bar:
-        for __ in range(POPULATION_SIZE):  # iterate as usual
-            hyp = createHypothesis()       # create a Hypothesis
-            # sanityCheckHyp(hyp)            # ! testing purposes only!
-            hypothesis.append(hyp)         # add the new hypothesis to the list
-            bar()
+    for __ in range(POPULATION_SIZE):  # iterate as usual
+        hyp = createHypothesis()       # create a Hypothesis
+        # sanityCheckHyp(hyp)            # ! testing purposes only!
+        hypothesis.append(hyp)         # add the new hypothesis to the list
     
     # sanityCheckPop(hypothesis)  # ! testing purposes only!
     return Population(hypothesis, 0)
@@ -734,7 +733,7 @@ def sanityCheckTree(tree: Tree, classId):
 # *************************************************************** #
 
 
-def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, Hypothesis]:
+def evolve(population: Population, elite: Hypothesis, bar) -> typ.Tuple[Population, Hypothesis]:
     """
     evolve is used by CDFC during the evolution step to create the next generation of the algorithm.
     This is done by randomly choosing between mutation & crossover based on the mutation rate.
@@ -766,19 +765,20 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         """
 
         # **************** Tournament Selection **************** #
-        # TODO try to find a way to avoid the deep copy here
         # get a list including every valid index in candidateHypotheses
         positions: typ.List[int] = list(range(len(p.candidateHypotheses)))
         first = None  # the tournament winner
         score = 0     # the winning score
         for i in range(TOURNEY):  # compare TOURNEY number of random hypothesis
             
-            randomIndex = random.choice(positions)   # choose a random index in p.candidateHypotheses
-            
-            positions.remove(randomIndex)  # remove the chosen value from the list of indexes (avoids duplicates)
+            randomIndex: int = random.choice(positions)   # choose a random index in p.candidateHypotheses
+            # print(f'index was {randomIndex} was selected')  # ! for debugging only!
             
             candidate: Hypothesis = p.candidateHypotheses[randomIndex]   # get the hypothesis at the random index
-
+            # print('hypothesis was found')  # ! for debugging only!
+            
+            positions.remove(randomIndex)  # remove the chosen value from the list of indexes (avoids duplicates)
+            # print('index was removed')  # ! for debugging only!
             fitness = candidate.fitness                                  # get that hypothesis's fitness score
 
             if first is None:      # if first has not been set,
@@ -798,8 +798,77 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
             sys.exit(-1)                            # exit on error; recovery not possible
         
         log.debug('Finished Tournament method')
-        # bar.text('found parent')  # ! for debugging
+        
+        # print('Tournament Finished')  # ! for debugging only!
+        
         return first
+        # ************ End of Tournament Selection ************* #
+
+    def __crossoverTournament(p: Population) -> typ.Tuple[Hypothesis, Hypothesis]:
+        """
+        Used by crossover to selection the parents. It differs from the normal tournament
+        because it will return two unique hypotheses.
+
+        :param p: The current population of hypotheses.
+        :type p: Population
+
+        :return: Two hypothesis that tournament found.
+        :rtype: typ.Tuple[Hypothesis, Hypothesis]
+        """
+    
+        # **************** Tournament Selection **************** #
+        # get a list including every valid index in candidateHypotheses
+        positions: typ.List[int] = list(range(len(p.candidateHypotheses)))
+        first = None  # the tournament winner
+        firstIndex = None  # the index of the winner
+        score = 0  # the winning score
+        for i in range(TOURNEY):  # compare TOURNEY number of random hypothesis
+        
+            randomIndex: int = random.choice(positions)  # choose a random index in p.candidateHypotheses
+            candidate: Hypothesis = p.candidateHypotheses[randomIndex]  # get the hypothesis at the random index
+            positions.remove(randomIndex)  # remove the chosen value from the list of indexes (avoids duplicates)
+            fitness = candidate.fitness  # get that hypothesis's fitness score
+        
+            if (first is None) or (score < fitness):  # if first has not been set, or candidate if more fit
+                first = candidate  # then update it
+                score = fitness  # then update the score to higher fitness
+                firstIndex = randomIndex  # finally update the index of the winner
+
+        positions = list(range(len(p.candidateHypotheses)))
+        try:
+            positions.remove(firstIndex)  # remove the last winner from consideration
+        except ValueError as err:
+            print(str(err))
+            print(f'index is {firstIndex}\nlist of positions is {positions}')
+            sys.exit(-1)  # exit on error; recovery not possible
+        
+        second = None  # the 2nd tournament winner
+        secondIndex = None  # the index of the winner
+        score = 0  # the winning score
+        for i in range(TOURNEY):  # compare TOURNEY number of random hypothesis
+    
+            randomIndex: int = random.choice(positions)  # choose a random index in p.candidateHypotheses
+            candidate: Hypothesis = p.candidateHypotheses[randomIndex]  # get the hypothesis at the random index
+            positions.remove(randomIndex)  # remove the chosen value from the list of indexes (avoids duplicates)
+            fitness = candidate.fitness  # get that hypothesis's fitness score
+    
+            if (second is None) or (score < fitness):  # if 2nd has not been set, or candidate is more fit
+                second = candidate  # then update it
+                score = fitness  # then update the score to higher fitness
+                secondIndex = randomIndex  # get the index of the winner
+
+        try:
+            if first is None or second is None:
+                raise Exception(f'ERROR: Tournament could not set first or second correctly, first = {first}')
+        except Exception as err2:
+            lineNm2 = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+            log.error(f'Tournament could not set first correctly, first = {first}, line number = {lineNm2}')
+            print(f'{str(err2)}, line = {lineNm2}')
+            sys.exit(-1)  # exit on error; recovery not possible
+    
+        log.debug('Finished Tournament method')
+    
+        return copy.deepcopy(p.candidateHypotheses[firstIndex]), copy.deepcopy(p.candidateHypotheses[secondIndex])
         # ************ End of Tournament Selection ************* #
 
     # ******************* Evolution ******************* #
@@ -862,13 +931,7 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
         log.debug('Starting Crossover')
         
         # * Find Random Parents * #
-        parent1: Hypothesis = __tournament(population)  # parent1 & parent2 are from a copy of population made by tournament, NOT original pop
-        parent2: Hypothesis = __tournament(population)  # because of this they should not be viewed as references
-        
-        #  check that each parent is unique
-        # if they are the same they should reference the same object & so 'is' is used instead of ==
-        while parent1 is parent2:
-            parent2 = __tournament(population)
+        parent1, parent2 = __crossoverTournament(population)
 
         # * Get CFs from the Same Class * #
         # Feature 1
@@ -924,36 +987,32 @@ def evolve(population: Population, elite: Hypothesis) -> typ.Tuple[Population, H
 
     # each iteration evolves 1 new candidate hypothesis, and we want to do this until
     # range(newPopulation.candidateHypotheses) = POPULATION_SIZE so loop over pop size
-    with alive_bar(POPULATION_SIZE, title="Evolving") as bar:  # declare your expected total
-        for pop in range(POPULATION_SIZE):
-            # print(f' evolving {pop}/{POPULATION_SIZE}...')  # update user on progress
-            probability = random.uniform(0, 1)              # get a random number between 0 & 1
+    for pop in range(POPULATION_SIZE):
+        probability = random.uniform(0, 1)              # get a random number between 0 & 1
 
-            # ! For Testing Only
-            # mutate()
-            # crossover()
-            # bar()
+        # ! For Testing Only
+        # mutate()
+        # crossover()
+        # bar()
+    
+        # ***************** Mutate ***************** #
+        if probability < MUTATION_RATE:  # if probability is less than mutation rate, mutate
+            bar.text('mutating...')      # update user
+            mutate()                     # perform mutation
+        # ************* End of Mutation ************* #
+
+        # **************** Crossover **************** #
+        else:                        # if probability is greater than mutation rate, use crossover
+            bar.text('crossing...')  # update user
+            crossover()              # perform crossover operation
+        # ************* End of Crossover ************* #
         
-            # ***************** Mutate ***************** #
-            if probability < MUTATION_RATE:  # if probability is less than mutation rate, mutate
-                bar.text('mutating...')      # update user
-                mutate()                     # perform mutation
-                bar()                        # update bar now that a candidate is finished
-            # ************* End of Mutation ************* #
-
-            # **************** Crossover **************** #
-            else:                        # if probability is greater than mutation rate, use crossover
-                bar.text('crossing...')  # update user
-                crossover()              # perform crossover operation
-                bar()                    # update bar now that a candidate is finished
-            # ************* End of Crossover ************* #
-            
-            # ****************** Elitism ****************** #
-            # check that if latest hypothesis has a higher fitness than our current elite
-            newHypothFitness = newPopulation.candidateHypotheses[-1].fitness
-            if newHypothFitness > elite.fitness:
-                elite = newPopulation.candidateHypotheses[-1]
-            # ************** End of Elitism *************** #
+        # ****************** Elitism ****************** #
+        # check that if latest hypothesis has a higher fitness than our current elite
+        newHypothFitness = newPopulation.candidateHypotheses[-1].fitness
+        if newHypothFitness > elite.fitness:
+            elite = newPopulation.candidateHypotheses[-1]
+        # ************** End of Elitism *************** #
 
     return newPopulation, elite
 
@@ -967,9 +1026,9 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
     :param dataIn: Index 0 contains the values of the global constants that cdfc needs, and
                    index 1 contains the TERMINALS dictionary.
     :param distanceFunction:
-    
+
     :type dataIn: tuple
-    :type distanceFunction
+    :type distanceFunction:
     
     :return: Hypothesis with the highest fitness score.
     :rtype: Hypothesis
@@ -1009,20 +1068,24 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
     # *********************** Run the Algorithm *********************** #
 
     currentPopulation = createInitialPopulation()     # run initialPop/create the initial population
-    SYSOUT.write(HDR + ' Initial population generated '.ljust(50, '-') + SUCCESS)
+    SYSOUT.write(NO_OVERWRITE + ' Initial population generated '.ljust(50, '-') + SUCCESS)
     elite = currentPopulation.candidateHypotheses[0]  # init elitism
 
     # loop, evolving each generation. This is where most of the work is done
-    SYSOUT.write('\nStarting generations stage...\n')  # update user
+    # SYSOUT.write('Starting generations stage...\n')  # update user
     
-    for gen in range(GENERATIONS):  # iterate as usual
-        print(f'\n{HDR} Starting Generation {gen}/{GENERATIONS}')
-        newPopulation, elite = evolve(currentPopulation, elite)  # generate a new population by evolving the old one
-        # update currentPopulation to hold the new population
-        # this is done in two steps to avoid potential namespace issues
-        currentPopulation = newPopulation
+    with alive_bar(GENERATIONS, title="Generations") as bar:  # declare your expected total
 
-    SYSOUT.write(HDR + ' Final Generation Reached \n'.ljust(50, '-') + SUCCESS)  # update user
+        for gen in range(GENERATIONS):  # iterate as usual
+            
+            newPopulation, elite = evolve(currentPopulation, elite, bar)  # generate a new population by evolving the old one
+            # update currentPopulation to hold the new population
+            # this is done in two steps to avoid potential namespace issues
+            currentPopulation = newPopulation
+
+            bar()  # update bar now that a generation is finished
+
+    # SYSOUT.write(NO_OVERWRITE + ' Final Generation Reached'.ljust(50, '-') + SUCCESS)  # update user
     # ***************************************************************** #
 
     # ****************** Return the Best Hypothesis ******************* #

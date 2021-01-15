@@ -40,6 +40,7 @@ instance n | class value | attribute value | attribute value | attribute value |
 import argparse
 import cProfile
 import pstats
+import time as time
 from pathlib import Path
 import sys
 import cdfcProject as cdfc
@@ -47,6 +48,7 @@ import cdfcProject as cdfc
 # ******************************************** Constants used by Profiler ******************************************** #
 profiler = cProfile.Profile()                       # create a profiler to profile cdfc during testing
 statsPath = str(Path.cwd() / 'logs' / 'stats.log')  # set the file path that the profiled info will be stored at
+timeFormat = '%H:%M:%S'
 # ******************************************** Parsing Command Line Flags ******************************************** #
 argumentParser = argparse.ArgumentParser()  # create the argument parser
 
@@ -61,6 +63,10 @@ argumentParser.add_argument("-s", "--stats", required=False, help="run the progr
 # cProfile Ordering Flag
 argumentParser.add_argument("-o", "--order", required=False, help="how the cProfile report should be sorted",
                             choices=['ncalls', 'tottime', 'percall', 'cumtime'], default='ncalls', type=str)
+
+# Learning Model Type Flag
+argumentParser.add_argument("-m", "--model", required=False, help="what learning model should be used/tested",
+                            choices=['KNN', 'NB', 'DT'], default='KNN', type=str)
 # ******************************************************************************************************************** #
 
 if __name__ == "__main__":
@@ -68,17 +74,22 @@ if __name__ == "__main__":
     # parse the arguments into a namespace
     provided = argumentParser.parse_args()
     
-    if provided.stats:               # if the stats flag was set
+    if provided.stats:  # if the stats flag was set
         
         print('Starting Profiler')
         
         # * Run the Profiler * #
-        profiler.enable()            # start collecting profiling info
-        cdfc.run(provided.function)  # run cdfc
-        profiler.create_stats()
-        print('Profiler Finished')
+        profiler.enable()    # start collecting profiling info
+        start = time.time()  # get the start time
+        
+        cdfc.run(provided.function, provided.model)  # run cdfc
+
+        end = time.time() - start    # get the elapsed
+        print(f'Elapsed Time: {time.strftime("%H:%M:%S", time.gmtime(end))}')  # print the elapsed time
         
         # * Sort & Export the Report * #
+        profiler.create_stats()
+        print('Profiler Finished')
         with open(statsPath, 'w') as file:                   # open file to write to
             stats = pstats.Stats(profiler, stream=file)      # create the report streamer
             stats.sort_stats(provided.order)                 # sort the report
@@ -87,7 +98,10 @@ if __name__ == "__main__":
 
         # *** Exit *** #
         sys.stdout.write('\nExiting')
-        sys.exit(0)                   # close program
+        sys.exit(0)                  # close program
 
-    else:                             # otherwise just run cdfc
-        cdfc.run(provided.function)
+    else:                            # otherwise just run cdfc
+        start = time.time()          # get the start time
+        cdfc.run(provided.function, provided.model)
+        end = time.time() - start    # get the elapsed
+        print(f'Elapsed Time: {time.strftime("%H:%M:%S", time.gmtime(end))}')  # print the elapsed time

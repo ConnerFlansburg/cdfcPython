@@ -13,6 +13,7 @@ import copy
 import math
 import os
 import pickle
+import time as time
 # import traceback
 import tkinter as tk
 from pathlib import Path
@@ -31,25 +32,27 @@ from tqdm import tqdm
 
 from cdfc import cdfc
 from formatting import *
-from formatting import __buildAccuracyFrame, __accuracyFrameToLatex, __formatForSciKit, __flattenTrainingData
+from formatting import buildAccuracyFrame, formatForSciKit, flattenTrainingData
 from objects import WrapperInstance as Instance
 
 # ********************************************* Constants used by Parser ********************************************* #
 BETA: typ.Final = 2              # BETA is a constant used to calculate the pop size
 R: typ.Final = 2                 # R is the ratio of number of CFs to the number of classes (features/classes)
 PASSED_FUNCTION = None           # PASSED_FUNCTION is the distance function that was passed (defaults to Euclidean)
+LEARN = None                     # LEARN is the type of learning model that should be used (defaults to KNN)
 # ********************************************* Constants used by Logger ********************************************* #
 # create the file path for the log file & configure the logger
 logPath = str(Path.cwd() / 'logs' / 'cdfc.log')
-log.basicConfig(level=log.ERROR, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
+# log.basicConfig(level=log.ERROR, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
 # ******************************************** Constants used for Writing ******************************************** #
 HDR = '*' * 6
 SUCCESS = u' \u2713\n'+'\033[0m'     # print the checkmark & reset text color
 OVERWRITE = '\r' + '\033[32m' + HDR  # overwrite previous text & set the text color to green
+NO_OVERWRITE = '\033[32m' + HDR      # NO_OVERWRITE colors lines green that don't use overwrite
 SYSOUT = sys.stdout
 # ****************************************** Constants used by Type Hinting ****************************************** #
 # ! change back to 10 after testing
-K: typ.Final[int] = 3  # set the K for k fold cross validation
+K: typ.Final[int] = 10  # set the K for k fold cross validation
 ModelList = typ.Tuple[typ.List[float], typ.List[float], typ.List[float]]          # type hinting alias
 ModelTypes = typ.Union[KNeighborsClassifier, GaussianNB, DecisionTreeClassifier]  # type hinting alias
 ScalarsIn = typ.Union[None, StandardScaler]
@@ -609,10 +612,10 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
     try:
 
         if os.path.isfile(str(pth)):           # if the file does exist
-            print(f'{HDR} Reading in pickle file ......')
             with open(str(pth), 'rb') as fl:   # try to open the file
                 pickles = pickle.load(fl)      # load the file into pickles
             wasPickle = True                   # since we read in the file set to True
+            print(NO_OVERWRITE + ' Pickle File Read '.ljust(50, '-') + SUCCESS)
 
         else:                                  # if the file didn't exist
             pickles = {}                       # set pickles to be an empty dict
@@ -625,11 +628,12 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
         pickles = {}                           # set pickles to empty to avoid data corruption errors
 
     # *** Divide them into training & test data K times ***
-    # loop over all the random index values
+    # loop over all the random index values.
+    # + Each loop will create a new learning model using the fit method from SciKit
 
-    iteration: int = 0  # used to count iterations by the progress bar
+    iteration: int = 0  # used to count iterations so progress can be printed
     for r in range(K):  # len(r) = K so this will be done K times
-        print(f'{HDR} Starting Fold {iteration}/{K}')
+        print('\n\n' + f' Starting Fold {iteration + 1}/{K} '.center(58, '*'))
         # ********** Get the Training & Testing Data ********** #
         # the Rth bucket becomes our testing data, everything else becomes training data
         # this is done in order to prevent accidental overwrites
@@ -643,7 +647,7 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
             oldR = r                             # save the current r value for then next loop
     
         # ********** Flatten the Training Data ********** #
-        train: np.ndarray = __flattenTrainingData(trainList)  # remove buckets to create a single pool
+        train: np.ndarray = flattenTrainingData(trainList)  # remove buckets to create a single pool
 
         testing: np.ndarray = np.array(testingList)  # turn testing data into a numpy array, testing doesn't need to be flattened
 
@@ -656,7 +660,7 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
     
         # ********** 3B Train the CDFC Model & Transform the Training Data using It ********** #
 
-        SYSOUT.write(f"\nTraining CDFC for {mType}...\n")  # update user
+        # SYSOUT.write(f"\nTraining CDFC for {mType}...\n")  # update user
         
         if wasPickle:                                                            # if there was a saved data object
             data = pickles[r]                                                    # read in from it
@@ -669,7 +673,8 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
             data = (constants, relevant)                                         # data[0] = constants to be set, data[1] = TERMINALS
             pickles[r] = data
 
-        CDFC_Hypothesis = cdfc(data, PASSED_FUNCTION)                            # now that we have our train & test data create our hypothesis
+        # now that we have our train & test data create our hypothesis (train CDFC)
+        CDFC_Hypothesis = cdfc(data, PASSED_FUNCTION)
         SYSOUT.write(OVERWRITE + ' CDFC Trained '.ljust(50, '-') + SUCCESS)      # replace starting with complete
         
         SYSOUT.write(HDR + ' Transforming Training Data ......')                 # print
@@ -678,13 +683,15 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
         SYSOUT.write(OVERWRITE + ' Data Transformed '.ljust(50, '-') + SUCCESS)  # replace starting with complete
 
         # ********** 3C Train the Learning Algorithm ********** #
+        SYSOUT.write(HDR + f' Training {mType} Model ......')
         # format data for SciKit Learn
-        ftrs, labels = __formatForSciKit(train)
+        ftrs, labels = formatForSciKit(train)
         
         # now that the data is formatted, run the learning algorithm.
         # if useNormalize is True the data has been transformed to fit
         # a scalar & gone through discretization. If False, it has not
         model.fit(ftrs, labels)
+        SYSOUT.write(OVERWRITE + f' {mType} Model Trained '.ljust(50, '-') + SUCCESS)  # replace starting with complete
     
         # ********** 3D.1 Normalize the Testing Data ********** #
         # if use
@@ -695,7 +702,7 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
         testing = CDFC_Hypothesis.runCDFC(testing)  # use the cdfc model to reduce the data's size
     
         # format testing data for SciKit Learn
-        ftrs, trueLabels = __formatForSciKit(testing)
+        ftrs, trueLabels = formatForSciKit(testing)
     
         # ********** 3D.3 Feed the Training Data into the Model & get Accuracy ********** #
         labelPrediction = model.predict(ftrs)  # use model to predict labels
@@ -714,7 +721,7 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
             log.error(f'Pickle could not open or create file {pth}')         # log the error & print it
             SYSOUT.write(f'\nPickle could not open or create file {pth}\n')  # to console, but continue
 
-    SYSOUT.write(HDR + ' K Fold Validation Complete '.ljust(50, '-') + SUCCESS)  # update user
+    SYSOUT.write('\n' + NO_OVERWRITE + ' K Fold Validation Complete '.ljust(50, '-') + SUCCESS)  # update user
     
     # *** Return Accuracy *** #
     return accuracy
@@ -750,7 +757,7 @@ def __sanityCheckDictionary(d: typ.Dict[int, typ.List[int]]) -> None:
     log.debug('Dictionary Sanity Check Passed')
 
 
-def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> ModelList:
+def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> typ.List[float]:
     """
     __runSciKitModels builds the non-CDFC models & returns the
     constructed models as a list.
@@ -774,34 +781,46 @@ def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> ModelList:
     buckets = __fillBuckets(entries)  # using the parsed data, fill the k buckets (once for all models)
     SYSOUT.write(OVERWRITE + " Buckets built ".ljust(50, '-') + SUCCESS)  # update user
     
-    # ************ Kth Nearest Neighbor Classifier ************ #
-    knnAccuracy: typ.List[float] = __buildModel(buckets, KNeighborsClassifier(n_neighbors=3), useNormalize)  # build the model
-
-    # ************ Decision Tree Classifier ************ #
-    dtAccuracy: typ.List[float] = __buildModel(buckets, DecisionTreeClassifier(random_state=0), useNormalize)  # build the model
-
-    # ************ Gaussian Classifier (Naive Bayes) ************ #
-    nbAccuracy: typ.List[float] = __buildModel(buckets, GaussianNB(), useNormalize)       # build the model
+    if LEARN == "DT":
+        
+        # ************ Decision Tree Classifier ************ #
+        accuracy: typ.List[float] = __buildModel(buckets, DecisionTreeClassifier(random_state=0),
+                                                 useNormalize)  # build the model
     
-    SYSOUT.write("Models run\n\n")  # update user
+    elif LEARN == "NB":
+        
+        # ************ Gaussian Classifier (Naive Bayes) ************ #
+        accuracy: typ.List[float] = __buildModel(buckets, GaussianNB(), useNormalize)  # build the model
+    
+    else:  # do the defualt (KNN)
+        
+        # ************ Kth Nearest Neighbor Classifier ************ #
+        accuracy: typ.List[float] = __buildModel(buckets, KNeighborsClassifier(n_neighbors=3),
+                                                 useNormalize)  # build the model
 
-    return knnAccuracy, dtAccuracy, nbAccuracy
+    # SYSOUT.write("Model ran\n\n")  # update user
+
+    # TODO change calling function so it can accept a single return
+    return accuracy
 
 
-def run(fnc: str) -> None:
+def run(fnc: str, mdl: str) -> None:
     """
     run is the entry point for main.py. It prompts the user for a file, parses it, builds the required models,
     formats the data frames, and general coordinates the other models with CDFC.
     
     :param fnc: the distance function to be used. It should be provided via command line flags (see main.py).
+    :param mdl:
+    
     :type fnc: str
+    :type mdl:
     
     :return: run either crashes or returns a None on a success.
     :rtype: None
     """
     
     SYSOUT.write(Figlet(font='larry3d').renderText('C D f C'))  # formatted start up message
-    SYSOUT.write("Program Initialized Successfully\n")
+    SYSOUT.write("\033[32mProgram Initialized Successfully\033[00m\n")
     
     parent = tk.Tk()            # prevent root window caused by Tkinter
     parent.overrideredirect(1)  # Avoid it appearing and then disappearing quickly
@@ -810,6 +829,9 @@ def run(fnc: str) -> None:
     # *** set the passed functions value *** #
     # NOTE: for some reason just passing the fnc string was causing a key error
     global PASSED_FUNCTION
+    global LEARN
+    
+    LEARN = mdl  # set the value of LEARN using provided input
     
     if fnc == "correlation":    # use the Correlation function
         PASSED_FUNCTION = "correlation"
@@ -828,7 +850,7 @@ def run(fnc: str) -> None:
         sys.stderr.write(f"\n{HDR} Permission Denied, or No File was Selected\nExiting......")  # exit gracefully
         sys.exit("Could not access file/No file was selected")
 
-    SYSOUT.write(f"{OVERWRITE} File {inPath.name} found ".ljust(60, '-') + SUCCESS)
+    SYSOUT.write(OVERWRITE + f' File {inPath.name} Found '.ljust(50, '-') + SUCCESS)
 
     # useNormalize = messagebox.askyesno('CDFC - Transformations', 'Do you want to __transform the data before using it?', parent=parent)  # Yes / No
     useNormalize = True  # use during debugging to make runs faster
@@ -840,17 +862,27 @@ def run(fnc: str) -> None:
     SYSOUT.write('\r\033[32mFile Found & Loaded Successfully\033[00m\n')                   # update user
     
     # *** Build the Models *** #
-    modelsTuple = __runSciKitModels(entries, useNormalize)  # knnAccuracy, dtAccuracy, nbAccuracy
+    accuracy: typ.List[float] = __runSciKitModels(entries, useNormalize)  # knnAccuracy, dtAccuracy, nbAccuracy
 
     # NOTE: everything below just formats & outputs the results
     # *** Create a Dataframe that Combines the Accuracy of all the Models *** #
-    accuracyFrame = __buildAccuracyFrame(modelsTuple, K)
-
-    # *** Modify the Dataframe to Match our LaTeX File *** #
-    latexFrame = __accuracyFrameToLatex(modelsTuple, accuracyFrame)
+    accuracyFrame = buildAccuracyFrame(accuracy, K, LEARN)
     
     # *** Export the Dataframe as a LaTeX File *** #
     SYSOUT.write(HDR + ' Exporting LaTeX dataframe...')
+    
+    # will be of the form MODEL_DATASET, for example: KNN_Colon
+    title = f'{LEARN}_{inPath.name}'
+    
+    try:  # attempt to convert the dataframe to latex
+        output: str = accuracyFrame.to_latex(label=title)
+    except Exception as err:
+        lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+        msg: str = f'ERROR is formatting.py, line {lineNm}\n{str(err)}'  # create the message
+        printError(msg)                        # print the message
+        print(f'dataframe = {accuracyFrame}')  # print the dataframe
+        printError(traceback.format_exc())     # print stack trace
+        sys.exit(-1)  # exit on error; recovery not possible
     
     # set the output file path
     if useNormalize:                       # if we are using the transformations
@@ -859,18 +891,25 @@ def run(fnc: str) -> None:
     else:                          # if we are not transforming the data
         stm = inPath.stem + 'Raw'  # add 'Raw' to the file name
     
-    outPath = Path.cwd() / 'data' / 'outputs' / (stm + '.tex')  # create the file path
+    outPath = Path.cwd() / 'data' / 'outputs' / (title + stm + '.tex')  # create the file path
 
-    with open(outPath, "w") as texFile:             # open the selected file
-        print(latexFrame.to_latex(), file=texFile)  # & write dataframe to it, converting it to latex
-    texFile.close()                                 # close the file
+    with open(outPath, "w") as texFile:                           # open the selected file
+        print(output, file=texFile)  # & write dataframe to it, converting it to latex
+    texFile.close()                                               # close the file
     
     SYSOUT.write(OVERWRITE + ' Export Successful '.ljust(50, '-') + SUCCESS)
-    SYSOUT.write('Dataframe converted to LaTeX & Exported\n')
+    # SYSOUT.write('\033[32m Dataframe converted to LaTeX & Exported\n'+'\033[0m')
     
     return
 
 
 if __name__ == "__main__":
     
-    run("euclidean")
+    timeFormat = '%H:%M:%S'
+    log.debug(f'Start {time.strftime(timeFormat)}')
+    print(f'Start {time.strftime(timeFormat)}')
+    
+    run("euclidean", 'KNN')
+    
+    log.debug(f'End {time.strftime(timeFormat)}')
+    print(f'Start {time.strftime(timeFormat)}')
