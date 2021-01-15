@@ -188,8 +188,7 @@ class Hypothesis:
         if self._fitness is None:                # if fitness isn't set
             self._fitness = self.__newFitness()  # set the fitness score
         return self._fitness                     # either way return fitness
-    
-    # TODO Check if I need to call this anywhere (like after mutation or crossover)
+
     def updateFitness(self) -> None:
         """
         This should be used instead of __newFitness in order to force a new fitness calculation

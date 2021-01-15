@@ -707,7 +707,23 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
         # ********** 3D.3 Feed the Training Data into the Model & get Accuracy ********** #
         labelPrediction = model.predict(ftrs)  # use model to predict labels
         # compute the accuracy score by comparing the actual labels with those predicted
-        accuracy.append(accuracy_score(trueLabels, labelPrediction))
+        score = accuracy_score(trueLabels, labelPrediction)
+        accuracy.append(score)  # add the score to the list of scores
+
+        # *** print the computed accuracy *** #
+        percentScore: float = round(score * 100, 1)  # turn the score into a percent with 2 decimal places
+        
+        if percentScore > 75:  # print in green
+            SYSOUT.write(f'\r\033[32m{mType} Accuracy is: {percentScore}%\033[00m\n')
+            SYSOUT.flush()
+
+        elif percentScore < 45:  # print in red
+            SYSOUT.write(f'\r\033[91m{mType} Accuracy is: {percentScore}%\033[00m\n')
+            SYSOUT.flush()
+        
+        else:  # don't add color, but print accuracy
+            SYSOUT.write(f'{mType} Accuracy is: {percentScore}%\n')
+            SYSOUT.flush()
         
         iteration += 1  # update iteration
     
