@@ -20,7 +20,6 @@ import numpy as np
 from alive_progress import alive_bar, config_handler
 from treelib import Node as Node
 
-from formatting import printError
 from objects import Tree
 from objects import cdfcInstance as Instance
 
@@ -89,27 +88,29 @@ rows: typ.List[Instance] = []  # this will store all of the records read in (the
 
 
 class ConstructedFeature:
+    # noinspection PyUnresolvedReferences
     """
-    Constructed Feature is used to represent a single constructed feature in
-    a hypothesis. It contains the tree representation of the feature along
-    with additional information about the feature.
-
-    :var className: Class id of the class that the feature is meant to distinguish.
-    :var tree: Constructed feature's binary decision tree.
-    :var size: Number of nodes in the tree
-    :var relevantFeatures: List of terminal characters relevant to the feature's class.
+        Constructed Feature is used to represent a single constructed feature in
+        a hypothesis. It contains the tree representation of the feature along
+        with additional information about the feature.
     
-    :type className: int
-    :type tree: Tree
-    :type size: int
-    :type relevantFeatures: list[int]
-    
+        :var className: Class id of the class that the feature is meant to distinguish.
+        :var tree: Constructed feature's binary decision tree.
+        :var size: Number of nodes in the tree
+        :var relevantFeatures: List of terminal characters relevant to the feature's class.
+        
+        :type className: int
+        :type tree: Tree
+        :type size: int
+        :type relevantFeatures: list[int]
+        
     """
 
     def __init__(self, className: int, tree: Tree) -> None:
         """Constructor for the ConstructedFeature object"""
         self.className = className                    # the name of the class this tree is meant to distinguish
         self.tree = tree                              # the root node of the constructed feature
+        # noinspection PyTypeChecker
         self.size = tree.size                         # the individual size (the size of the tree)
         self.relevantFeatures = TERMINALS[className]  # holds the indexes of the relevant features
         # sanityCheckCF(self)  # ! testing purposes only!
@@ -131,48 +132,67 @@ class ConstructedFeature:
 
 
 class Hypothesis:
+    # noinspection PyUnresolvedReferences
     """
-    Hypothesis is a single hypothesis (a GP individual), and will contain a list of constructed features. It
-    should have the same number of constructed features for every class id, and should have at least one for
-    each class id.
-    
-    :var features: List of the constructed features for this hypothesis.
-    :var size: Sum of the constructed feature's sizes.
-    :var fitness: Calculated fitness score.
-    :var distance: Calculated distance value.
-    :var averageInfoGain: Average of every features info gain.
-    :var maxInfoGain: Largest info gain for any feature.
-    
-    :type features: list[ConstructedFeature]
-    :type size: int
-    :type fitness: float
-    :type distance: float
-    :type averageInfoGain: float
-    :type maxInfoGain: float
+        Hypothesis is a single hypothesis (a GP individual), and will contain a list of constructed features. It
+        should have the same number of constructed features for every class id, and should have at least one for
+        each class id.
         
-     
-            
-    Methods:
-        getFitness: Get the fitness score of the Hypothesis
-        __transform: Transforms a dataset using the trees in the constructed features.
+        :var features: Dictionary of the constructed features, keyed by class ids, for this hypothesis.
+        :var size: Sum of the constructed feature's sizes.
+        :var fitness: Calculated fitness score.
+        :var distance: Calculated distance value.
+        :var averageInfoGain: Average of every features info gain.
+        :var maxInfoGain: Largest info gain for any feature.
+        
+        :type features: dict[int][list[ConstructedFeature]]
+        :type size: int
+        :type fitness: float
+        :type distance: float
+        :type averageInfoGain: float
+        :type maxInfoGain: float
+        
+        
+        
+        Methods:
+            getFitness: Get the fitness score of the Hypothesis
+            __transform: Transforms a dataset using the trees in the constructed features.
+    
+        """
 
-    """
+    # * type hinting aliases * #
+    fDictType = typ.Optional[typ.Dict[int, typ.List[ConstructedFeature]]]
+    cfsType = typ.List[ConstructedFeature]
 
     _fitness: typ.Union[None, int, float] = None  # the fitness score
-    distance: typ.Union[float, int] = 0          # the distance function score
+    _distance: typ.Union[float, int] = 0          # the distance function score
     averageInfoGain: typ.Union[float, int] = -1  # the average info gain of the hypothesis
     maxInfoGain: typ.Union[float, int] = -1      # the max info gain in the hypothesis
-    idsToFeatures: typ.Dict[int, ConstructedFeature] = {}  # key all the CFs by their class ids
+    features: typ.Dict[int, typ.List[ConstructedFeature]] = {}
+    cfList: typ.List[ConstructedFeature] = []
     # + averageInfoGain & maxInfoGain must be low enough that they will always be overwritten + #
     
-    def __init__(self, features: typ.List[ConstructedFeature], size: int) -> None:
+    def __init__(self, size: int, cfs: cfsType, fDict: fDictType = None) -> None:
         """Constructor for the Hypothesis object"""
-        self.features: typ.List[ConstructedFeature] = features      # a list of all the constructed features
-        self.size: int = size                                       # the number of nodes in all the cfs
-        self.idsToFeatures: typ.Dict[int, ConstructedFeature] = {}  # key all the CFs by their class ids
-        for feature in features:
-            k = feature.className
-            self.idsToFeatures[k] = feature
+        self.size: int = size                                         # the number of nodes in all the cfs
+
+        if fDict:  # if a dictionary was passed, just copy the info in
+            self.features = fDict
+            self.cfList = cfs
+            
+        else:  # if a dictionary was not passed
+            # create a list of all the Constructed Features (regardless of class)
+            self.cfList = cfs
+            
+            for c in cfs:  # add the CFs to the dictionary, keyed by their class id
+                if c.className in self.features.keys():   # if the entry already exists
+                    self.features[c.className].append(c)  # append c to the list
+                else:                                     # if the entry doesn't exist
+                    self.features[c.className] = [c]  # create a list with c and add it to the dictionary
+
+    def getFeatures(self, classId) -> typ.List[ConstructedFeature]:
+        """ Gets a list of CFs for a given class"""
+        return self.features[classId]
 
     @property
     def fitness(self) -> typ.Union[int, float]:
@@ -335,18 +355,20 @@ class Hypothesis:
             return s  # s holds the conditional entropy value
 
         gainSum = 0  # the info gain of the hypothesis
-        for f in self.features:  # loop over all features & get their info gain
+        
+        for classId in CLASS_IDS:  # Loop over all the class ids
+            for f in self.features[classId]:  # Loop over all the features for that class id
 
-            # ********* Entropy calculation ********* #
-            condEntropy = __conditionalEntropy(f)  # find the conditional entropy
-
-            # ******** Info Gain calculation ******* #
-            f.infoGain = ENTROPY_OF_S - condEntropy  # H(class) - H(class|f)
-            gainSum += f.infoGain                    # update the info sum
-
-            # updates the max info gain of the hypothesis if needed
-            if self.maxInfoGain < f.infoGain:
-                self.maxInfoGain = f.infoGain
+                # ********* Entropy calculation ********* #
+                condEntropy = __conditionalEntropy(f)  # find the conditional entropy
+    
+                # ******** Info Gain calculation ******* #
+                f.infoGain = ENTROPY_OF_S - condEntropy  # H(class) - H(class|f)
+                gainSum += f.infoGain                    # update the info sum
+    
+                # updates the max info gain of the hypothesis if needed
+                if self.maxInfoGain < f.infoGain:
+                    self.maxInfoGain = f.infoGain
 
         # calculate the average info gain using formula 3
         term1 = gainSum+self.maxInfoGain
@@ -358,11 +380,11 @@ class Hypothesis:
         # * the depth will be the same for all of them
 
         # *********  Distance Calculation ********* #
-        self.distance = Distance(self.__transform())  # calculate the distance using the transformed values
+        self._distance = Distance(self.__transform())  # calculate the distance using the transformed values
 
         # ********* Final Calculation ********* #
         term1 = ALPHA*self.averageInfoGain
-        term2 = (1-ALPHA)*self.distance
+        term2 = (1-ALPHA)*self._distance
         term3 = (math.pow(10, -7)*self.size)
         final = term1 + term2 - term3
         # ********* Finish Calculation ********* #
@@ -371,6 +393,7 @@ class Hypothesis:
         self._fitness = final
         return final
 
+    # TODO check runCDFC & _transform
     def runCDFC(self, data: np.array) -> np.array:
         """
         runCDFC transforms a dataset using the trees in the constructed features, and is use by cdfcProject
@@ -394,10 +417,11 @@ class Hypothesis:
             # This will hold the transformed values for each constructed feature until we have all of them.
             values: valueList = [d[0]]  # values[0] = class name(int), values[0:] = transformed values (float)
 
-            # NOTE: here we want to create a np array version of an Instance object of the form
-            # +     (classID, values[]), for each row/instance
+            # here we want to create a np array version of an Instance object of the form
+            # (classID, values[]), for each row/instance
+            
             # for each row, convert that row using each constructed feature (where f is a constructed feature)
-            for f in self.features:
+            for f in self.cfList:
                 # convert the numpy array to an instance & transform it
                 currentLine: float = f.transform(Instance(d[0], dict(zip(range(len(d[1:])), d[1:])), d[1:]))
                 # add the value of the transformation to the values list
@@ -419,18 +443,13 @@ class Hypothesis:
         :return: A new dataset, created by transforming the original one.
         :rtype: list
         """
-    
-        log.debug('Starting __transform() method')
         
         transformed: typ.List[Instance] = []  # this will hold the transformed values
-        
-        # if data is None then we are transforming as part of the distance calculation
-        # so we should use rows (the provided training data)
     
-        for r in rows:    # for each Instance
+        for r in rows:    # for each Instance in the provided training data
             values = []   # this will hold the calculated values for all the constructed features
 
-            for f in self.features:            # __transform the original input using each constructed feature
+            for f in self.cfList:            # __transform the original input using each constructed feature
                 values.append(f.transform(r))  # append the transformed values for a single CF to values
             
             # each Instance will hold the new values for an Instance & className, and
@@ -630,67 +649,36 @@ def createInitialPopulation() -> Population:
         :rtype: Hypothesis
         """
         
-        # given a list of trees, create a hypothesis
-        # NOTE this will make 1 tree for each feature, and 1 CF for each class
-
-        classIds: typ.List[int] = copy.copy(CLASS_IDS)  # create a copy of all the unique class ids
-
-        ftrs: typ.List[ConstructedFeature] = []
+        cfDictionary = {}
+        cfList = []
         size = 0
 
-        # ? should this be LABEL_NUMBER or FEATURE_NUMBER
-        for _ in CLASS_IDS:  # create a CF for each class
-            # randomly decide if grow or full should be used.
-            # Also randomly assign the class ID then remove that ID
-            # so each ID may only be used once
+        # *** create M CFs for each class *** #
+        for cid in CLASS_IDS:  # loop over the class ids
+    
+            ftrs: typ.List[ConstructedFeature] = []  # empty the list of features
             
-            try:
-                name = classIds.pop(0)     # get a random id
-                if name not in CLASS_IDS:  # make sure name is a valid class id
-                    raise Exception(f'createHypothesis got an invalid name ({name}) from classIds')
-            
-            except IndexError:                         # if classIds.pop() tried to pop an empty list, log error & exit
-                lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-                log.error(f'Index error encountered in createInitialPopulation (popped from an empty list), line {lineNm}')
-                print(f'ERROR: Index error encountered in createInitialPopulation (popped from an empty list), line {lineNm}')
-                sys.exit(-1)                           # exit on error; recovery not possible
-            except Exception as err:                   # if class ids some how gave an invalid name
-                lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-                log.error(str(err))
-                printError(f'ERROR: {str(err)}, line {lineNm}')
-                sys.exit(-1)                           # exit on error; recovery not possible
-            # DEBUG if we pass this point we know that name is valid
-            
-            tree = Tree()   # create an empty tree
-            tree.addRoot()  # create a root node for the tree
-            
-            # !!!!!!!!!!!!!!!!!!!!! Used for Testing Only !!!!!!!!!!!!!!!!!!!!! #
-            # root = tree.addRoot()  # create a root node for the tree
-            # if not (root.is_root()):  # + This does pass so root doesn't have parents
-            #     raise Exception('Root is not tree root')
-            # if root is not tree.getRoot():
-            #     raise Exception('Root is not equal to tree root')
-            # # __grow(name, root, tree)    # create tree using grow
-            # __full(name, root, tree)      # create tree using full
-            # tree.checkTree()
-            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #'''
-            
-            if random.choice([True, False]):         # *** use grow *** #
-                __grow(name, tree.getRoot(), tree)   # create tree using grow
-            else:                                    # *** use full *** #
-                __full(name, tree.getRoot(), tree)   # create tree using full
+            for _ in range(M):  # loop M times so M CFs are created
+                
+                tree = Tree()   # create an empty tree
+                tree.addRoot()  # create a root node for the tree
+                
+                if random.choice([True, False]):         # *** use grow *** #
+                    __grow(cid, tree.getRoot(), tree)    # create tree using grow
+                else:                                    # *** use full *** #
+                    __full(cid, tree.getRoot(), tree)    # create tree using full
+    
+                cf = ConstructedFeature(cid, tree)       # create constructed feature
+                ftrs.append(cf)                          # add the feature to the list of features
+                cfList.append(cf)
+                
+                size += size
 
-            cf = ConstructedFeature(name, tree)      # create constructed feature
-            ftrs.append(cf)                          # add the feature to the list of features
-
-            size += size
-            
-        if classIds:  # if we didn't pop everything from the classIds list, raise an exception
-            log.error(f'creatInitialPopulation didn\'t use all of classIds, classIds = {classIds}')
-            raise Exception(f'ERROR: creatInitialPopulation didn\'t use all of classIds, classIds = {classIds}')
+            # add the list of features for class cid to the dictionary, keyed by cid
+            cfDictionary[cid] = ftrs
             
         # create a hypothesis & return it
-        return Hypothesis(ftrs, size)
+        return Hypothesis(cfs=cfList, fDict=cfDictionary, size=size)
 
     hypothesis: typ.List[Hypothesis] = []
 
@@ -744,9 +732,11 @@ def evolve(population: Population, elite: Hypothesis, bar) -> typ.Tuple[Populati
         
     :param population: Population to be evolved.
     :param elite: Highest scoring Hypothesis created so far.
+    :param bar:
     
     :type population: Population
     :type elite: Hypothesis
+    :type bar:
     
     :return: A new population (index 0) and the new elite (index 1).
     :rtype: tuple
@@ -880,12 +870,13 @@ def evolve(population: Population, elite: Hypothesis, bar) -> typ.Tuple[Populati
         uses the same grow & full methods as the initial population generation without
         an offset. This means that mutate trees will still obey the max depth rule.
         """
-        
-        log.debug('Starting mutation')
+
         # ******************* Fetch Values Needed ******************* #
         parent: Hypothesis = __tournament(population)                # get copy of a parent Hypothesis using tournament
-        randIndex: int = random.choice(range(len(parent.features)))  # get a random index
-        randCF: ConstructedFeature = parent.features[randIndex]      # get a random Constructed Feature
+        randClass: int = random.choice(CLASS_IDS)                    # get a random class
+        indexOptions = range(len(parent.features[randClass]))
+        randIndex: int = random.choice(indexOptions)                 # get a random index
+        randCF: ConstructedFeature = parent.cfList[randIndex]        # get a random Constructed Feature
         terminals = randCF.relevantFeatures                          # save the indexes of the relevant features
         tree: Tree = randCF.tree                                     # get the tree from the CF
         # tree.checkTree()     # ! For Testing purposes only !!
@@ -916,9 +907,8 @@ def evolve(population: Population, elite: Hypothesis, bar) -> typ.Tuple[Populati
         # tree.sendToStdOut()  # ! For Testing purposes only !!
         
         # overwrite old CF with the new one
-        parent.features[randIndex] = ConstructedFeature(randCF.className, randCF.tree)
+        parent.features[randClass][randIndex] = ConstructedFeature(randCF.className, randCF.tree)
         
-        # TODO is this needed?
         parent.updateFitness()  # force an update of the fitness score
         
         # add the mutated parent to the new pop (appending is needed because parent is a copy NOT a reference)
@@ -927,21 +917,22 @@ def evolve(population: Population, elite: Hypothesis, bar) -> typ.Tuple[Populati
     def crossover() -> None:
         """Performs the crossover operation on two trees"""
         
-        log.debug('Starting Crossover')
-        
         # * Find Random Parents * #
         parent1, parent2 = __crossoverTournament(population)
 
         # * Get CFs from the Same Class * #
         # Feature 1
-        feature1: ConstructedFeature = random.choice(parent1.features)  # get a random feature from the parent
+        feature1: ConstructedFeature = random.choice(parent1.cfList)    # get a random feature from the parent
         tree1: Tree = feature1.tree                                     # get the tree
+        
         # tree1.checkTree()        # ! For Testing Only !!
         # tree1.sendToStdOut()     # ! For Testing Only !!
 
         # Feature 2
-        feature2: ConstructedFeature = parent2.idsToFeatures[feature1.className]  # makes sure CFs are from/for the same class
-        tree2: Tree = feature2.tree                                               # get the tree
+        # makes sure CFs are from/for the same class
+        feature2: ConstructedFeature = random.choice(parent2.features[feature1.className])
+        tree2: Tree = feature2.tree  # get the tree
+        
         # tree2.checkTree()        # ! For Testing Only !!
         # tree2.sendToStdOut()     # ! For Testing Only !!
     
@@ -975,7 +966,6 @@ def evolve(population: Population, elite: Hypothesis, bar) -> typ.Tuple[Populati
         # tree2.checkTree()
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
     
-        # TODO is this needed?
         parent1.updateFitness()  # force an update of the fitness score
         parent2.updateFitness()  # force an update of the fitness score
         
