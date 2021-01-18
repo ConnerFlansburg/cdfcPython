@@ -921,11 +921,10 @@ def run(fnc: str, mdl: str) -> None:
 
 if __name__ == "__main__":
     
-    timeFormat = '%H:%M:%S'
-    log.debug(f'Start {time.strftime(timeFormat)}')
-    print(f'Start {time.strftime(timeFormat)}')
+    start = time.time()        # get the start time
+    run("euclidean", 'KNN')    # run CDFC
+    end = time.time() - start  # get the elapsed
+    print(f'Elapsed Time: {time.strftime("%H:%M:%S", time.gmtime(end))}')  # print the elapsed time
     
-    run("euclidean", 'KNN')
     
-    log.debug(f'End {time.strftime(timeFormat)}')
-    print(f'Start {time.strftime(timeFormat)}')
+
