@@ -913,17 +913,18 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
         parent1, parent2 = __crossoverTournament(population)
 
         # * Get CFs from the Same Class * #
+        randIndex = random.randint(0, M-1)  # get a random index that's valid in cfList
+        randClass = random.choice(CLASS_IDS)  # choose a random class
         # Feature 1
-        feature1: ConstructedFeature = random.choice(parent1.cfList)    # get a random feature from the parent
-        tree1: Tree = feature1.tree                                     # get the tree
+        feature1: ConstructedFeature = parent1.getFeatures(randClass)[randIndex]  # get a random feature from the parent
+        tree1: Tree = feature1.tree                                               # get the tree
         
         # tree1.checkTree()        # ! For Testing Only !!
         # tree1.sendToStdOut()     # ! For Testing Only !!
 
         # Feature 2
         # makes sure CFs are from/for the same class
-        # TODO change so choice is not random & uses same index as 1
-        feature2: ConstructedFeature = random.choice(parent2.features[feature1.className])
+        feature2: ConstructedFeature = parent2.getFeatures(randClass)[randIndex]
         tree2: Tree = feature2.tree  # get the tree
         
         # tree2.checkTree()        # ! For Testing Only !!
