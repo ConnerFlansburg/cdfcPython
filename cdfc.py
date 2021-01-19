@@ -14,7 +14,7 @@ import random
 import sys
 import typing as typ
 import warnings
-from pathlib import Path
+# from pathlib import Path
 import Distances as Dst
 import numpy as np
 from alive_progress import alive_bar, config_handler
@@ -24,9 +24,9 @@ from objects import Tree
 from objects import cdfcInstance as Instance
 
 # ! Next Steps
+# TODO fix accuracy issue
 # TODO update comments on new code
 # TODO add exceptions to comments
-# TODO performance enhancements
 
 # TODO check copyright on imported packages
 # TODO add testing functions
@@ -75,9 +75,9 @@ warnings.filterwarnings('ignore', message=suppressMessage)
 config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', title_length=0, length=20)  # the global config for the loading bars
 # config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', force_tty=True, title_length=0, length=10)  # the global config for the loading bars
 
-logPath = str(Path.cwd() / 'logs' / 'cdfc.log')               # create the file path for the log file & configure the logger
-log.basicConfig(level=log.ERROR, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
+# logPath = str(Path.cwd() / 'logs' / 'cdfc.log')               # create the file path for the log file & configure the logger
 # log.basicConfig(level=log.ERROR, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
+# log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
 
 # profiler = cProfile.Profile()                                 # create a profiler to profile cdfc during testing
 # statsPath = str(Path.cwd() / 'logs' / 'stats.log')            # set the file path that the profiled info will be stored at
@@ -228,8 +228,6 @@ class Hypothesis:
         :return: Fitness value of a Hypothesis.
         :rtype: float
         """
-    
-        log.debug('Starting getFitness() method')
         
         def Distance(values: typ.List[Instance]) -> float:
             """"
@@ -241,8 +239,6 @@ class Hypothesis:
             :return: Distance value calculated using the chosen distance function.
             :rtype: float
             """
-    
-            log.debug('Starting Distance() method')
             
             Db: typ.Union[int, float] = 2  # this will hold the lowest distance Czekanowski found
             Dw: typ.Union[int, float] = 0  # this will hold the highest distance Czekanowski found
@@ -272,8 +268,6 @@ class Hypothesis:
             # perform the final distance calculations
             Db *= (1 / len(values))  # multiply by 1/|S|
             Dw *= (1 / len(values))  # multiply by 1/|S|
-
-            log.debug('Finished Distance() method')
             
             return 1 / (1 + math.pow(math.e, -5*(Db - Dw)))
 
@@ -287,8 +281,6 @@ class Hypothesis:
             :return: Entropy value of the partition.
             :rtype: float
             """
-            
-            log.debug('Starting entropy() method')
             
             p: typ.Dict[int, int] = {}   # p[classId] = number of instances in the class in the partition sv
             for i in partition:          # for instance i in a partition sv
@@ -304,7 +296,7 @@ class Hypothesis:
                 pi = p[c] / len(partition)
                 calc -= pi * math.log(pi, 2)
 
-            log.debug('Finished entropy() method')
+            # log.debug('Finished entropy() method')
 
             return calc
 
@@ -319,7 +311,7 @@ class Hypothesis:
             :rtype: float
             """
     
-            log.debug('Starting conditionalEntropy() method')
+            # log.debug('Starting conditionalEntropy() method')
 
             # this is a feature struct that will be used to store feature values
             # with their indexes/IDs in CFs
@@ -350,7 +342,7 @@ class Hypothesis:
             for e in partition.keys():
                 s += (len(partition[e])/INSTANCES_NUMBER) * __entropy(partition[e])
 
-            log.debug('Finished conditionalEntropy() method')
+            # log.debug('Finished conditionalEntropy() method')
 
             return s  # s holds the conditional entropy value
 
@@ -389,7 +381,7 @@ class Hypothesis:
         final = term1 + term2 - term3
         # ********* Finish Calculation ********* #
 
-        log.debug('Finished getFitness() method')
+        # log.debug('Finished getFitness() method')
         self._fitness = final
         return final
 
@@ -457,16 +449,16 @@ class Hypothesis:
             vls = dict(zip(range(len(values)), values))  # create a dict of the values keyed by their index
             transformed.append(Instance(r.className, vls, values))
 
-        log.debug('Finished __transform() method')
+        # log.debug('Finished __transform() method')
         
         return transformed  # return the list of all instances
 
     # ! testing purposes only!
     def sanityCheck(self):
         """Used in debugging to check a Hypothesis"""
-        log.debug('Starting Hypothesis Sanity Check...')
+        # log.debug('Starting Hypothesis Sanity Check...')
         self.__transform()
-        log.debug('Population Hypothesis Check Passed')
+        # log.debug('Population Hypothesis Check Passed')
 
 
 class Population:
@@ -720,7 +712,7 @@ def sanityCheckTree(tree: Tree, classId):
 # *************************************************************** #
 
 
-def evolve(population: Population, elite: Hypothesis, bar) -> typ.Tuple[Population, Hypothesis]:
+def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Population, Hypothesis]:
     """
     evolve is used by CDFC during the evolution step to create the next generation of the algorithm.
     This is done by randomly choosing between mutation & crossover based on the mutation rate.
@@ -731,16 +723,18 @@ def evolve(population: Population, elite: Hypothesis, bar) -> typ.Tuple[Populati
         crossover: Performs the crossover operation.
         
     :param population: Population to be evolved.
-    :param elite: Highest scoring Hypothesis created so far.
+    :param passedElite: Highest scoring Hypothesis created so far.
     :param bar:
     
     :type population: Population
-    :type elite: Hypothesis
+    :type passedElite: Hypothesis
     :type bar:
     
     :return: A new population (index 0) and the new elite (index 1).
     :rtype: tuple
     """
+
+    elite: Hypothesis = passedElite
 
     def __tournament(p: Population) -> Hypothesis:
         """
@@ -761,14 +755,11 @@ def evolve(population: Population, elite: Hypothesis, bar) -> typ.Tuple[Populati
         for i in range(TOURNEY):  # compare TOURNEY number of random hypothesis
             
             randomIndex: int = random.choice(positions)   # choose a random index in p.candidateHypotheses
-            # print(f'index was {randomIndex} was selected')  # ! for debugging only!
             
             candidate: Hypothesis = p.candidateHypotheses[randomIndex]   # get the hypothesis at the random index
-            # print('hypothesis was found')  # ! for debugging only!
             
             positions.remove(randomIndex)  # remove the chosen value from the list of indexes (avoids duplicates)
-            # print('index was removed')  # ! for debugging only!
-            fitness = candidate.fitness                                  # get that hypothesis's fitness score
+            fitness = candidate.fitness    # get that hypothesis's fitness score
 
             if first is None:      # if first has not been set,
                 first = candidate  # then  set it
@@ -786,7 +777,7 @@ def evolve(population: Population, elite: Hypothesis, bar) -> typ.Tuple[Populati
             print(f'{str(err2)}, line = {lineNm2}')
             sys.exit(-1)                            # exit on error; recovery not possible
         
-        log.debug('Finished Tournament method')
+        # log.debug('Finished Tournament method')
         
         # print('Tournament Finished')  # ! for debugging only!
         
@@ -855,7 +846,7 @@ def evolve(population: Population, elite: Hypothesis, bar) -> typ.Tuple[Populati
             print(f'{str(err2)}, line = {lineNm2}')
             sys.exit(-1)  # exit on error; recovery not possible
     
-        log.debug('Finished Tournament method')
+        # log.debug('Finished Tournament method')
     
         return copy.deepcopy(p.candidateHypotheses[firstIndex]), copy.deepcopy(p.candidateHypotheses[secondIndex])
         # ************ End of Tournament Selection ************* #
@@ -864,7 +855,7 @@ def evolve(population: Population, elite: Hypothesis, bar) -> typ.Tuple[Populati
     # create a new population with no hypotheses (made here crossover & mutate can access it)
     newPopulation = Population([], population.generation+1)
 
-    def mutate() -> None:
+    def mutate() -> Hypothesis:
         """
         Finds a random node and builds a new sub-tree starting at it. Currently mutate
         uses the same grow & full methods as the initial population generation without
@@ -913,8 +904,9 @@ def evolve(population: Population, elite: Hypothesis, bar) -> typ.Tuple[Populati
         
         # add the mutated parent to the new pop (appending is needed because parent is a copy NOT a reference)
         newPopulation.candidateHypotheses.append(parent)
+        return parent
     
-    def crossover() -> None:
+    def crossover() -> (Hypothesis, Hypothesis):
         """Performs the crossover operation on two trees"""
         
         # * Find Random Parents * #
@@ -930,6 +922,7 @@ def evolve(population: Population, elite: Hypothesis, bar) -> typ.Tuple[Populati
 
         # Feature 2
         # makes sure CFs are from/for the same class
+        # TODO change so choice is not random & uses same index as 1
         feature2: ConstructedFeature = random.choice(parent2.features[feature1.className])
         tree2: Tree = feature2.tree  # get the tree
         
@@ -973,6 +966,8 @@ def evolve(population: Population, elite: Hypothesis, bar) -> typ.Tuple[Populati
         # but they refer to a copy made in tournament so add them to the new pop
         newPopulation.candidateHypotheses.append(parent1)
         newPopulation.candidateHypotheses.append(parent2)
+        
+        return parent1, parent2
 
     # each iteration evolves 1 new candidate hypothesis, and we want to do this until
     # range(newPopulation.candidateHypotheses) = POPULATION_SIZE so loop over pop size
@@ -985,23 +980,35 @@ def evolve(population: Population, elite: Hypothesis, bar) -> typ.Tuple[Populati
         # bar()
     
         # ***************** Mutate ***************** #
-        if probability < MUTATION_RATE:  # if probability is less than mutation rate, mutate
-            bar.text('mutating...')      # update user
-            mutate()                     # perform mutation
+        if probability < MUTATION_RATE:            # if probability is less than mutation rate, mutate
+            
+            bar.text('mutating...')                # update user
+            newHypoth = mutate()                   # perform mutation
+
+            # ****************** Elitism ****************** #
+            if newHypoth.fitness > elite.fitness:  # if the new hypothesis has a better fitness
+                elite = newHypoth                  # update elite
+            # ************** End of Elitism *************** #
+            
         # ************* End of Mutation ************* #
 
         # **************** Crossover **************** #
-        else:                        # if probability is greater than mutation rate, use crossover
-            bar.text('crossing...')  # update user
-            crossover()              # perform crossover operation
+        else:                                             # if probability is greater than mutation rate, use crossover
+            
+            bar.text('crossing...')                       # update user
+            newHypoth1, newHypoth2 = crossover()          # perform crossover operation
+
+            # ****************** Elitism ****************** #
+            if newHypoth1.fitness >= newHypoth2.fitness:  # if newHypoth1 has a greater or equal fitness
+                betterH = newHypoth1                      # then set it as the one to be compared to elite
+            else:                                         # otherwise,
+                betterH = newHypoth2                      # set newHypoth2 as the one to be compared
+            
+            if betterH.fitness > elite.fitness:           # if one of the new hypotheses has a
+                elite = betterH                           # better fitness, then update elite
+            # ************** End of Elitism *************** #
+            
         # ************* End of Crossover ************* #
-        
-        # ****************** Elitism ****************** #
-        # check that if latest hypothesis has a higher fitness than our current elite
-        newHypothFitness = newPopulation.candidateHypotheses[-1].fitness
-        if newHypothFitness > elite.fitness:
-            elite = newPopulation.candidateHypotheses[-1]
-        # ************** End of Elitism *************** #
 
     return newPopulation, elite
 
@@ -1058,7 +1065,7 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
 
     currentPopulation = createInitialPopulation()     # run initialPop/create the initial population
     SYSOUT.write(NO_OVERWRITE + ' Initial population generated '.ljust(50, '-') + SUCCESS)
-    elite = currentPopulation.candidateHypotheses[0]  # init elitism
+    oldElite = currentPopulation.candidateHypotheses[0]  # init elitism
 
     # loop, evolving each generation. This is where most of the work is done
     # SYSOUT.write('Starting generations stage...\n')  # update user
@@ -1067,10 +1074,11 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
 
         for gen in range(GENERATIONS):  # iterate as usual
             
-            newPopulation, elite = evolve(currentPopulation, elite, bar)  # generate a new population by evolving the old one
+            newPopulation, newElite = evolve(currentPopulation, oldElite, bar)  # generate a new population by evolving the old one
             # update currentPopulation to hold the new population
             # this is done in two steps to avoid potential namespace issues
             currentPopulation = newPopulation
+            oldElite = newElite  # update elitism
 
             bar()  # update bar now that a generation is finished
 
@@ -1078,8 +1086,8 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
     # ***************************************************************** #
 
     # ****************** Return the Best Hypothesis ******************* #
-    log.debug('Finding best hypothesis')
+    # log.debug('Finding best hypothesis')
 
-    bestHypothesis = max(currentPopulation.candidateHypotheses, key=lambda x: x.fitness)
-    log.debug('Found best hypothesis, returning...')
+    bestHypothesis: Hypothesis = max(currentPopulation.candidateHypotheses, key=lambda x: x.fitness)
+    # log.debug('Found best hypothesis, returning...')
     return bestHypothesis  # return the best hypothesis generated
