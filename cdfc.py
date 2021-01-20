@@ -6,6 +6,7 @@ Authors/Contributors: Dr. Dimitrios Diochnos, Conner Flansburg
 Github Repo: https://github.com/brom94/cdfcPython.git
 """
 
+import itertools
 import collections as collect
 import copy
 import logging as log
@@ -240,36 +241,41 @@ class Hypothesis:
             :rtype: float
             """
             
-            Db: typ.Union[int, float] = 2  # this will hold the lowest distance Czekanowski found
-            Dw: typ.Union[int, float] = 0  # this will hold the highest distance Czekanowski found
-    
-            # ********** Compute Vi & Vj ********** #
-            # the reason for these two loops is to allow us to compare vi with every other instance (vj)
-            for vi in values:                                   # loop over all the training examples
-                for vj in values:                               # loop over all the training examples
-
-                    if vi.className == vj.className:            # if the instances vi & vj are from the same class, skip
-                        continue
+            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
+            Dw: float = 0  # the calculated score of Dw
+            Db: float = 0  # the calculated score of Db
             
-                    elif vi.attributes == vj.attributes:    # if vi & vj are not in the same class (Db), skip
-                        continue                            # if vi & vj have the same values, skip
+            # create a list containing every unique combination of Instances
+            combined: typ.List[typ.Tuple[Instance]] = list(itertools.combinations(values, 2))
             
-                    else:                                         # if vi & vj are valid
-    
-                        # compute the distance using the values and the passed function
-                        dist = Dst.computeDistance(DISTANCE_FUNCTION, vi.vList, vj.vList)
-                        
-                        if dist > Dw:                             # replace the max if the current value is higher
-                            Dw = dist
-                            
-                        if dist < Db:                             # replace the min if the current value is smaller
-                            Db = dist
+            # ********* Loop Over Every Combination of Instances ********* #
+            # vi & vj will be Instances
+            for vi, vj in combined:  # loop over the instance combinations
+                
+                dstCount = []  # reset the distance counter list to be empty
 
-            # perform the final distance calculations
-            Db *= (1 / len(values))  # multiply by 1/|S|
+                # ********** Compute Vid & Vjd ********** #
+                # vid & vjd will be list of floats
+                for Vid, Vjd in zip(vi.vList, vj.vList):  # loop over the values in the lists
+    
+                    # compute the distance using the values and the passed function &
+                    # append to the end of the dstCount list
+                    dstCount.append(Dst.computeDistance(DISTANCE_FUNCTION, Vid, Vjd))
+
+                # *************** Determine Which to Calculate: Dw or Dj *************** #
+                # get the min distance found for the vectors vi & vj, and add it to the sum
+                if vi.className == vj.className:  # if these instances were in the same class
+                    Dw += max(dstCount)
+
+                # get the max distance found for the vectors vi & vj, and add it to the sum
+                else:
+                    Db += min(dstCount)
+
+            # ******** Multiply Both By 1/|S| ******** #
+            Db *= (1 / len(values))
             Dw *= (1 / len(values))  # multiply by 1/|S|
-            
-            return 1 / (1 + math.pow(math.e, -5*(Db - Dw)))
+
+            return 1 / (1 + math.pow(math.e, -5 * (Db - Dw)))
 
         def __entropy(partition: typ.List[Instance]) -> float:
             """
