@@ -1,15 +1,26 @@
-import cProfile
+"""
+cdfcProject.py serves as the primary entry point into the project for wrapper main.py. It reads in CSV files, parses
+them, creates constants, trains the models, creates & trains cdfc, and exports data. The primary purpose of cdfcProject
+is to coordinate all other files in the project.
+
+Authors/Contributors: Dr. Dimitrios Diochnos, Conner Flansburg
+
+Github Repo: https://github.com/brom94/cdfcPython.git
+"""
+
 import collections as collect
 import copy
-# import logging as log
 import math
 import os
 import pickle
+import time as time
 # import traceback
 import tkinter as tk
 from pathlib import Path
+
 # from tkinter import messagebox
-from alive_progress import alive_bar, config_handler
+from tkinter import filedialog
+from alive_progress import config_handler
 from pyfiglet import Figlet
 from scipy import stats
 from sklearn.metrics import accuracy_score
@@ -20,92 +31,40 @@ from sklearn.tree import DecisionTreeClassifier
 from tqdm import tqdm
 
 from cdfc import cdfc
-from cdfcFmt import *
-from cdfcFmt import __buildAccuracyFrame, __accuracyFrameToLatex, __formatForSciKit, __flattenTrainingData
+from formatting import *
+from formatting import buildAccuracyFrame, formatForSciKit, flattenTrainingData
+from objects import WrapperInstance as Instance
 
-'''
-                                       CSVs should be of the form
-
-           |  label/id   |   attribute 1   |   attribute 2   |   attribute 3   |   attribute 4   | ... |   attribute k   |
---------------------------------------------------------------------------------------------------------------------------
-instance 1 | class value | attribute value | attribute value | attribute value | attribute value | ... | attribute value |
---------------------------------------------------------------------------------------------------------------------------
-instance 2 | class value | attribute value | attribute value | attribute value | attribute value | ... | attribute value |
---------------------------------------------------------------------------------------------------------------------------
-instance 3 | class value | attribute value | attribute value | attribute value | attribute value | ... | attribute value |
---------------------------------------------------------------------------------------------------------------------------
-instance 4 | class value | attribute value | attribute value | attribute value | attribute value | ... | attribute value |
---------------------------------------------------------------------------------------------------------------------------
-    ...    |    ...      |      ...        |       ...       |       ...       |       ...       | ... |       ...       |
---------------------------------------------------------------------------------------------------------------------------
-instance n | class value | attribute value | attribute value | attribute value | attribute value | ... | attribute value |
---------------------------------------------------------------------------------------------------------------------------
-
-'''
 # ********************************************* Constants used by Parser ********************************************* #
 BETA: typ.Final = 2              # BETA is a constant used to calculate the pop size
 R: typ.Final = 2                 # R is the ratio of number of CFs to the number of classes (features/classes)
-# ******************************************** Constants used by Profiler ******************************************** #
-profiler = cProfile.Profile()                       # create a profiler to profile cdfc during testing
-statsPath = str(Path.cwd() / 'logs' / 'stats.log')  # set the file path that the profiled info will be stored at
+PASSED_FUNCTION = None           # PASSED_FUNCTION is the distance function that was passed (defaults to Euclidean)
+LEARN = None                     # LEARN is the type of learning model that should be used (defaults to KNN)
 # ********************************************* Constants used by Logger ********************************************* #
 # create the file path for the log file & configure the logger
 logPath = str(Path.cwd() / 'logs' / 'cdfc.log')
-log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
+# log.basicConfig(level=log.ERROR, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
 # ******************************************** Constants used for Writing ******************************************** #
 HDR = '*' * 6
 SUCCESS = u' \u2713\n'+'\033[0m'     # print the checkmark & reset text color
 OVERWRITE = '\r' + '\033[32m' + HDR  # overwrite previous text & set the text color to green
+NO_OVERWRITE = '\033[32m' + HDR      # NO_OVERWRITE colors lines green that don't use overwrite
 SYSOUT = sys.stdout
 # ****************************************** Constants used by Type Hinting ****************************************** #
+# ! change back to 10 after testing
 K: typ.Final[int] = 10  # set the K for k fold cross validation
 ModelList = typ.Tuple[typ.List[float], typ.List[float], typ.List[float]]          # type hinting alias
 ModelTypes = typ.Union[KNeighborsClassifier, GaussianNB, DecisionTreeClassifier]  # type hinting alias
-
 ScalarsIn = typ.Union[None, StandardScaler]
-# ******************************************************************************************************************** #
+# ****************************************** Configuration of Progress Bar ****************************************** #
 config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', title_length=0, length=20)  # the global config for the loading bars
 # config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', force_tty=True, title_length=0, length=10)  # the global config for the loading bars
+# ******************************************************************************************************************** #
+
 
 # * Next Steps
 # TODO add doc strings
 # TODO add more unit tests
-
-
-def printError(err): print("\033[91m {}\033[00m" .format(err))  # used for coloring error message red
-
-
-class Instance:
-    """Instance is an instance, or row, within our data set. It represents a single
-       record of whatever we are measuring. This replaces the earlier row struct.
-
-    Variables:
-        className (int): The class id of the class that the record is in (this class ids start at 0).
-        attribute ({key: int, value: float}): This dictionary stores the features values in the
-                                                  instance, keyed by index (these start at 0)
-        vList ([float]): The list of the values stored in the dictionary (used to speed up iteration)
-    """
-    
-    def __init__(self, className: int, values: np.ndarray):
-        # this stores the name of the class that the instance is in
-        self.className: int = className
-        # this stores the values of the features, keyed by index, in the instance
-        self.attributes: typ.Dict[int, float] = dict(zip(range(values.size), values))
-        # this creates a list of the values stored in the dictionary for when iteration is wanted
-        self.vList: typ.List[float] = values.tolist()
-        
-        try:  # check that all the feature values are valid
-            if None in self.vList:  # if a None is in the list of feature values
-                raise Exception('Tried to create an Instance obj with a None feature value')
-        except Exception as err:
-            log.error(str(err))
-            tqdm.write(str(err))
-            traceback.print_stack()
-            sys.exit(-1)  # exit on error; recovery not possible
-
-    def __array__(self) -> np.array:
-        """Converts an Instance to an Numpy array."""
-        return np.array([float(self.className)] + self.vList)
 
 
 def parseFile(train: np.ndarray) -> typ.Dict[any, any]:
@@ -146,7 +105,7 @@ def parseFile(train: np.ndarray) -> typ.Dict[any, any]:
             if np.isnan(name):  # if it isn't a number
                 raise Exception(f'ERROR: Parser expected an integer, got a NaN of value:{line[0]}')
             elif not (type(name) is int):  # if it is a number, but not an integer
-                # log.debug(f'Parser expected an integer class ID, got a float: {line[0]}')
+                log.debug(f'Parser expected an integer class ID, got a float: {line[0]}')
                 name = int(name)  # caste to int
         except ValueError:  # if casting failed
             lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
@@ -193,7 +152,7 @@ def parseFile(train: np.ndarray) -> typ.Dict[any, any]:
                 CLASS_DICTS[name] = dict(newDict)  # insert the new dictionary using the key classID
                 ids.append(name)                   # add classId to ids -- a list of unique classIDs
                 
-                # log.debug(f'Parser created dictionary for classId {name}')  # ! for debugging
+                log.debug(f'Parser created dictionary for classId {name}')  # ! for debugging
         
         except IndexError:                         # catch error thrown by dictionary indexing
             lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
@@ -244,13 +203,14 @@ def parseFile(train: np.ndarray) -> typ.Dict[any, any]:
         'ENTROPY_OF_S': ENTROPY_OF_S,
         'CLASS_DICTS': CLASS_DICTS,
     }
-    
-    try:
-        if not (type(constants) is dict):
-            raise Exception(f'parseFile set constants to something other than a dictionary')
-    except Exception as err:
-        SYSOUT.write(str(err) + f'\n constants = {constants}, \n feature num = {FEATURE_NUMBER}, \n'
-                                f'class ids = {CLASS_IDS}, \n pop size = {POPULATION_SIZE}, \n')
+
+    # ! For Debugging Only
+    # try:
+    #     if not (type(constants) is dict):
+    #         raise Exception(f'parseFile set constants to something other than a dictionary')
+    # except Exception as err:
+    #     SYSOUT.write(str(err) + f'\n constants = {constants}, \n feature num = {FEATURE_NUMBER}, \n'
+    #                             f'class ids = {CLASS_IDS}, \n pop size = {POPULATION_SIZE}, \n')
 
     SYSOUT.write(OVERWRITE + ' Global variables set '.ljust(50, '-') + SUCCESS)
     return constants
@@ -331,21 +291,22 @@ def valuesInClass(classId: int, attribute: int, constants) -> typ.Tuple[typ.List
         tqdm.write(str(err) + f'line{lineNm}')
         sys.exit(-1)
     # ************************************************************************************************************* #
-    
-    try:
-        if not inClass and not notInClass:
-            log.debug('The valuesInClass method has found that both inClass & notInClass are empty')
-            raise Exception('valuesInClass() found notInClass[] & inClass[] to be empty')
-        elif not inClass:     # if inClass is empty
-            log.debug('The valuesInClass method has found that inClass is empty')
-            raise Exception('valuesInClass() found inClass[] to be empty')
-        elif not notInClass:  # if notInClass is empty
-            log.debug('The valuesInClass method has found that notInClass is empty')
-            raise Exception('valuesInClass() found notInClass[] to be empty')
-    except Exception as err:
-        lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-        tqdm.write(str(err) + f', line = {lineNm}')
-        sys.exit(-1)  # exit on error; recovery not possible
+
+    # ! For Debugging Only
+    # try:
+    #     if not inClass and not notInClass:
+    #         log.debug('The valuesInClass method has found that both inClass & notInClass are empty')
+    #         raise Exception('valuesInClass() found notInClass[] & inClass[] to be empty')
+    #     elif not inClass:     # if inClass is empty
+    #         log.debug('The valuesInClass method has found that inClass is empty')
+    #         raise Exception('valuesInClass() found inClass[] to be empty')
+    #     elif not notInClass:  # if notInClass is empty
+    #         log.debug('The valuesInClass method has found that notInClass is empty')
+    #         raise Exception('valuesInClass() found notInClass[] to be empty')
+    # except Exception as err:
+    #     lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+    #     tqdm.write(str(err) + f', line = {lineNm}')
+    #     sys.exit(-1)  # exit on error; recovery not possible
     
     return inClass, notInClass  # return inClass & notInClass
 
@@ -419,7 +380,7 @@ def terminals(classId: int, constants) -> typ.List[int]:
                                    The list will have a length of FEATURE_NUMBER/2, and will
                                    hold the indexes of the features.
     """
-    # log.debug('Starting terminals() method')
+    log.debug('Starting terminals() method')
     
     FEATURE_NUMBER = constants['FEATURE_NUMBER']
     
@@ -438,48 +399,49 @@ def terminals(classId: int, constants) -> typ.List[int]:
         tValue, pValue = stats.ttest_ind(inClass, notIn, equal_var=False)
         
         # ****************** Check that valuesInClass & t-test worked as expected ****************** #
-        try:
-            # __transform into numpy arrays which are easier to test
-            inside_of_class = np.array(inClass)
-            not_inside_of_class = np.array(notIn)
-            
-            # *** Check if pValue is 1 *** #
-            if pValue == 1:  # if pValue is 1 then inClass & notIn are the same. Relevancy should be zero
-                log.debug(f'pValue is 1 (inClass & notIn share the same mean), feature {i} should be ignored')
-            
-            # *** Check that inClass is not empty *** #
-            if not inClass:
-                log.error(f'inClass was empty, ninClass={inClass}, notIn={notIn}, classId={classId}, attribute={i}')
-                raise Exception(f'ERROR: inClass was empty,'
-                                f'\ninClass={inClass}, notIn={notIn}, classId={classId}, attribute={i}')
-            # + if inClass is empty tValue is inaccurate, don't run other checks + #
-            
-            # *** Check that inClass & notIn aren't equal *** #
-            elif np.array_equal(inside_of_class, not_inside_of_class):
-                log.error(f'inClass & notIn are equal, inClass{inside_of_class}, notIn{not_inside_of_class}')
-                raise Exception(f'inClass & notIn are equal, inClass{inside_of_class}, '
-                                f'notIn{not_inside_of_class}')
-            
-            # *** Check that inClass & notIn aren't equivalent *** #
-            elif np.array_equiv(inside_of_class, not_inside_of_class):
-                log.error(f'inClass & notIn are equivalent (but not equal, their shapes are different), '
-                          f'inClass{inside_of_class}, notIn{not_inside_of_class}')
-                raise Exception(f'inClass & notIn are equivalent, inClass{inside_of_class}, '
-                                f'notIn{not_inside_of_class}')
-            
-            # *** Check that tValue was set & is a finite number  *** #
-            elif tValue is None or math.isnan(tValue) or math.isinf(tValue):
-                log.error(f'tValue computation failed, expected a finite number got {tValue}')
-                raise Exception(f'ERROR: tValue computation failed, expected a finite number got {tValue}')
-            
-            # *** Check that pValue was set & is a number  *** #
-            elif pValue is None or math.isnan(pValue) or math.isinf(pValue):
-                log.error(f'pValue computation failed, expected a finite number got {pValue}')
-                raise Exception(f'ERROR: pValue computation failed, expected a finite number got {pValue}')
+        # ! For Debugging Only
+        # try:
+        #     # __transform into numpy arrays which are easier to test
+        #     inside_of_class = np.array(inClass)
+        #     not_inside_of_class = np.array(notIn)
+        #
+        #     # *** Check if pValue is 1 *** #
+        #     if pValue == 1:  # if pValue is 1 then inClass & notIn are the same. Relevancy should be zero
+        #         log.debug(f'pValue is 1 (inClass & notIn share the same mean), feature {i} should be ignored')
+        #
+        #     # *** Check that inClass is not empty *** #
+        #     if not inClass:
+        #         log.error(f'inClass was empty, ninClass={inClass}, notIn={notIn}, classId={classId}, attribute={i}')
+        #         raise Exception(f'ERROR: inClass was empty,'
+        #                         f'\ninClass={inClass}, notIn={notIn}, classId={classId}, attribute={i}')
+        #     # + if inClass is empty tValue is inaccurate, don't run other checks + #
+        #
+        #     # *** Check that inClass & notIn aren't equal *** #
+        #     elif np.array_equal(inside_of_class, not_inside_of_class):
+        #         log.error(f'inClass & notIn are equal, inClass{inside_of_class}, notIn{not_inside_of_class}')
+        #         raise Exception(f'inClass & notIn are equal, inClass{inside_of_class}, '
+        #                         f'notIn{not_inside_of_class}')
+        #
+        #     # *** Check that inClass & notIn aren't equivalent *** #
+        #     elif np.array_equiv(inside_of_class, not_inside_of_class):
+        #         log.error(f'inClass & notIn are equivalent (but not equal, their shapes are different), '
+        #                   f'inClass{inside_of_class}, notIn{not_inside_of_class}')
+        #         raise Exception(f'inClass & notIn are equivalent, inClass{inside_of_class}, '
+        #                         f'notIn{not_inside_of_class}')
+        #
+        #     # *** Check that tValue was set & is a finite number  *** #
+        #     elif tValue is None or math.isnan(tValue) or math.isinf(tValue):
+        #         log.error(f'tValue computation failed, expected a finite number got {tValue}')
+        #         raise Exception(f'ERROR: tValue computation failed, expected a finite number got {tValue}')
+        #
+        #     # *** Check that pValue was set & is a number  *** #
+        #     elif pValue is None or math.isnan(pValue) or math.isinf(pValue):
+        #         log.error(f'pValue computation failed, expected a finite number got {pValue}')
+        #         raise Exception(f'ERROR: pValue computation failed, expected a finite number got {pValue}')
         
-        except Exception as err:
-            tqdm.write(str(err))
-            sys.exit(-1)  # exit on error; recovery not possible
+        # except Exception as err:
+        #     tqdm.write(str(err))
+        #     sys.exit(-1)  # exit on error; recovery not possible
         # ******************************************************************************************* #
         
         # calculate relevancy for a single feature (if the mean is the same for inClass & notIn, pValue=1)
@@ -494,21 +456,22 @@ def terminals(classId: int, constants) -> typ.List[int]:
                 relevancy: float = np.divide(np.absolute(tValue), pValue)  # set relevancy using t-value/p-value
                 
                 # *************************** Check that division worked *************************** #
-                if math.isinf(relevancy):  # check for n/0
-                    log.error(
-                        f'Relevancy is infinite; some non-zero was divided by 0 -- tValue={tValue} pValue={pValue}')
-                    raise Exception(f'ERROR: relevancy is infinite, tValue={tValue} pValue={pValue}')
-                
-                elif math.isnan(relevancy):  # check for 0/0
-                    log.error(f'Relevancy is infinite; 0/0 -- tValue={tValue} pValue={pValue}')
-                    raise Exception(f'ERROR: relevancy is NaN (0/0), tValue={tValue} pValue={pValue}')
-                if pValue == 1:
-                    log.error('pValue is 1, but was not caught by if pValue >= 0.05')
-                    raise Exception('ERROR: pValue is 1, but was not caught by if pValue >= 0.05')
+                # ! For Debugging Only
+                # if math.isinf(relevancy):  # check for n/0
+                #     log.error(
+                #         f'Relevancy is infinite; some non-zero was divided by 0 -- tValue={tValue} pValue={pValue}')
+                #     raise Exception(f'ERROR: relevancy is infinite, tValue={tValue} pValue={pValue}')
+                #
+                # elif math.isnan(relevancy):  # check for 0/0
+                #     log.error(f'Relevancy is infinite; 0/0 -- tValue={tValue} pValue={pValue}')
+                #     raise Exception(f'ERROR: relevancy is NaN (0/0), tValue={tValue} pValue={pValue}')
+                # if pValue == 1:
+                #     log.error('pValue is 1, but was not caught by if pValue >= 0.05')
+                #     raise Exception('ERROR: pValue is 1, but was not caught by if pValue >= 0.05')
                 # ********************************************************************************** #
                 
-                else:  # if division worked
-                    scores.append(Score(i, relevancy))  # add relevancy score to the list of scores
+                # if division worked, add relevancy score to the list of scores
+                scores.append(Score(i, relevancy))
             
             except Exception as err:
                 tqdm.write(str(err))
@@ -524,17 +487,18 @@ def terminals(classId: int, constants) -> typ.List[int]:
         terminalSet.append(i.Attribute)  # add the attribute number to the terminal set
     
     # ************************* Test if terminalSet is empty ************************* #
-    try:
-        if not terminalSet:      # if terminalSet is empty
-            log.error('Terminals calculation failed: terminalSet is empty')
-            raise Exception('ERROR: Terminals calculation failed: terminalSet is empty')
-        if None in terminalSet:  # if terminalSet contains a None
-            log.error('Terminals calculation failed: terminalSet contains a None')
-            raise Exception('ERROR: Terminals calculation failed: terminalSet contains a None')
-    except Exception as err:
-        lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-        tqdm.write(f'{str(err)}, line = {lineNm}')
-        sys.exit(-1)  # exit on error; recovery not possible
+    # ! For Debugging Only
+    # try:
+    #     if not terminalSet:      # if terminalSet is empty
+    #         log.error('Terminals calculation failed: terminalSet is empty')
+    #         raise Exception('ERROR: Terminals calculation failed: terminalSet is empty')
+    #     if None in terminalSet:  # if terminalSet contains a None
+    #         log.error('Terminals calculation failed: terminalSet contains a None')
+    #         raise Exception('ERROR: Terminals calculation failed: terminalSet contains a None')
+    # except Exception as err:
+    #     lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+    #     tqdm.write(f'{str(err)}, line = {lineNm}')
+    #     sys.exit(-1)  # exit on error; recovery not possible
     # ********************************************************************************* #
     
     log.debug('Finished terminals() method')
@@ -610,7 +574,22 @@ def __fillBuckets(entries: np.ndarray) -> typ.List[typ.List[np.ndarray]]:
     return buckets
 
 
+# TODO check what this function is doing & update docstring
 def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, useNormalize: bool) -> typ.List[float]:
+    """
+    __buildModel
+    
+    :param buckets:
+    :param model: model that will make use of the feature reduction done by CDFC
+    :param useNormalize: should the original data be normalized
+    
+    :type buckets:
+    :type model: ModelTypes
+    :type useNormalize: bool
+    
+    :return: the classifications of the instances
+    :rtype: typ.List[float]
+    """
     
     # determine the type of model we are using for printing later
     if type(model) == KNeighborsClassifier:
@@ -627,16 +606,16 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
     trainList: typ.List[typ.List[np.ndarray]] = copy.deepcopy(buckets)  # make a copy of buckets so we don't override it
     accuracy: typ.List[float] = []      # this will store the details about the accuracy of our hypotheses
 
-    # TODO pickle isn't making a file; why?
+    # TODO: change pickle name so that it won't read in "pickles" from different data sets
     # *** Open the Pickle Jar file *** #
     pth = Path.cwd() / 'jar' / 'features'  # create the file path
     try:
 
         if os.path.isfile(str(pth)):           # if the file does exist
-            print(f'{HDR} Reading in pickle file ......')
             with open(str(pth), 'rb') as fl:   # try to open the file
                 pickles = pickle.load(fl)      # load the file into pickles
             wasPickle = True                   # since we read in the file set to True
+            print(NO_OVERWRITE + ' Pickle File Read '.ljust(50, '-') + SUCCESS)
 
         else:                                  # if the file didn't exist
             pickles = {}                       # set pickles to be an empty dict
@@ -649,11 +628,12 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
         pickles = {}                           # set pickles to empty to avoid data corruption errors
 
     # *** Divide them into training & test data K times ***
-    # loop over all the random index values
+    # loop over all the random index values.
+    # + Each loop will create a new learning model using the fit method from SciKit
 
-    iteration: int = 0  # used to count iterations by the progress bar
+    iteration: int = 0  # used to count iterations so progress can be printed
     for r in range(K):  # len(r) = K so this will be done K times
-        print(f'{HDR} Starting Fold {iteration}/{K}')
+        print('\n\n' + f' Starting Fold {iteration + 1}/{K} '.center(58, '*'))
         # ********** Get the Training & Testing Data ********** #
         # the Rth bucket becomes our testing data, everything else becomes training data
         # this is done in order to prevent accidental overwrites
@@ -667,7 +647,7 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
             oldR = r                             # save the current r value for then next loop
     
         # ********** Flatten the Training Data ********** #
-        train: np.ndarray = __flattenTrainingData(trainList)  # remove buckets to create a single pool
+        train: np.ndarray = flattenTrainingData(trainList)  # remove buckets to create a single pool
 
         testing: np.ndarray = np.array(testingList)  # turn testing data into a numpy array, testing doesn't need to be flattened
 
@@ -680,7 +660,7 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
     
         # ********** 3B Train the CDFC Model & Transform the Training Data using It ********** #
 
-        SYSOUT.write(f"\nTraining CDFC for {mType}...\n")  # update user
+        # SYSOUT.write(f"\nTraining CDFC for {mType}...\n")  # update user
         
         if wasPickle:                                                            # if there was a saved data object
             data = pickles[r]                                                    # read in from it
@@ -689,11 +669,12 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
             relevant: typ.Dict[int, typ.List[int]] = {}                          # this will hold the relevant features found by terminals
             for classId in constants['CLASS_IDS']:                               # loop over all class ids and get the relevant features for each one
                 relevant[classId] = terminals(classId, constants)                # store the relevant features for a class using the classId as a key
-            # sanityCheckDictionary(relevant)
+            # __sanityCheckDictionary(relevant)
             data = (constants, relevant)                                         # data[0] = constants to be set, data[1] = TERMINALS
             pickles[r] = data
 
-        CDFC_Hypothesis = cdfc(data)                                             # now that we have our train & test data create our hypothesis
+        # now that we have our train & test data create our hypothesis (train CDFC)
+        CDFC_Hypothesis = cdfc(data, PASSED_FUNCTION)
         SYSOUT.write(OVERWRITE + ' CDFC Trained '.ljust(50, '-') + SUCCESS)      # replace starting with complete
         
         SYSOUT.write(HDR + ' Transforming Training Data ......')                 # print
@@ -702,13 +683,15 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
         SYSOUT.write(OVERWRITE + ' Data Transformed '.ljust(50, '-') + SUCCESS)  # replace starting with complete
 
         # ********** 3C Train the Learning Algorithm ********** #
+        SYSOUT.write(HDR + f' Training {mType} Model ......')
         # format data for SciKit Learn
-        ftrs, labels = __formatForSciKit(train)
+        ftrs, labels = formatForSciKit(train)
         
         # now that the data is formatted, run the learning algorithm.
         # if useNormalize is True the data has been transformed to fit
         # a scalar & gone through discretization. If False, it has not
         model.fit(ftrs, labels)
+        SYSOUT.write(OVERWRITE + f' {mType} Model Trained '.ljust(50, '-') + SUCCESS)  # replace starting with complete
     
         # ********** 3D.1 Normalize the Testing Data ********** #
         # if use
@@ -719,12 +702,28 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
         testing = CDFC_Hypothesis.runCDFC(testing)  # use the cdfc model to reduce the data's size
     
         # format testing data for SciKit Learn
-        ftrs, trueLabels = __formatForSciKit(testing)
+        ftrs, trueLabels = formatForSciKit(testing)
     
         # ********** 3D.3 Feed the Training Data into the Model & get Accuracy ********** #
         labelPrediction = model.predict(ftrs)  # use model to predict labels
         # compute the accuracy score by comparing the actual labels with those predicted
-        accuracy.append(accuracy_score(trueLabels, labelPrediction))
+        score = accuracy_score(trueLabels, labelPrediction)
+        accuracy.append(score)  # add the score to the list of scores
+
+        # *** print the computed accuracy *** #
+        percentScore: float = round(score * 100, 1)  # turn the score into a percent with 2 decimal places
+        
+        if percentScore > 75:  # print in green
+            SYSOUT.write(f'\r\033[32m{mType} Accuracy is: {percentScore}%\033[00m\n')
+            SYSOUT.flush()
+
+        elif percentScore < 45:  # print in red
+            SYSOUT.write(f'\r\033[91m{mType} Accuracy is: {percentScore}%\033[00m\n')
+            SYSOUT.flush()
+        
+        else:  # don't add color, but print accuracy
+            SYSOUT.write(f'{mType} Accuracy is: {percentScore}%\n')
+            SYSOUT.flush()
         
         iteration += 1  # update iteration
     
@@ -738,18 +737,31 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
             log.error(f'Pickle could not open or create file {pth}')         # log the error & print it
             SYSOUT.write(f'\nPickle could not open or create file {pth}\n')  # to console, but continue
 
-    SYSOUT.write(HDR + ' K Fold Validation Complete '.ljust(50, '-') + SUCCESS)  # update user
+    SYSOUT.write('\n' + NO_OVERWRITE + ' K Fold Validation Complete '.ljust(50, '-') + SUCCESS)  # update user
     
     # *** Return Accuracy *** #
     return accuracy
 
 
 # ! for testing purposes only!
-def sanityCheckDictionary(d: typ.Dict[int, typ.List[int]]):
+def __sanityCheckDictionary(d: typ.Dict[int, typ.List[int]]) -> None:
+    """
+    A Sanity check for the dictionary that cdfcProject will send to cdfc.
+    This is used in testing only, and checks that the dictionary is non-empty.
+    
+    :param d: dictionary to be tested.
+    :type d: dict
+    
+    :return: either raises an exception or returns None if dictionary is non-empty.
+    :rtype: None
+    """
+
     log.debug('Starting Dictionary Sanity Check...')
+    
     try:
         if None in d.values():
             raise Exception('ERROR: buildModel() created a relevant value dictionary that includes \'None\'')
+    
     except Exception as err:
         lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
         msg = f'{str(err)}, line = {lineNm}'  # create the error/log message
@@ -757,10 +769,25 @@ def sanityCheckDictionary(d: typ.Dict[int, typ.List[int]]):
         tqdm.write(msg)
         traceback.print_stack()
         sys.exit(-1)  # exit on error; recovery not possible
+    
     log.debug('Dictionary Sanity Check Passed')
 
 
-def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> ModelList:
+def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> typ.List[float]:
+    """
+    __runSciKitModels builds the non-CDFC models & returns the
+    constructed models as a list.
+    
+    :param entries: the parsed input file
+    :param useNormalize: a flag that is true if the data should be normalized
+    
+    :type entries: np.ndarray
+    :type useNormalize: bool
+    
+    :return: the constructed models
+    :rtype: typ.List[typ.List[float]]
+    """
+    
     # NOTE adding more models requires updating the Models type at top of file
     # hdr, overWrite, & success are just used to format string for the console
     # accuracy is a float list, each value is the accuracy for a single run
@@ -770,28 +797,67 @@ def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> ModelList:
     buckets = __fillBuckets(entries)  # using the parsed data, fill the k buckets (once for all models)
     SYSOUT.write(OVERWRITE + " Buckets built ".ljust(50, '-') + SUCCESS)  # update user
     
-    # ************ Kth Nearest Neighbor Classifier ************ #
-    knnAccuracy: typ.List[float] = __buildModel(buckets, KNeighborsClassifier(n_neighbors=3), useNormalize)  # build the model
-
-    # ************ Decision Tree Classifier ************ #
-    dtAccuracy: typ.List[float] = __buildModel(buckets, DecisionTreeClassifier(random_state=0), useNormalize)  # build the model
-
-    # ************ Gaussian Classifier (Naive Bayes) ************ #
-    nbAccuracy: typ.List[float] = __buildModel(buckets, GaussianNB(), useNormalize)       # build the model
+    if LEARN == "DT":
+        
+        # ************ Decision Tree Classifier ************ #
+        accuracy: typ.List[float] = __buildModel(buckets, DecisionTreeClassifier(random_state=0),
+                                                 useNormalize)  # build the model
     
-    SYSOUT.write("Models run\n\n")  # update user
+    elif LEARN == "NB":
+        
+        # ************ Gaussian Classifier (Naive Bayes) ************ #
+        accuracy: typ.List[float] = __buildModel(buckets, GaussianNB(), useNormalize)  # build the model
+    
+    else:  # do the defualt (KNN)
+        
+        # ************ Kth Nearest Neighbor Classifier ************ #
+        accuracy: typ.List[float] = __buildModel(buckets, KNeighborsClassifier(n_neighbors=3),
+                                                 useNormalize)  # build the model
 
-    return knnAccuracy, dtAccuracy, nbAccuracy
+    # SYSOUT.write("Model ran\n\n")  # update user
+
+    # TODO change calling function so it can accept a single return
+    return accuracy
 
 
-def main() -> None:
+def run(fnc: str, mdl: str) -> None:
+    """
+    run is the entry point for main.py. It prompts the user for a file, parses it, builds the required models,
+    formats the data frames, and general coordinates the other models with CDFC.
+    
+    :param fnc: the distance function to be used. It should be provided via command line flags (see main.py).
+    :param mdl:
+    
+    :type fnc: str
+    :type mdl:
+    
+    :return: run either crashes or returns a None on a success.
+    :rtype: None
+    """
+    
     SYSOUT.write(Figlet(font='larry3d').renderText('C D f C'))  # formatted start up message
-    SYSOUT.write("Program Initialized Successfully\n")
+    SYSOUT.write("\033[32mProgram Initialized Successfully\033[00m\n")
     
     parent = tk.Tk()            # prevent root window caused by Tkinter
     parent.overrideredirect(1)  # Avoid it appearing and then disappearing quickly
     parent.withdraw()           # Hide the window
 
+    # *** set the passed functions value *** #
+    # NOTE: for some reason just passing the fnc string was causing a key error
+    global PASSED_FUNCTION
+    global LEARN
+    
+    LEARN = mdl  # set the value of LEARN using provided input
+    
+    if fnc == "correlation":    # use the Correlation function
+        PASSED_FUNCTION = "correlation"
+    elif fnc == "czekanowski":  # use the Czekanowski function
+        PASSED_FUNCTION = "czekanowski"
+    elif fnc == "euclidean":    # use the Euclidean function
+        PASSED_FUNCTION = "euclidean"
+    else:                       # default to the Euclidean function
+        PASSED_FUNCTION = "euclidean"
+    
     SYSOUT.write('\nGetting File...\n')
     try:
         inPath = Path(filedialog.askopenfilename(parent=parent))  # prompt user for file path
@@ -800,7 +866,7 @@ def main() -> None:
         sys.stderr.write(f"\n{HDR} Permission Denied, or No File was Selected\nExiting......")  # exit gracefully
         sys.exit("Could not access file/No file was selected")
 
-    SYSOUT.write(f"{OVERWRITE} File {inPath.name} found ".ljust(60, '-') + SUCCESS)
+    SYSOUT.write(OVERWRITE + f' File {inPath.name} Found '.ljust(50, '-') + SUCCESS)
 
     # useNormalize = messagebox.askyesno('CDFC - Transformations', 'Do you want to __transform the data before using it?', parent=parent)  # Yes / No
     useNormalize = True  # use during debugging to make runs faster
@@ -812,17 +878,27 @@ def main() -> None:
     SYSOUT.write('\r\033[32mFile Found & Loaded Successfully\033[00m\n')                   # update user
     
     # *** Build the Models *** #
-    modelsTuple = __runSciKitModels(entries, useNormalize)  # knnAccuracy, dtAccuracy, nbAccuracy
+    accuracy: typ.List[float] = __runSciKitModels(entries, useNormalize)  # knnAccuracy, dtAccuracy, nbAccuracy
 
     # NOTE: everything below just formats & outputs the results
     # *** Create a Dataframe that Combines the Accuracy of all the Models *** #
-    accuracyFrame = __buildAccuracyFrame(modelsTuple, K)
-
-    # *** Modify the Dataframe to Match our LaTeX File *** #
-    latexFrame = __accuracyFrameToLatex(modelsTuple, accuracyFrame)
+    accuracyFrame = buildAccuracyFrame(accuracy, K, LEARN)
     
     # *** Export the Dataframe as a LaTeX File *** #
     SYSOUT.write(HDR + ' Exporting LaTeX dataframe...')
+    
+    # will be of the form MODEL_DATASET, for example: KNN_Colon
+    title = f'{LEARN}_{inPath.name}'
+    
+    try:  # attempt to convert the dataframe to latex
+        output: str = accuracyFrame.to_latex(label=title)
+    except Exception as err:
+        lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+        msg: str = f'ERROR is formatting.py, line {lineNm}\n{str(err)}'  # create the message
+        printError(msg)                        # print the message
+        print(f'dataframe = {accuracyFrame}')  # print the dataframe
+        printError(traceback.format_exc())     # print stack trace
+        sys.exit(-1)  # exit on error; recovery not possible
     
     # set the output file path
     if useNormalize:                       # if we are using the transformations
@@ -831,20 +907,24 @@ def main() -> None:
     else:                          # if we are not transforming the data
         stm = inPath.stem + 'Raw'  # add 'Raw' to the file name
     
-    outPath = Path.cwd() / 'data' / 'outputs' / (stm + '.tex')  # create the file path
+    outPath = Path.cwd() / 'data' / 'outputs' / (title + stm + '.tex')  # create the file path
 
-    with open(outPath, "w") as texFile:             # open the selected file
-        print(latexFrame.to_latex(), file=texFile)  # & write dataframe to it, converting it to latex
-    texFile.close()                                 # close the file
+    with open(outPath, "w") as texFile:                           # open the selected file
+        print(output, file=texFile)  # & write dataframe to it, converting it to latex
+    texFile.close()                                               # close the file
     
     SYSOUT.write(OVERWRITE + ' Export Successful '.ljust(50, '-') + SUCCESS)
-    SYSOUT.write('Dataframe converted to LaTeX & Exported\n')
+    # SYSOUT.write('\033[32m Dataframe converted to LaTeX & Exported\n'+'\033[0m')
     
-    # *** Exit *** #
-    SYSOUT.write('\nExiting')
-    sys.exit(0)  # close program
-    
+    return
+
 
 if __name__ == "__main__":
+    
+    start = time.time()        # get the start time
+    run("euclidean", 'KNN')    # run CDFC
+    end = time.time() - start  # get the elapsed
+    print(f'Elapsed Time: {time.strftime("%H:%M:%S", time.gmtime(end))}')  # print the elapsed time
+    
+    
 
-    main()
