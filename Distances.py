@@ -27,14 +27,18 @@ def computeDistance(func: str, Vi: typ.List[float], Vj: typ.List[float]) -> typ.
     :rtype: typ.Union[float, int]
     """
     
-    if func == "czekanowski":  # if the function provided was Czekanowski,
-        return __Czekanowski(Vi, Vj)  # run Czekanowski
+    if func == "czekanowski":    # if the function provided was Czekanowski,
+        return __Czekanowski(Vi, Vj)
     
-    elif func == "euclidean":  # if the euclidean distance was requested
+    elif func == "euclidean":    # if the euclidean distance was requested
         return __Euclidean(Vi, Vj)
     
     elif func == "correlation":  # if the correlation distance/value was requested
         return sp.correlation(Vi, Vj)
+    
+    elif func == "cosine":       # if the cosine similarity function was requested
+        # NOTE: this computes the distance, to compute similarity subtract result from 1
+        return sp.cosine(Vi, Vj)
     
     else:  # if no valid distance function was provided, default to the euclidean distance
         return __Euclidean(Vi, Vj)
