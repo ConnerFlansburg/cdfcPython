@@ -47,8 +47,8 @@ logPath = str(Path.cwd() / 'logs' / 'cdfc.log')
 # ******************************************** Constants used for Writing ******************************************** #
 HDR = '*' * 6
 SUCCESS = u' \u2713\n'+'\033[0m'     # print the checkmark & reset text color
-OVERWRITE = '\r' + '\033[32m' + HDR  # overwrite previous text & set the text color to green
-NO_OVERWRITE = '\033[32m' + HDR      # NO_OVERWRITE colors lines green that don't use overwrite
+OVERWRITE = '\r' + '\033[32;1m' + HDR  # overwrite previous text & set the text color to green
+NO_OVERWRITE = '\033[32;1m' + HDR      # NO_OVERWRITE colors lines green that don't use overwrite
 SYSOUT = sys.stdout
 # ****************************************** Constants used by Type Hinting ****************************************** #
 # ! change back to 10 after testing
@@ -714,15 +714,15 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
         percentScore: float = round(score * 100, 1)  # turn the score into a percent with 2 decimal places
         
         if percentScore > 75:         # > 75 print in green
-            SYSOUT.write(f'\r\033[32m{mType} Accuracy is: {percentScore}%\033[00m\n')
+            SYSOUT.write(f'\r\033[32;1m{mType} Accuracy is: {percentScore}%\033[00m\n')
             SYSOUT.flush()
 
         elif 45 < percentScore < 75:  # > 45 and < 75 print yellow
-            SYSOUT.write(f'\r\033[33m{mType} Accuracy is: {percentScore}%\033[00m\n')
+            SYSOUT.write(f'\r\033[33;1m{mType} Accuracy is: {percentScore}%\033[00m\n')
             SYSOUT.flush()
 
         elif percentScore < 45:       # < 45 print in red
-            SYSOUT.write(f'\r\033[91m{mType} Accuracy is: {percentScore}%\033[00m\n')
+            SYSOUT.write(f'\r\033[91;1m{mType} Accuracy is: {percentScore}%\033[00m\n')
             SYSOUT.flush()
         
         else:  # don't add color, but print accuracy
@@ -838,9 +838,9 @@ def run(fnc: str, mdl: str) -> None:
     :return: run either crashes or returns a None on a success.
     :rtype: None
     """
-    
-    SYSOUT.write(Figlet(font='larry3d').renderText('C D f C'))  # formatted start up message
-    SYSOUT.write("\033[32mProgram Initialized Successfully\033[00m\n")
+    title: str = Figlet(font='larry3d').renderText('C D f C')
+    SYSOUT.write(f'\033[34;1m{title}\033[00m')  # formatted start up message
+    SYSOUT.write("\033[32;1mProgram Initialized Successfully\033[00m\n")
     
     parent = tk.Tk()            # prevent root window caused by Tkinter
     parent.overrideredirect(1)  # Avoid it appearing and then disappearing quickly
@@ -879,7 +879,7 @@ def run(fnc: str, mdl: str) -> None:
     SYSOUT.write(HDR + ' Reading in .csv file...')  # update user
     entries = np.genfromtxt(inPath, delimiter=',', skip_header=1)  # + this line is used to read .csv files
     SYSOUT.write(OVERWRITE + ' .csv file read in successfully '.ljust(50, '-') + SUCCESS)  # update user
-    SYSOUT.write('\r\033[32mFile Found & Loaded Successfully\033[00m\n')                   # update user
+    SYSOUT.write('\r\033[32;1mFile Found & Loaded Successfully\033[00m\n')                   # update user
     
     # *** Build the Models *** #
     accuracy: typ.List[float] = __runSciKitModels(entries, useNormalize)  # knnAccuracy, dtAccuracy, nbAccuracy
@@ -918,7 +918,7 @@ def run(fnc: str, mdl: str) -> None:
     texFile.close()                                               # close the file
     
     SYSOUT.write(OVERWRITE + ' Export Successful '.ljust(50, '-') + SUCCESS)
-    # SYSOUT.write('\033[32m Dataframe converted to LaTeX & Exported\n'+'\033[0m')
+    # SYSOUT.write('\033[32;1m Dataframe converted to LaTeX & Exported\n'+'\033[0m')
     
     return
 

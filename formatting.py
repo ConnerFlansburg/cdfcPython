@@ -33,7 +33,7 @@ def printError(message: str) -> None:
     :return: printError does not return, but rather prints to the console.
     :rtype: None
     """
-    print("\033[91m {}\033[00m" .format(message))
+    print("\033[91;1m {}\033[00m" .format(message))
 
 
 def flattenTrainingData(trainList: typ.List[typ.List[np.ndarray]]) -> np.ndarray:
