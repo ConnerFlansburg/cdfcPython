@@ -713,11 +713,15 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
         # *** print the computed accuracy *** #
         percentScore: float = round(score * 100, 1)  # turn the score into a percent with 2 decimal places
         
-        if percentScore > 75:  # print in green
+        if percentScore > 75:         # > 75 print in green
             SYSOUT.write(f'\r\033[32m{mType} Accuracy is: {percentScore}%\033[00m\n')
             SYSOUT.flush()
 
-        elif percentScore < 45:  # print in red
+        elif 45 < percentScore < 75:  # > 45 and < 75 print yellow
+            SYSOUT.write(f'\r\033[33m{mType} Accuracy is: {percentScore}%\033[00m\n')
+            SYSOUT.flush()
+
+        elif percentScore < 45:       # < 45 print in red
             SYSOUT.write(f'\r\033[91m{mType} Accuracy is: {percentScore}%\033[00m\n')
             SYSOUT.flush()
         
@@ -922,9 +926,6 @@ def run(fnc: str, mdl: str) -> None:
 if __name__ == "__main__":
     
     start = time.time()        # get the start time
-    run("euclidean", 'KNN')    # run CDFC
+    run("cosine", 'KNN')    # run CDFC
     end = time.time() - start  # get the elapsed
     print(f'Elapsed Time: {time.strftime("%H:%M:%S", time.gmtime(end))}')  # print the elapsed time
-    
-    
-
