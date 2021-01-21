@@ -15,11 +15,12 @@ import random
 import sys
 import typing as typ
 import warnings
-# from pathlib import Path
+from pathlib import Path
 import Distances as Dst
 import numpy as np
 from alive_progress import alive_bar, config_handler
 from treelib import Node as Node
+from decimal import Decimal
 
 from objects import Tree
 from objects import cdfcInstance as Instance
@@ -63,8 +64,8 @@ CLASS_DICTS: CL_DICTION = {}                  # CLASS_DICTS is a list of dicts (
 # ++++++++++++++++++++++++ console formatting strings +++++++++++++++++++++++++ #
 HDR = '*' * 6
 SUCCESS = u' \u2713\n'+'\033[0m'     # print the checkmark & reset text color
-OVERWRITE = '\r' + '\033[32m' + HDR  # overwrite previous text & set the text color to green
-NO_OVERWRITE = '\033[32m' + HDR      # NO_OVERWRITE colors lines green that don't use overwrite
+OVERWRITE = '\r' + '\033[32;1m' + HDR  # overwrite previous text & set the text color to green
+NO_OVERWRITE = '\033[32;1m' + HDR      # NO_OVERWRITE colors lines green that don't use overwrite
 SYSOUT = sys.stdout
 # ++++++++++++++++++++++++ configurations & file paths ++++++++++++++++++++++++ #
 sys.setrecursionlimit(10000)                                  # set the recursion limit for the program
@@ -76,9 +77,9 @@ warnings.filterwarnings('ignore', message=suppressMessage)
 config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', title_length=0, length=20)  # the global config for the loading bars
 # config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', force_tty=True, title_length=0, length=10)  # the global config for the loading bars
 
-# logPath = str(Path.cwd() / 'logs' / 'cdfc.log')               # create the file path for the log file & configure the logger
+logPath = str(Path.cwd() / 'logs' / 'cdfc.log')               # create the file path for the log file & configure the logger
 # log.basicConfig(level=log.ERROR, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
-# log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
+log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
 
 # profiler = cProfile.Profile()                                 # create a profiler to profile cdfc during testing
 # statsPath = str(Path.cwd() / 'logs' / 'stats.log')            # set the file path that the profiled info will be stored at
@@ -241,41 +242,58 @@ class Hypothesis:
             :rtype: float
             """
             
-            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
-            Dw: float = 0  # the calculated score of Dw
-            Db: float = 0  # the calculated score of Db
+            minimum: typ.Optional[float] = 999  # smallest distance between classes that has been found
+            maximum: typ.Optional[float] = -999  # largest distance within the same class that has been found
             
             # create a list containing every unique combination of Instances
             combined: typ.List[typ.Tuple[Instance]] = list(itertools.combinations(values, 2))
             
             # ********* Loop Over Every Combination of Instances ********* #
-            # vi & vj will be Instances
-            for vi, vj in combined:  # loop over the instance combinations
-                
-                dstCount = []  # reset the distance counter list to be empty
+            # loop over the instance combinations
+            for Vi, Vj in combined:  # type: Instance
 
                 # ********** Compute Vid & Vjd ********** #
-                # vid & vjd will be list of floats
-                for Vid, Vjd in zip(vi.vList, vj.vList):  # loop over the values in the lists
-    
-                    # compute the distance using the values and the passed function &
-                    # append to the end of the dstCount list
-                    dstCount.append(Dst.computeDistance(DISTANCE_FUNCTION, Vid, Vjd))
+                # Vi.vList & Vj.vList will be list of floats
+                dstValue = Dst.computeDistance(DISTANCE_FUNCTION, Vi.vList, Vj.vList)
 
                 # *************** Determine Which to Calculate: Dw or Dj *************** #
-                # get the min distance found for the vectors vi & vj, and add it to the sum
-                if vi.className == vj.className:  # if these instances were in the same class
-                    Dw += max(dstCount)
+                # if these instances are in the same class, and Db is less than dstValue, choose Dw
+                if (Vi.className == Vj.className) and (maximum < dstValue):
+                    maximum = dstValue
+                
+                # if these instances are in different classes, and Db is more than dstValue, choose Db
+                elif (Vi.className != Vj.className) and (minimum > dstValue):
+                    minimum = dstValue
 
-                # get the max distance found for the vectors vi & vj, and add it to the sum
-                else:
-                    Db += min(dstCount)
+            # ******** Multiply Both Db & Dw By 1/|S| ******** #
+            Db: float = (1 / len(values)) * minimum
+            Dw: float = (1 / len(values)) * maximum
+            log.debug(f'min = {minimum}')
+            log.debug(f'max = {maximum}')
+            
+            # *************** Create Exponent *************** #
+            exp: float = -5 * (Db - Dw)  # create the exponent
+            log.debug(f'Exponent: -5 * {Db} - {Dw} = {exp}')
+            
+            # *************** Calculate Power *************** #
+            try:
+                # ! Python supports arbitrarily large ints, but not floats
+                pwr = np.float_power(np.e, exp)  # ! this causing overflow
+                # pwr = np.power(np.e, exp)
+            except OverflowError:
+                # try using Decimal type to hold large floats
+                pwrFix = Decimal(exp).exp()  # e**exp
+                print('OVERFLOW ERROR occurred during distance calculation')
+                print(f'value: {pwrFix.to_eng_string()}')
+                # try to round the Decimal to 4 places & then convert to a float
+                r = 1 / (1 + float(pwrFix.quantize(Decimal('1.0000'))))
+                return r
+                # sys.exit(-1)  # exit with an error
+            
+            pwr = np.round(pwr, 4)
+            log.debug(f'Power of e = {pwr}')
 
-            # ******** Multiply Both By 1/|S| ******** #
-            Db *= (1 / len(values))
-            Dw *= (1 / len(values))  # multiply by 1/|S|
-
-            return 1 / (1 + math.pow(math.e, -5 * (Db - Dw)))
+            return 1 / (1 + pwr)
 
         def __entropy(partition: typ.List[Instance]) -> float:
             """
@@ -289,7 +307,8 @@ class Hypothesis:
             """
             
             p: typ.Dict[int, int] = {}   # p[classId] = number of instances in the class in the partition sv
-            for i in partition:          # for instance i in a partition sv
+            # for instance i in a partition sv
+            for i in partition:  # type: Instance
                 if i.className in p:       # if we have already found the class once,
                     p[i.className] += 1  # increment the counter
                     
@@ -329,8 +348,8 @@ class Hypothesis:
             s = 0                                # used to sum CF's conditional entropy
             used = TERMINALS[feature.className]  # get the indexes of the used features
             v = []                               # this will hold the used features ids & values
-            for i in rows:                       # loop over all instances
-
+            for i in rows:                       # type: Instance
+                # loop over all instances
                 # get CF(v) for this instance (i is a Instance struct which is what __transform needs)
                 cfv = feature.transform(i)  # needs the values for an instance
 
@@ -411,7 +430,7 @@ class Hypothesis:
 
         # loop over each row/instance in data and transform each row using each constructed feature.
         # We want to transform a row once, FOR EACH CF in a Hypothesis.
-        for d in data:
+        for d in data:  # type: np.array
             # This will hold the transformed values for each constructed feature until we have all of them.
             values: valueList = [d[0]]  # values[0] = class name(int), values[0:] = transformed values (float)
 
@@ -419,7 +438,7 @@ class Hypothesis:
             # (classID, values[]), for each row/instance
             
             # for each row, convert that row using each constructed feature (where f is a constructed feature)
-            for f in self.cfList:
+            for f in self.cfList:  # type: ConstructedFeature
                 # convert the numpy array to an instance & transform it
                 currentLine: float = f.transform(Instance(d[0], dict(zip(range(len(d[1:])), d[1:])), d[1:]))
                 # add the value of the transformation to the values list
