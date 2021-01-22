@@ -21,6 +21,9 @@ import numpy as np
 from alive_progress import alive_bar, config_handler
 from treelib import Node as Node
 from decimal import Decimal
+# from pyitlib import discrete_random_variable as drv
+import pprint
+
 
 from objects import Tree
 from objects import cdfcInstance as Instance
@@ -277,8 +280,8 @@ class Hypothesis:
             
             # *************** Calculate Power *************** #
             try:
-                # ! Python supports arbitrarily large ints, but not floats
-                pwr = np.float_power(np.e, exp)  # ! this causing overflow
+                # Note: Python supports arbitrarily large ints, but not floats
+                pwr = np.float_power(np.e, exp)  # this can cause overflow
                 # pwr = np.power(np.e, exp)
             except OverflowError:
                 # try using Decimal type to hold large floats
@@ -294,7 +297,31 @@ class Hypothesis:
             log.debug(f'Power of e = {pwr}')
 
             return 1 / (1 + pwr)
+        
+        def _averageInfoGain(cid: int) -> float:
+            """ This calculates AvgIG for a single class """
+            
+            count: float = 0.0
+            value: float = 0.0
+            maxValue: float = -999
+            
+            # loop over every CF in the class cid (should loop m times)
+            for ft in self.features[cid]:  # type: ConstructedFeature
+                
+                # ? what should I be sending here?
+                # value = drv.information_mutual(cid, f.transform())  # get the mutual info gain
+                count += value                    # add to the running total
+                
+                if value > maxValue:              # if this CF has a higher IG, update max
+                    maxValue = value
 
+            # since we didn't add fmax during the loop, add it here
+            # (times the amount of times it should have been added)
+            avgIG: float = value + (maxValue * M)
+            
+            # perform final calculations & return
+            return avgIG/(M+1)
+            
         def __entropy(partition: typ.List[Instance]) -> float:
             """
             Calculates the entropy of a Hypothesis
@@ -327,7 +354,7 @@ class Hypothesis:
 
         def __conditionalEntropy(feature: ConstructedFeature) -> float:
             """
-            Calculates the entropy of a Hypothesis
+            Calculates the conditional entropy of a Hypothesis
             
             :param feature: Constructed feature who's conditional entropy is needed.
             :type feature: ConstructedFeature
@@ -380,6 +407,8 @@ class Hypothesis:
                 condEntropy = __conditionalEntropy(f)  # find the conditional entropy
     
                 # ******** Info Gain calculation ******* #
+                # ? maybe the problem is with ENTROPY_OF_S? should it be a dict?
+                # ?  Not all classes have the same entropy, right?
                 f.infoGain = ENTROPY_OF_S - condEntropy  # H(class) - H(class|f)
                 gainSum += f.infoGain                    # update the info sum
     
@@ -477,13 +506,6 @@ class Hypothesis:
         # log.debug('Finished __transform() method')
         
         return transformed  # return the list of all instances
-
-    # ! testing purposes only!
-    def sanityCheck(self):
-        """Used in debugging to check a Hypothesis"""
-        # log.debug('Starting Hypothesis Sanity Check...')
-        self.__transform()
-        # log.debug('Population Hypothesis Check Passed')
 
 
 class Population:
@@ -702,21 +724,53 @@ def createInitialPopulation() -> Population:
     # creat a number hypotheses equal to pop size
     for __ in range(POPULATION_SIZE):  # iterate as usual
         hyp = createHypothesis()       # create a Hypothesis
-        # sanityCheckHyp(hyp)            # ! testing purposes only!
         hypothesis.append(hyp)         # add the new hypothesis to the list
+
+    pop = Population(hypothesis, 0)
     
+    sanityCheckPopReference(pop)
     # sanityCheckPop(hypothesis)  # ! testing purposes only!
-    return Population(hypothesis, 0)
+    return pop
 
 
 # ********** Sanity Check Functions used for Debugging ********** #
 # ! testing purposes only!
-def sanityCheckPop(hypothesis: typ.List[Hypothesis]):
-    """Used in debugging to check a Population"""
-    log.debug('Starting Population Sanity Check...')
-    for h in hypothesis:
-        h.sanityCheck()
-    log.debug('Population Sanity Check Passed')
+def sanityCheckPopReference(pop: Population):
+    
+    log.debug('Starting Population Reference Check...')
+    # loop over every GPI in the pop
+    for i in pop.candidateHypotheses:  # type: Hypothesis
+        
+        sanityCheckHypReference(i)  # check that the hypoth is fine
+        
+        count = 0  # rest the count for each GPI
+        # compare that GPI with every other GPI
+        for j in pop.candidateHypotheses:
+            
+            # there will always be one that is the same,
+            # but throw an error if there is two
+            if i is j:
+                count += 1
+            if count > 1:
+                raise AssertionError
+
+    log.debug('Population Reference Check Passed')
+
+
+def sanityCheckHypReference(hyp: Hypothesis):
+    # loop over every GPI in the pop
+    for i in hyp.cfList:  # type: ConstructedFeature
+        
+        count = 0  # rest the count for each GPI
+        # compare that GPI with every other GPI
+        for j in hyp.cfList:  # type: ConstructedFeature
+            
+            # there will always be one that is the same,
+            # but throw an error if there is two
+            if i is j:
+                count += 1
+            if count > 1:
+                raise AssertionError
 
 
 # ! testing purposes only!
@@ -880,12 +934,14 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
     # create a new population with no hypotheses (made here crossover & mutate can access it)
     newPopulation = Population([], population.generation+1)
 
-    def mutate() -> Hypothesis:
+    def mutate() -> Hypothesis:  # ! check for reference issues here
         """
         Finds a random node and builds a new sub-tree starting at it. Currently mutate
         uses the same grow & full methods as the initial population generation without
         an offset. This means that mutate trees will still obey the max depth rule.
         """
+
+        # TODO: change so it just creates a new CF(s) instead of working in place
 
         # ******************* Fetch Values Needed ******************* #
         parent: Hypothesis = __tournament(population)                # get copy of a parent Hypothesis using tournament
@@ -931,8 +987,10 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
         newPopulation.candidateHypotheses.append(parent)
         return parent
     
-    def crossover() -> (Hypothesis, Hypothesis):
+    def crossover() -> (Hypothesis, Hypothesis):  # ! check for reference issues here
         """Performs the crossover operation on two trees"""
+
+        # TODO: change so it just creates a new CF(s) instead of working in place
         
         # * Find Random Parents * #
         parent1, parent2 = __crossoverTournament(population)
@@ -1032,6 +1090,11 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
             
             if betterH.fitness > elite.fitness:           # if one of the new hypotheses has a
                 elite = betterH                           # better fitness, then update elite
+                
+                # ! this is being hit meaning crossover is giving references to old CFs
+                # print('Elitism Updated')  # ! debugging only
+                # if betterH is elite:  # ! debugging only
+                #     raise AssertionError  # ! debugging only
             # ************** End of Elitism *************** #
             
         # ************* End of Crossover ************* #
@@ -1094,7 +1157,8 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
     oldElite = currentPopulation.candidateHypotheses[0]  # init elitism
 
     # loop, evolving each generation. This is where most of the work is done
-    # SYSOUT.write('Starting generations stage...\n')  # update user
+    
+    elites = [oldElite.fitness]  # ! debugging only!
     
     with alive_bar(GENERATIONS, title="Generations") as bar:  # declare your expected total
 
@@ -1105,15 +1169,18 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
             # this is done in two steps to avoid potential namespace issues
             currentPopulation = newPopulation
             oldElite = newElite  # update elitism
+            
+            elites.append(newElite.fitness)  # ! used in debugging
 
             bar()  # update bar now that a generation is finished
 
+    print('Fitness of the elites')  # ! used in debugging
+    pprint.pprint(elites, compact=True)  # ! used in debugging
     # SYSOUT.write(NO_OVERWRITE + ' Final Generation Reached'.ljust(50, '-') + SUCCESS)  # update user
     # ***************************************************************** #
 
     # ****************** Return the Best Hypothesis ******************* #
-    # log.debug('Finding best hypothesis')
 
     bestHypothesis: Hypothesis = max(currentPopulation.candidateHypotheses, key=lambda x: x.fitness)
-    # log.debug('Found best hypothesis, returning...')
+
     return bestHypothesis  # return the best hypothesis generated

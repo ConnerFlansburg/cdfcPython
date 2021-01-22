@@ -62,7 +62,8 @@ def flattenTrainingData(trainList: typ.List[typ.List[np.ndarray]]) -> np.ndarray
 def formatForSciKit(data: np.ndarray) -> (np.ndarray, np.ndarray):
     """
     __formatForSciKit takes the input data and converts it into a form that can
-    be understood by the sklearn package.
+    be understood by the sklearn package. It does this by separating the features
+    from their labels and returning them as two different numpy arrays.
     
     :param data: The input data, from a read in CSV.
     :type data: np.ndarray

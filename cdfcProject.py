@@ -575,29 +575,21 @@ def __fillBuckets(entries: np.ndarray) -> typ.List[typ.List[np.ndarray]]:
 
 
 # TODO check what this function is doing & update docstring
-def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, useNormalize: bool) -> typ.List[float]:
+def __buildModel(buckets: typ.List[typ.List[np.ndarray]], mType: str, useNormalize: bool) -> typ.List[float]:
     """
     __buildModel
     
     :param buckets:
-    :param model: model that will make use of the feature reduction done by CDFC
+    :param mType: type of model that will make use of the feature reduction done by CDFC
     :param useNormalize: should the original data be normalized
     
     :type buckets:
-    :type model: ModelTypes
+    :type mType: str  (valid options are: 'KNN', 'Naive Bayes', or 'Decision Tree' )
     :type useNormalize: bool
     
     :return: the classifications of the instances
     :rtype: typ.List[float]
     """
-    
-    # determine the type of model we are using for printing later
-    if type(model) == KNeighborsClassifier:
-        mType = 'KNN'
-    elif type(model) == GaussianNB:
-        mType = 'Naive Bayes'
-    else:
-        mType = 'Decision Tree'
 
     # *** Loop over our buckets K times, each time running creating a new hypothesis *** #
     oldR = 0                            # used to remember previous r in loop
@@ -634,6 +626,18 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
     iteration: int = 0  # used to count iterations so progress can be printed
     for r in range(K):  # len(r) = K so this will be done K times
         print('\n\n' + f' Starting Fold {iteration + 1}/{K} '.center(58, '*'))
+
+        # ************ Create a New Model ************ #
+        # determine the type of model we need to create
+        if mType == 'KNN':
+            model = KNeighborsClassifier(n_neighbors=3)
+
+        elif mType == 'Naive Bayes':
+            model = GaussianNB()
+
+        else:  # mType == 'Decision Tree'
+            model = DecisionTreeClassifier(random_state=0)
+        
         # ********** Get the Training & Testing Data ********** #
         # the Rth bucket becomes our testing data, everything else becomes training data
         # this is done in order to prevent accidental overwrites
@@ -704,7 +708,7 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], model: ModelTypes, use
         # format testing data for SciKit Learn
         ftrs, trueLabels = formatForSciKit(testing)
     
-        # ********** 3D.3 Feed the Training Data into the Model & get Accuracy ********** #
+        # ********** 3D.3 Feed the Testing Data into the Model & get Accuracy ********** #
         labelPrediction = model.predict(ftrs)  # use model to predict labels
         # compute the accuracy score by comparing the actual labels with those predicted
         score = accuracy_score(trueLabels, labelPrediction)
@@ -804,19 +808,17 @@ def __runSciKitModels(entries: np.ndarray, useNormalize: bool) -> typ.List[float
     if LEARN == "DT":
         
         # ************ Decision Tree Classifier ************ #
-        accuracy: typ.List[float] = __buildModel(buckets, DecisionTreeClassifier(random_state=0),
-                                                 useNormalize)  # build the model
+        accuracy: typ.List[float] = __buildModel(buckets, 'Decision Tree', useNormalize)  # build the model
     
     elif LEARN == "NB":
         
         # ************ Gaussian Classifier (Naive Bayes) ************ #
-        accuracy: typ.List[float] = __buildModel(buckets, GaussianNB(), useNormalize)  # build the model
+        accuracy: typ.List[float] = __buildModel(buckets, 'Naive Bayes', useNormalize)  # build the model
     
     else:  # do the defualt (KNN)
         
         # ************ Kth Nearest Neighbor Classifier ************ #
-        accuracy: typ.List[float] = __buildModel(buckets, KNeighborsClassifier(n_neighbors=3),
-                                                 useNormalize)  # build the model
+        accuracy: typ.List[float] = __buildModel(buckets, 'KNN', useNormalize)  # build the model
 
     # SYSOUT.write("Model ran\n\n")  # update user
 
