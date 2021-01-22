@@ -14,6 +14,7 @@ import math
 import os
 import pickle
 import time as time
+import random
 # import traceback
 import tkinter as tk
 from pathlib import Path
@@ -40,6 +41,9 @@ BETA: typ.Final = 2              # BETA is a constant used to calculate the pop 
 R: typ.Final = 2                 # R is the ratio of number of CFs to the number of classes (features/classes)
 PASSED_FUNCTION = None           # PASSED_FUNCTION is the distance function that was passed (defaults to Euclidean)
 LEARN = None                     # LEARN is the type of learning model that should be used (defaults to KNN)
+# ************************************************** Random Seeding ************************************************** #
+SEED = 498
+random.seed(SEED)
 # ********************************************* Constants used by Logger ********************************************* #
 # create the file path for the log file & configure the logger
 logPath = str(Path.cwd() / 'logs' / 'cdfc.log')
@@ -202,6 +206,7 @@ def parseFile(train: np.ndarray) -> typ.Dict[any, any]:
         'rows': rows,
         'ENTROPY_OF_S': ENTROPY_OF_S,
         'CLASS_DICTS': CLASS_DICTS,
+        'DISTANCE_FUNCTION': PASSED_FUNCTION,
     }
 
     # ! For Debugging Only
@@ -545,7 +550,6 @@ def __dealToBuckets(classToInstances: typ.Dict[int, typ.List[typ.Union[int, typ.
     # *** Now create a random permutation of the instances in a class, & put them in buckets ***
     buckets = [[] for _ in range(K)]  # create a list of empty lists that we will "deal" our "deck" of instances to
     index = 0  # this will be the index of the bucket we are "dealing" to
-    seed = 498
     
     # classId is a int
     for classId in classToInstances.keys():
@@ -553,7 +557,7 @@ def __dealToBuckets(classToInstances: typ.Dict[int, typ.List[typ.Union[int, typ.
         # *** for each class use the class id to get it's instances ***
         # instances is of the form [instance1, instance2, ...]  (the counter has been removed)
         # where instanceN is a numpy array and where instanceN[0] is the classId & instanceN[1:] are the values
-        permutation = __getPermutation(classToInstances[classId][1:], seed)
+        permutation = __getPermutation(classToInstances[classId][1:], SEED)
 
         # *** assign instances to buckets *** #
         # loop over every instance in the class classId, in what is now a random order
@@ -859,8 +863,8 @@ def run(fnc: str, mdl: str) -> None:
         PASSED_FUNCTION = "correlation"
     elif fnc == "czekanowski":  # use the Czekanowski function
         PASSED_FUNCTION = "czekanowski"
-    elif fnc == "euclidean":    # use the Euclidean function
-        PASSED_FUNCTION = "euclidean"
+    elif fnc == "cosine":    # use the Euclidean function
+        PASSED_FUNCTION = "cosine"
     else:                       # default to the Euclidean function
         PASSED_FUNCTION = "euclidean"
     

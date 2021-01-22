@@ -6,7 +6,6 @@ Authors/Contributors: Dr. Dimitrios Diochnos, Conner Flansburg
 Github Repo: https://github.com/brom94/cdfcPython.git
 """
 
-import itertools
 import collections as collect
 import copy
 import logging as log
@@ -64,6 +63,8 @@ M = 0                                         # M is the number of constructed f
 POPULATION_SIZE = 0                           # POPULATION_SIZE is the population size
 CL_DICTION = typ.Dict[int, typ.Dict[int, typ.List[float]]]
 CLASS_DICTS: CL_DICTION = {}                  # CLASS_DICTS is a list of dicts (indexed by classId) mapping attribute values to classes
+SEED = 498                                    # SEED the seed used for random values
+random.seed(SEED)
 # ++++++++++++++++++++++++ console formatting strings +++++++++++++++++++++++++ #
 HDR = '*' * 6
 SUCCESS = u' \u2713\n'+'\033[0m'     # print the checkmark & reset text color
@@ -234,6 +235,74 @@ class Hypothesis:
         :rtype: float
         """
         
+        def DbCalculation(S: typ.List[Instance]) -> float:
+            """ Used to calculate Db """
+
+            index = 0
+            minimum: typ.Dict[int, float] = {}
+            # loop over every instance
+            for i in S:
+                
+                Ci = i.className  # get the class name of the instance
+                
+                differentClasses: typ.List[typ.Optional[Instance]] = []
+
+                for j in S:
+                    Cj = j.className  # get the class name of the instance
+
+                    if Ci != Cj:  # if the instances i & j are from different classes
+                        differentClasses.append(j)
+
+                # different classes now contains all the instance that are in different classes
+                minimum[index] = Dst.computeDistance(DISTANCE_FUNCTION, i.vList, differentClasses[0].vList)
+                
+                for j in differentClasses:  # create the list on mins
+                    
+                    distance = Dst.computeDistance(DISTANCE_FUNCTION, i.vList, j.vList)
+
+                    # if we have found a lower value for the distance of i, update min
+                    if distance < minimum[index]:
+                        minimum[index] = distance
+
+                index += 1
+            # sum everything & return
+            value: typ.Union[int, float] = sum(minimum.values())
+            return (1 / len(S)) * value
+
+        def DwCalculation(S: typ.List[Instance]) -> float:
+            """ Used to calculate Dw """
+
+            index = 0
+            maximum: typ.Dict[int, float] = {}
+            # loop over every instance
+            for i in S:
+        
+                Ci = i.className  # get the class name of the instance
+        
+                sameClasses: typ.List[typ.Optional[Instance]] = []
+        
+                for j in S:
+                    Cj = j.className  # get the class name of the instance
+            
+                    if (Ci == Cj) and (i is not j):  # if the instances i & j are from different classes
+                        sameClasses.append(j)
+        
+                # same classes now contains all the instances that are in the same classe
+                maximum[index] = Dst.computeDistance(DISTANCE_FUNCTION, i.vList, sameClasses[0].vList)
+        
+                for j in sameClasses:  # create the list on maxs
+
+                    distance = Dst.computeDistance(DISTANCE_FUNCTION, i.vList, j.vList)
+            
+                    # if we have found a higher value for the distance of i, update max
+                    if distance > maximum[index]:
+                        maximum[index] = distance
+
+                index += 1
+            # sum everything & return
+            value = sum(maximum.values())
+            return (1 / len(S)) * value
+        
         def Distance(values: typ.List[Instance]) -> float:
             """"
             Distance calculates the distance value of the Hypothesis
@@ -244,84 +313,38 @@ class Hypothesis:
             :return: Distance value calculated using the chosen distance function.
             :rtype: float
             """
-            
-            minimum: typ.Optional[float] = 999  # smallest distance between classes that has been found
-            maximum: typ.Optional[float] = -999  # largest distance within the same class that has been found
-            
-            # create a list containing every unique combination of Instances
-            combined: typ.List[typ.Tuple[Instance]] = list(itertools.combinations(values, 2))
-            
-            # ********* Loop Over Every Combination of Instances ********* #
-            # loop over the instance combinations
-            for Vi, Vj in combined:  # type: Instance
 
-                # ********** Compute Vid & Vjd ********** #
-                # Vi.vList & Vj.vList will be list of floats
-                dstValue = Dst.computeDistance(DISTANCE_FUNCTION, Vi.vList, Vj.vList)
-
-                # *************** Determine Which to Calculate: Dw or Dj *************** #
-                # if these instances are in the same class, and Db is less than dstValue, choose Dw
-                if (Vi.className == Vj.className) and (maximum < dstValue):
-                    maximum = dstValue
-                
-                # if these instances are in different classes, and Db is more than dstValue, choose Db
-                elif (Vi.className != Vj.className) and (minimum > dstValue):
-                    minimum = dstValue
-
-            # ******** Multiply Both Db & Dw By 1/|S| ******** #
-            Db: float = (1 / len(values)) * minimum
-            Dw: float = (1 / len(values)) * maximum
-            log.debug(f'min = {minimum}')
-            log.debug(f'max = {maximum}')
+            # ******** Calculate Db & Dw ******** #
+            Db: float = DbCalculation(values)
+            Dw: float = DwCalculation(values)
             
             # *************** Create Exponent *************** #
             exp: float = -5 * (Db - Dw)  # create the exponent
-            log.debug(f'Exponent: -5 * {Db} - {Dw} = {exp}')
+            # log.debug(f'Exponent: -5 * ({Db} - {Dw}) = {exp}')
             
             # *************** Calculate Power *************** #
             try:
                 # Note: Python supports arbitrarily large ints, but not floats
                 pwr = np.float_power(np.e, exp)  # this can cause overflow
                 # pwr = np.power(np.e, exp)
-            except OverflowError:
-                # try using Decimal type to hold large floats
-                pwrFix = Decimal(exp).exp()  # e**exp
-                print('OVERFLOW ERROR occurred during distance calculation')
-                print(f'value: {pwrFix.to_eng_string()}')
-                # try to round the Decimal to 4 places & then convert to a float
-                r = 1 / (1 + float(pwrFix.quantize(Decimal('1.0000'))))
-                return r
-                # sys.exit(-1)  # exit with an error
+            except (OverflowError, RuntimeWarning):
+                try:  # attempt recovery
+                    # try using Decimal type to hold large floats
+                    pwrFix = Decimal(exp).exp()  # e**exp
+                    print('OVERFLOW ERROR occurred during distance calculation')
+                    print(f'value: {pwrFix.to_eng_string()}')
+                    # try to round the Decimal to 4 places & then convert to a float
+                    r = 1 / (1 + float(pwrFix.quantize(Decimal('1.0000'))))
+                    return r
+                except (RuntimeError, TypeError, OverflowError):
+                    print('Recovery was impossible, exiting')
+                    sys.exit(-1)  # exit with an error
             
-            pwr = np.round(pwr, 4)
-            log.debug(f'Power of e = {pwr}')
+            pwr = np.round(pwr, 12)
+            # log.debug(f'Power of e = {pwr}')
 
             return 1 / (1 + pwr)
-        
-        def _averageInfoGain(cid: int) -> float:
-            """ This calculates AvgIG for a single class """
-            
-            count: float = 0.0
-            value: float = 0.0
-            maxValue: float = -999
-            
-            # loop over every CF in the class cid (should loop m times)
-            for ft in self.features[cid]:  # type: ConstructedFeature
-                
-                # ? what should I be sending here?
-                # value = drv.information_mutual(cid, f.transform())  # get the mutual info gain
-                count += value                    # add to the running total
-                
-                if value > maxValue:              # if this CF has a higher IG, update max
-                    maxValue = value
-
-            # since we didn't add fmax during the loop, add it here
-            # (times the amount of times it should have been added)
-            avgIG: float = value + (maxValue * M)
-            
-            # perform final calculations & return
-            return avgIG/(M+1)
-            
+    
         def __entropy(partition: typ.List[Instance]) -> float:
             """
             Calculates the entropy of a Hypothesis
@@ -728,7 +751,7 @@ def createInitialPopulation() -> Population:
 
     pop = Population(hypothesis, 0)
     
-    sanityCheckPopReference(pop)
+    sanityCheckPopReference(pop)  # ! testing purposes only!
     # sanityCheckPop(hypothesis)  # ! testing purposes only!
     return pop
 
@@ -736,41 +759,37 @@ def createInitialPopulation() -> Population:
 # ********** Sanity Check Functions used for Debugging ********** #
 # ! testing purposes only!
 def sanityCheckPopReference(pop: Population):
-    
+    """ Used to make sure that every Hypothesis is unique"""
     log.debug('Starting Population Reference Check...')
+    
+    noDuplicates = []
     # loop over every GPI in the pop
     for i in pop.candidateHypotheses:  # type: Hypothesis
         
         sanityCheckHypReference(i)  # check that the hypoth is fine
-        
-        count = 0  # rest the count for each GPI
-        # compare that GPI with every other GPI
-        for j in pop.candidateHypotheses:
-            
-            # there will always be one that is the same,
-            # but throw an error if there is two
-            if i is j:
-                count += 1
-            if count > 1:
-                raise AssertionError
+
+        if i not in noDuplicates:  # if it isn't in the list, add it
+            noDuplicates.append(i)
+    
+    # if there were duplicates, raise an error
+    if len(noDuplicates) != len(pop.candidateHypotheses):
+        raise AssertionError
 
     log.debug('Population Reference Check Passed')
 
 
 def sanityCheckHypReference(hyp: Hypothesis):
+    """ Used to make sure that every CF is unique"""
+    noDuplicates = []
     # loop over every GPI in the pop
     for i in hyp.cfList:  # type: ConstructedFeature
         
-        count = 0  # rest the count for each GPI
-        # compare that GPI with every other GPI
-        for j in hyp.cfList:  # type: ConstructedFeature
-            
-            # there will always be one that is the same,
-            # but throw an error if there is two
-            if i is j:
-                count += 1
-            if count > 1:
-                raise AssertionError
+        if i not in noDuplicates:
+            noDuplicates.append(i)
+    
+    # if there were duplicates, raise an error
+    if len(noDuplicates) != len(hyp.cfList):
+        raise AssertionError
 
 
 # ! testing purposes only!
@@ -815,7 +834,7 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
 
     elite: Hypothesis = passedElite
 
-    def __tournament(p: Population) -> Hypothesis:
+    def __tournament(p: Population) -> Hypothesis:    # ! check for reference issues here
         """
         Used by evolution to selection the parent(s)
         
@@ -930,19 +949,14 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
         return copy.deepcopy(p.candidateHypotheses[firstIndex]), copy.deepcopy(p.candidateHypotheses[secondIndex])
         # ************ End of Tournament Selection ************* #
 
-    # ******************* Evolution ******************* #
-    # create a new population with no hypotheses (made here crossover & mutate can access it)
-    newPopulation = Population([], population.generation+1)
-
-    def mutate() -> Hypothesis:  # ! check for reference issues here
+    def mutate() -> Hypothesis:
         """
         Finds a random node and builds a new sub-tree starting at it. Currently mutate
         uses the same grow & full methods as the initial population generation without
         an offset. This means that mutate trees will still obey the max depth rule.
+        This will create a new CF and overwrite the one it chose to mutate.
         """
-
-        # TODO: change so it just creates a new CF(s) instead of working in place
-
+        
         # ******************* Fetch Values Needed ******************* #
         parent: Hypothesis = __tournament(population)                # get copy of a parent Hypothesis using tournament
         randClass: int = random.choice(CLASS_IDS)                    # get a random class
@@ -983,52 +997,56 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
         
         parent.updateFitness()  # force an update of the fitness score
         
-        # add the mutated parent to the new pop (appending is needed because parent is a copy NOT a reference)
-        newPopulation.candidateHypotheses.append(parent)
         return parent
     
-    def crossover() -> (Hypothesis, Hypothesis):  # ! check for reference issues here
+    def crossover() -> (Hypothesis, Hypothesis):
         """Performs the crossover operation on two trees"""
-
-        # TODO: change so it just creates a new CF(s) instead of working in place
         
         # * Find Random Parents * #
-        parent1, parent2 = __crossoverTournament(population)
+        parent1, parent2 = __crossoverTournament(population)  # type: Hypothesis
 
         # * Get CFs from the Same Class * #
-        randIndex = random.randint(0, M-1)  # get a random index that's valid in cfList
-        randClass = random.choice(CLASS_IDS)  # choose a random class
-        # Feature 1
-        feature1: ConstructedFeature = parent1.getFeatures(randClass)[randIndex]  # get a random feature from the parent
-        tree1: Tree = feature1.tree                                               # get the tree
-        
-        # tree1.checkTree()        # ! For Testing Only !!
-        # tree1.sendToStdOut()     # ! For Testing Only !!
+        randIndex = random.randint(0, M-1)    # get a random index that's valid in cfList
+        classID = random.choice(CLASS_IDS)    # choose a random class
 
-        # Feature 2
-        # makes sure CFs are from/for the same class
-        feature2: ConstructedFeature = parent2.getFeatures(randClass)[randIndex]
+        # get a the chosen random features from both parents parent
+        # + Feature 1
+        feature1: ConstructedFeature = parent1.getFeatures(classID)[randIndex]
+        tree1: Tree = feature1.tree  # get the tree
+        
+        # + Feature 2
+        feature2: ConstructedFeature = parent2.getFeatures(classID)[randIndex]
         tree2: Tree = feature2.tree  # get the tree
-        
-        # tree2.checkTree()        # ! For Testing Only !!
-        # tree2.sendToStdOut()     # ! For Testing Only !!
     
+        # TODO fix the error being thrown here
         # *************** Find the Two Sub-Trees **************** #
-        node1: Node = tree1.getRandomNode()           # get a random node
-        branch1, p1 = tree1.getBranch(node1)          # get the branch string
-        subTree1: Tree = tree1.remove_subtree(node1.identifier)  # get a sub-tree with node1 as root
-        # subTree1.sendToStdOut()  # ! For Testing Only !!
+        # Pick Two Random Nodes, one from CF1 & one from CF2
+        nodeF1: Node = tree1.getRandomNode()           # get a random node
+        nodeF2: Node = tree2.getRandomNode()           # get a random node
 
-        node2: Node = tree2.getRandomNode()           # get a random node
-        branch2, p2 = tree2.getBranch(node2)          # get the branch string
-        subTree2: Tree = tree2.remove_subtree(node2.identifier)  # get a sub-tree with node2 as root
-        # subTree2.sendToStdOut()  # ! For Testing Only !!
+        # Get the Branch & Parent of the Subtree from CF1. This will tell use where to add it in CF 2
+        branch1, p1 = tree1.getBranch(nodeF1)
+        # Get the Branch & Parent of the Subtree from CF1. This will tell use where to add it in CF 2
+        branch2, p2 = tree2.getBranch(nodeF2)
+        
+        # Get the Subtree from CF1. This will be move to CF2 (nodeF1 will be root)
+        treeFromFeature1: Tree = tree1.remove_subtree(nodeF1.identifier)
+        # Get the Subtree from CF2. This will be move to CF1 (nodeF2 will be root)
+        treeFromFeature2: Tree = tree2.remove_subtree(nodeF2.identifier)
         # ******************************************************* #
     
         # ************************** swap the two subtrees ************************** #
-        tree1.addSubTree(parent=p1, branch=branch1, subtree=subTree1)  # update the first parent tree
-        tree2.addSubTree(parent=p2, branch=branch2, subtree=subTree2)  # update the second parent tree
+        # BUG: for some reason addSubTree fails because of a duplicate node error
+        # Add the Subtree from CF2 to the tree in CF1 (in the same location that the subtree1 was cut out)
+        feature1.tree.addSubTree(parent=p1, branch=branch1, subtree=treeFromFeature2)  # ! error is thrown here
+        # Add the Subtree from CF1 to the tree in CF2 (in the same location that the subtree2 was cut out)
+        feature2.tree.addSubTree(parent=p2, branch=branch2, subtree=treeFromFeature1)
         # **************************************************************************** #
+
+        # ************** Create Two New Constructed Features ************** #
+        cf1: ConstructedFeature = ConstructedFeature(classID, feature1.tree)
+        cf2: ConstructedFeature = ConstructedFeature(classID, feature2.tree)
+        # ***************************************************************** #
 
         # !!!!!!!!!!!!!! For Testing Only !!!!!!!!!!!!!! #
         # Print the trees to see if crossover broke them/performed correctly
@@ -1041,18 +1059,21 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
         # print('2nd Swapped Tree:')
         # tree2.sendToStdOut()
         # tree2.checkTree()
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
-    
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
+        
+        # ********* Update Parent1 & Parent2 with the New CFs ********* #
+        parent1.features[classID][randIndex] = cf1
+        parent2.features[classID][randIndex] = cf2
         parent1.updateFitness()  # force an update of the fitness score
         parent2.updateFitness()  # force an update of the fitness score
-        
-        # parent 1 & 2 are both hypotheses and should have been changed in place,
-        # but they refer to a copy made in tournament so add them to the new pop
-        newPopulation.candidateHypotheses.append(parent1)
-        newPopulation.candidateHypotheses.append(parent2)
-        
+        # ************************************************************* #
+
         return parent1, parent2
 
+    # ******************* Evolution ******************* #
+    # create a new population with no hypotheses (made here crossover & mutate can access it)
+    newPopulation = Population([], population.generation + 1)
+    
     # each iteration evolves 1 new candidate hypothesis, and we want to do this until
     # range(newPopulation.candidateHypotheses) = POPULATION_SIZE so loop over pop size
     for pop in range(POPULATION_SIZE):
@@ -1068,6 +1089,8 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
             
             bar.text('mutating...')                # update user
             newHypoth = mutate()                   # perform mutation
+            # add the new hypoth to the population
+            newPopulation.candidateHypotheses.append(newHypoth)
 
             # ****************** Elitism ****************** #
             if newHypoth.fitness > elite.fitness:  # if the new hypothesis has a better fitness
@@ -1081,6 +1104,10 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
             
             bar.text('crossing...')                       # update user
             newHypoth1, newHypoth2 = crossover()          # perform crossover operation
+
+            # add the new hypoth to the population
+            newPopulation.candidateHypotheses.append(newHypoth1)
+            newPopulation.candidateHypotheses.append(newHypoth2)
 
             # ****************** Elitism ****************** #
             if newHypoth1.fitness >= newHypoth2.fitness:  # if newHypoth1 has a greater or equal fitness
@@ -1138,8 +1165,7 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
     FEATURE_NUMBER = values['FEATURE_NUMBER']
     CLASS_IDS = values['CLASS_IDS']
     DISTANCE_FUNCTION = distanceFunction
-    # ! during testing we are just using Euclidean distance, so ignore any passed value
-    DISTANCE_FUNCTION = 'euclidean'
+    DISTANCE_FUNCTION = ['DISTANCE_FUNCTION']
     # POPULATION_SIZE = values['POPULATION_SIZE']
     POPULATION_SIZE = 10
     INSTANCES_NUMBER = values['INSTANCES_NUMBER']
