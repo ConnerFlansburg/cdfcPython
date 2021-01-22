@@ -15,7 +15,7 @@ class TestConstructedFeature(TestCase):
     # Get Used Features test
     def test_get_used_features(self):
         self.fail()
-
+    
     # Transform Test
     def test_transform(self):
         self.fail()
@@ -26,10 +26,11 @@ class TestHypothesis(TestCase):
     # Get Fitness test
     def test_get_fitness(self):
         self.fail()
-
+    
     # Transform test
     def test_transform(self):
         self.fail()
+
 
 # ***************** Objects ******************* #
 
@@ -90,3 +91,27 @@ class TestCreateInitialPopulation(TestCase):
 class TestEvolve(TestCase):
     def test_evolve(self):
         self.fail()
+
+
+def test_create_initial_population():
+    assert False
+
+
+def test_evolve():
+    assert False
+
+
+def test_cdfc():
+    assert False
+
+
+def test_constructed_feature():
+    assert False
+
+
+def test_hypothesis():
+    assert False
+
+
+def test_population():
+    assert False
