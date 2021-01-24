@@ -166,6 +166,12 @@ class Tree(libTree):
         # NOTE: we don't need to delete dictionary values from the old tree as they will be overwritten during swap
         subTree: Tree = super().remove_subtree(nid=nid)  # create a subtree
         subTree.BRANCHES = self.BRANCHES.copy()  # copy the dict from the original tree into the subtree
+        
+        # make sure that all the ids in the subTree are removed
+        for ident in subTree.nodes.keys():
+            if self.nodes.get(ident):
+                del self.nodes[ident]
+        
         return subTree  # return the subtree
     
     def printNodes(self) -> None:
@@ -249,7 +255,7 @@ class Tree(libTree):
     def addRoot(self) -> Node:
         """Adds a root node to the tree"""
         op = random.choice(OPS)
-        root = self.create_node(tag=f'root: {op}', identifier=f'Tree {next(TreeCount)}',
+        root = self.create_node(tag=f'root: {op}', identifier=f'Tree {next(NodeCount)}',
                                 data=op)  # create a root node for the tree
         return root
     
@@ -334,18 +340,18 @@ class Tree(libTree):
         """
         
         try:
-            self.BRANCHES[parent.identifier][branch] = subtree.root  # add the subtree root to the dictionary
             
-            # this shouldn't delete values from the old tree's dictionary as subtree is a copy
-            for nid in subtree.nodes.keys():  # loop over all the nids in the subtree
-                # ? this makes a shallow copy. Is that okay or should it be deep?
-                self.BRANCHES[nid] = subtree.BRANCHES[nid].copy()  # copy the sub-dictionary over
-            del subtree.BRANCHES  # delete the old dictionary
+            self.BRANCHES[parent.identifier][branch] = subtree.root  # add the subtree root to the dictionary
             
             # add the subtree to the original tree as a child of parent
             # deep=False because the subtree has been deleted from the old tree so can't affect it anymore.
-            # However is subtree is used after this it will need to be True
+            # However if subtree is used after this it will need to be True
             self.paste(parent.identifier, subtree)  # ? should deep be true or false?
+            
+            # this shouldn't delete values from the old tree's dictionary as subtree is a copy
+            for nid in subtree.nodes.keys():  # loop over all the nids in the subtree
+                self.BRANCHES[nid] = subtree.BRANCHES[nid].copy()  # copy the sub-dictionary over
+            del subtree.BRANCHES  # delete the old dictionary
         
         except NodeIDAbsentError as err:  # catch error thrown by deep paste
             print('adding to:')
@@ -387,6 +393,7 @@ class Tree(libTree):
             # if we picked the root or a node not in the tree
             while (n is self.getRoot()) or not (self.contains(n.identifier)):
                 if len(nodeList) == 0:  # if nodeList is empty
+                    log.error('getRandomNode could not find a node in the tree')
                     raise Exception('getRandomNode could not find a node in the tree')
                 n = nodeList.pop(0)  # pop the top of the list
         

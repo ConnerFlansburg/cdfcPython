@@ -14,7 +14,6 @@ import math
 import os
 import pickle
 import time as time
-import random
 # import traceback
 import tkinter as tk
 from pathlib import Path
@@ -43,7 +42,7 @@ PASSED_FUNCTION = None           # PASSED_FUNCTION is the distance function that
 LEARN = None                     # LEARN is the type of learning model that should be used (defaults to KNN)
 # ************************************************** Random Seeding ************************************************** #
 SEED = 498
-random.seed(SEED)
+# random.seed(SEED)
 # ********************************************* Constants used by Logger ********************************************* #
 # create the file path for the log file & configure the logger
 logPath = str(Path.cwd() / 'logs' / 'cdfc.log')
