@@ -18,13 +18,14 @@ from pathlib import Path
 import Distances as Dst
 import numpy as np
 from alive_progress import alive_bar, config_handler
-from treelib import Node as Node
+# from treelib import Node as Node
 from decimal import Decimal
 # from pyitlib import discrete_random_variable as drv
 import pprint
 
-
-from objects import Tree
+from Tree import Tree
+from Node import Node
+# from objects import Tree
 from objects import cdfcInstance as Instance
 
 # ! Next Steps
@@ -64,7 +65,7 @@ POPULATION_SIZE = 0                           # POPULATION_SIZE is the populatio
 CL_DICTION = typ.Dict[int, typ.Dict[int, typ.List[float]]]
 CLASS_DICTS: CL_DICTION = {}                  # CLASS_DICTS is a list of dicts (indexed by classId) mapping attribute values to classes
 SEED = 498                                    # SEED the seed used for random values
-# random.seed(SEED)
+random.seed(SEED)
 # ++++++++++++++++++++++++ console formatting strings +++++++++++++++++++++++++ #
 HDR = '*' * 6
 SUCCESS = u' \u2713\n'+'\033[0m'     # print the checkmark & reset text color
@@ -74,9 +75,8 @@ SYSOUT = sys.stdout
 # ++++++++++++++++++++++++ configurations & file paths ++++++++++++++++++++++++ #
 sys.setrecursionlimit(10000)                                  # set the recursion limit for the program
 
-np.seterr(divide='ignore', over='ignore')                     # suppress divide by zero warnings from numpy
+np.seterr(divide='ignore')                                    # suppress divide by zero warnings from numpy
 suppressMessage = 'invalid value encountered in true_divide'  # suppress the divide by zero error from Python
-warnings.filterwarnings('error', message='OVERFLOW ERROR occurred during distance calculation')
 warnings.filterwarnings('ignore', message=suppressMessage)
 
 config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', title_length=0, length=20)  # the global config for the loading bars
@@ -325,22 +325,23 @@ class Hypothesis:
             
             # *************** Calculate Power *************** #
             try:
-                # this should be faster than the np version since it doesn't support arrays
-                pwr = math.exp(exp)
+                # Note: Python supports arbitrarily large ints, but not floats
+                pwr = np.float_power(np.e, exp)  # this can cause overflow
+                # pwr = np.power(np.e, exp)
             except (OverflowError, RuntimeWarning):
                 try:  # attempt recovery
                     # try using Decimal type to hold large floats
                     pwrFix = Decimal(exp).exp()  # e**exp
-                    # print('OVERFLOW ERROR occurred during distance calculation')
-                    # print(f'value: {pwrFix.to_eng_string()}')
+                    print('OVERFLOW ERROR occurred during distance calculation')
+                    print(f'value: {pwrFix.to_eng_string()}')
                     # try to round the Decimal to 4 places & then convert to a float
-                    r = 1 / (1 + float(pwrFix))
+                    r = 1 / (1 + float(pwrFix.quantize(Decimal('1.0000'))))
                     return r
                 except (RuntimeError, TypeError, OverflowError):
                     print('Recovery was impossible, exiting')
                     sys.exit(-1)  # exit with an error
             
-            pwr = np.round(pwr, 20)
+            pwr = np.round(pwr, 12)
             # log.debug(f'Power of e = {pwr}')
 
             return 1 / (1 + pwr)
@@ -577,23 +578,23 @@ def __grow(classId: int, node: Node, tree: Tree) -> Node:
     
     # *************************** A Terminal was Chosen *************************** #
     # NOTE: check depth-1 because we will create children
-    if coin == 'TERM' or (tree.getDepth(node) == MAX_DEPTH - 1):  # if we need to add terminals
+    if coin == 'TERM' or (tree.getDepth(node.ID) == MAX_DEPTH - 1):  # if we need to add terminals
 
         # pick the needed amount of terminals
         terms: typ.List[int] = random.choices(TERMINALS[classId], k=NUM_TERMINALS[node.data])
         
         if NUM_TERMINALS[node.data] == 2:                  # if the OP needs 2 children
-            tree.addLeft(parent=node, data=terms.pop(0))   # create a new left node & add it
-            tree.addRight(parent=node, data=terms.pop(0))  # create a new left node & add it
+            tree.addLeft(parentID=node.ID, data=terms.pop(0))   # create a new left node & add it
+            tree.addRight(parentID=node.ID, data=terms.pop(0))  # create a new left node & add it
             
-            return tree.getRoot()                          # return the root node of the tree
+            return tree.root                          # return the root node of the tree
         
         elif NUM_TERMINALS[node.data] == 3:                 # if the OP needs 3 children
-            tree.addLeft(parent=node, data=terms.pop(0))    # create a new left node & add it
-            tree.addRight(parent=node, data=terms.pop(0))   # create a new right node & add it
-            tree.addMiddle(parent=node, data=terms.pop(0))  # create a new middle node & add it
+            tree.addLeft(parentID=node.ID, data=terms.pop(0))    # create a new left node & add it
+            tree.addRight(parentID=node.ID, data=terms.pop(0))   # create a new right node & add it
+            tree.addMiddle(parentID=node.ID, data=terms.pop(0))  # create a new middle node & add it
             
-            return tree.getRoot()                           # return the root node of the tree
+            return tree.root                           # return the root node of the tree
         
         else:                                               # if NUM_TERMINALS was not 2 or 3
             raise IndexError("Grow could not find the number of terminals need")
@@ -604,24 +605,24 @@ def __grow(classId: int, node: Node, tree: Tree) -> Node:
         if NUM_TERMINALS[node.data] == 2:                              # if the number of terminals needed by node is two
             ops: typ.List[str] = random.choices(OPS, k=2)              # pick the needed amount of OPs
             
-            left: Node = tree.addLeft(parent=node, data=ops.pop(0))    # add the new left node
-            right: Node = tree.addRight(parent=node, data=ops.pop(0))  # add the new right node
+            left: Node = tree.addLeft(parentID=node.ID, data=ops.pop(0))    # add the new left node
+            right: Node = tree.addRight(parentID=node.ID, data=ops.pop(0))  # add the new right node
             
             __grow(classId, left, tree)                                # call grow on left to set it's children
             __grow(classId, right, tree)                               # call grow on right to set it's children
-            return tree.getRoot()                                      # return the root node of the tree
+            return tree.root                                      # return the root node of the tree
         
         elif NUM_TERMINALS[node.data] == 3:                              # if the number of terminals needed by node is three
             ops: typ.List[str] = random.choices(OPS, k=3)                # pick the needed amount of OPs
             
-            left: Node = tree.addLeft(parent=node, data=ops.pop(0))      # create & add the new left node to the tree
-            right: Node = tree.addRight(parent=node, data=ops.pop(0))    # create & add the new right node to the tree
-            middle: Node = tree.addMiddle(parent=node, data=ops.pop(0))  # create & add the new middle node to the tree
+            left: Node = tree.addLeft(parentID=node.ID, data=ops.pop(0))      # create & add the new left node to the tree
+            right: Node = tree.addRight(parentID=node.ID, data=ops.pop(0))    # create & add the new right node to the tree
+            middle: Node = tree.addMiddle(parentID=node.ID, data=ops.pop(0))  # create & add the new middle node to the tree
             
             __grow(classId, left, tree)                                  # call grow on left to set it's children
             __grow(classId, right, tree)                                 # call grow on right to set it's children
             __grow(classId, middle, tree)                                # call grow on middle to set it's children
-            return tree.getRoot()                                        # return the root node of the tree
+            return tree.root                                        # return the root node of the tree
         
         else:  # if NUM_TERMINALS was not 1 or 2
             raise IndexError("Grow could not find the number of terminals need")
@@ -647,21 +648,21 @@ def __full(classId: int, node: Node, tree: Tree):
     """
     
     # *************************** Max Depth Reached *************************** #
-    if tree.getDepth(node) == MAX_DEPTH - 1:
+    if tree.getDepth(node.ID) == MAX_DEPTH - 1:
         
         # pick the needed amount of terminals
         terms: typ.List[int] = random.choices(TERMINALS[classId], k=NUM_TERMINALS[node.data])
         
         if NUM_TERMINALS[node.data] == 2:      # if the OP needs 2 children
-            tree.addLeft(parent=node, data=terms.pop(0))   # create a new left node & add it
-            tree.addRight(parent=node, data=terms.pop(0))  # create a right left node & add it
-            return tree.getRoot()              # return the root node of the tree
+            tree.addLeft(parentID=node.ID, data=terms.pop(0))   # create a new left node & add it
+            tree.addRight(parentID=node.ID, data=terms.pop(0))  # create a right left node & add it
+            return tree.root              # return the root node of the tree
         
         elif NUM_TERMINALS[node.data] == 3:     # if the OP needs 3 children
-            tree.addLeft(parent=node, data=terms.pop(0))    # create a new left node & add it
-            tree.addRight(parent=node, data=terms.pop(0))   # create a new right node & add it
-            tree.addMiddle(parent=node, data=terms.pop(0))  # create a new middle node & add it
-            return tree.getRoot()               # return the root node of the tree
+            tree.addLeft(parentID=node.ID, data=terms.pop(0))    # create a new left node & add it
+            tree.addRight(parentID=node.ID, data=terms.pop(0))   # create a new right node & add it
+            tree.addMiddle(parentID=node.ID, data=terms.pop(0))  # create a new middle node & add it
+            return tree.root               # return the root node of the tree
         
         else:  # if NUM_TERMINALS was not 1 or 2
             raise IndexError("Grow could not find the number of terminals need")
@@ -672,24 +673,24 @@ def __full(classId: int, node: Node, tree: Tree):
         if NUM_TERMINALS[node.data] == 2:                              # if the number of terminals needed by node is two
             ops: typ.List[str] = random.choices(OPS, k=2)              # pick the needed amount of OPs
 
-            left: Node = tree.addLeft(parent=node, data=ops.pop(0))    # add the new left node
-            right: Node = tree.addRight(parent=node, data=ops.pop(0))  # add the new right node
+            left: Node = tree.addLeft(parentID=node.ID, data=ops.pop(0))    # add the new left node
+            right: Node = tree.addRight(parentID=node.ID, data=ops.pop(0))  # add the new right node
             
             __full(classId, left, tree)                                # call grow on left to set it's children
             __full(classId, right, tree)                               # call grow on right to set it's children
-            return tree.getRoot()                                      # return the root node of the tree
+            return tree.root                                      # return the root node of the tree
         
         elif NUM_TERMINALS[node.data] == 3:                              # if the number of terminals needed by node is three
             ops: typ.List[str] = random.choices(OPS, k=3)                # pick the needed amount of OPs
             
-            left: Node = tree.addLeft(parent=node, data=ops.pop(0))      # create & add the new left node to the tree
-            right: Node = tree.addRight(parent=node, data=ops.pop(0))    # create & add the new right node to the tree
-            middle: Node = tree.addMiddle(parent=node, data=ops.pop(0))  # create & add the new middle node to the tree
+            left: Node = tree.addLeft(parentID=node.ID, data=ops.pop(0))      # create & add the new left node to the tree
+            right: Node = tree.addRight(parentID=node.ID, data=ops.pop(0))    # create & add the new right node to the tree
+            middle: Node = tree.addMiddle(parentID=node.ID, data=ops.pop(0))  # create & add the new middle node to the tree
             
             __full(classId, left, tree)                                   # call grow on left to set it's children
             __full(classId, right, tree)                                  # call grow on right to set it's children
             __full(classId, middle, tree)                                 # call grow on middle to set it's children
-            return tree.getRoot()                                         # return the root node of the tree
+            return tree.root                                         # return the root node of the tree
         
         else:  # if NUM_TERMINALS was not 1 or 2
             raise IndexError("Grow could not find the number of terminals need")
@@ -715,43 +716,53 @@ def createInitialPopulation() -> Population:
         cfList = []
         size = 0
 
+        barTotal = M * len(CLASS_IDS)
         # *** create M CFs for each class *** #
-        for cid in CLASS_IDS:  # loop over the class ids
+        with alive_bar(barTotal, title="Hypotheses") as bar2:  # declare your expected total
+            for cid in CLASS_IDS:  # loop over the class ids
+        
+                ftrs: typ.List[ConstructedFeature] = []  # empty the list of features
+                
+                for k in range(M):  # loop M times so M CFs are created
+                    bar2.text(f'Class:{cid}, M:{k}')
+                    
+                    tree = Tree()   # create an empty tree
+                    tree.addRoot()  # create a root node for the tree
+                    
+                    if random.choice([True, False]):         # *** use grow *** #
+                        __grow(cid, tree.root, tree)    # create tree using grow
+                        print('Grow Finished')
+                    else:                                    # *** use full *** #
+                        __full(cid, tree.root, tree)    # create tree using full
+                        print('Full Finished')
+        
+                    cf = ConstructedFeature(cid, tree)       # create constructed feature
+                    ftrs.append(cf)                          # add the feature to the list of features
+                    cfList.append(cf)
+                    
+                    size += size
+                    bar2()
     
-            ftrs: typ.List[ConstructedFeature] = []  # empty the list of features
-            
-            for _ in range(M):  # loop M times so M CFs are created
-                
-                tree = Tree()   # create an empty tree
-                tree.addRoot()  # create a root node for the tree
-                
-                if random.choice([True, False]):         # *** use grow *** #
-                    __grow(cid, tree.getRoot(), tree)    # create tree using grow
-                else:                                    # *** use full *** #
-                    __full(cid, tree.getRoot(), tree)    # create tree using full
-    
-                cf = ConstructedFeature(cid, tree)       # create constructed feature
-                ftrs.append(cf)                          # add the feature to the list of features
-                cfList.append(cf)
-                
-                size += size
-
-            # add the list of features for class cid to the dictionary, keyed by cid
-            cfDictionary[cid] = ftrs
+                # add the list of features for class cid to the dictionary, keyed by cid
+                cfDictionary[cid] = ftrs
+                bar2()  # update progress bar
             
         # create a hypothesis & return it
         return Hypothesis(cfs=cfList, fDict=cfDictionary, size=size)
 
     hypothesis: typ.List[Hypothesis] = []
 
+    # with alive_bar(POPULATION_SIZE, title="Initial Population") as bar:  # declare your expected total
     # creat a number hypotheses equal to pop size
-    for __ in range(POPULATION_SIZE):  # iterate as usual
+    for p in range(POPULATION_SIZE):  # iterate as usual
+        print(f'Creating Initial Population {p}/{POPULATION_SIZE}')
         hyp = createHypothesis()       # create a Hypothesis
         hypothesis.append(hyp)         # add the new hypothesis to the list
+        # bar()                          # update progress bar
 
     pop = Population(hypothesis, 0)
     
-    # sanityCheckPopReference(pop)  # ! testing purposes only!
+    sanityCheckPopReference(pop)  # ! testing purposes only!
     # sanityCheckPop(hypothesis)  # ! testing purposes only!
     return pop
 
@@ -760,6 +771,8 @@ def createInitialPopulation() -> Population:
 # ! testing purposes only!
 def sanityCheckPopReference(pop: Population):
     """ Used to make sure that every Hypothesis is unique"""
+    log.debug('Starting Population Reference Check...')
+    
     noDuplicates = []
     # loop over every GPI in the pop
     for i in pop.candidateHypotheses:  # type: Hypothesis
@@ -771,8 +784,9 @@ def sanityCheckPopReference(pop: Population):
     
     # if there were duplicates, raise an error
     if len(noDuplicates) != len(pop.candidateHypotheses):
-        log.error('Duplicates where found in Population')
         raise AssertionError
+
+    log.debug('Population Reference Check Passed')
 
 
 def sanityCheckHypReference(hyp: Hypothesis):
@@ -795,15 +809,6 @@ def sanityCheckCF(cf: ConstructedFeature):
     log.debug('Starting Constructed Feature Sanity Check...')
     cf.transform(rows[0])
     log.debug('Constructed Feature Sanity Check Passed')
-
-
-# ! testing purposes only!
-def sanityCheckTree(tree: Tree, classId):
-    """Used in debugging to check a Tree"""
-    log.debug('Starting Tree Sanity Check...')
-    tree.checkTree()
-    tree.runTree(rows[0].attributes, classId, TERMINALS)
-    log.debug('Tree Sanity Check Passed')
 # *************************************************************** #
 
 
@@ -968,12 +973,11 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
         # *********************************************************** #
         
         # ************* Remove the Children of the Node ************* #
-        children: typ.List[Node] = tree.children(node.identifier)   # get all the children
-        [tree.remove_node(child.identifier) for child in children]  # delete all the children
+        tree.removeChildren(node.ID)  # delete all the children
         # *********************************************************** #
     
         # ************************* Mutate ************************* #
-        if random.choice(['OPS', 'TERM']) == 'TERM' or tree.depth(node.identifier) == MAX_DEPTH:
+        if random.choice(['OPS', 'TERM']) == 'TERM' or tree.getDepth(node.ID) == MAX_DEPTH:
             node.data = random.choice(terminals)  # if we are at max depth or choose TERM,
     
         else:  # if we choose to add an OP
@@ -995,125 +999,6 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
         parent.updateFitness()  # force an update of the fitness score
         
         return parent
-
-    def swap(tree1: Tree, tree2: Tree) -> (Tree, Tree):
-
-        # Pick Two Random Nodes, one from CF1 & one from CF2
-        nodeF1: Node = tree1.getRandomNode()  # get a random node
-        nodeF2: Node = tree2.getRandomNode()  # get a random node
-
-        # TODO handle the case when 1 or both nodes are leaves
-        tree1HasChild = False
-        if tree1.children(nodeF1.identifier):
-            # store the values of node 1
-            leftChild = tree1.getLeft(nodeF1)
-            leftTree = tree1.remove_subtree(tree1.getLeft(nodeF1).identifier)
-            rightChild = tree1.getRight(nodeF1)
-            rightTree = tree1.remove_subtree(tree1.getRight(nodeF1).identifier)
-            middleChild = tree1.getMiddle(nodeF1)
-            if tree1.getMiddle(nodeF1):
-                midTree = tree1.remove_subtree(tree1.getMiddle(nodeF1).identifier)
-            tree1HasChild = True
-            
-        operation = nodeF1.data
-
-        if tree2.children(nodeF2.identifier):
-            # *** Overwrite Tree One *** #
-            # overwite node 1 middle child
-            if tree2.getMiddle(nodeF2):  # if tree 2 has a middle
-                
-                # overwrite node 1 middle child
-                # grab the id of the middle child before it's moved
-                middleID = tree2.getMiddle(nodeF2).identifier
-                # this deletes the subTree's dictionary from tree 2
-                tree1.paste(nodeF1.identifier, tree2.remove_subtree(tree2.getMiddle(nodeF2).identifier))
-                # update tree 2's dictionary to point to the root of removed subtree
-                tree1.BRANCHES[nodeF1.identifier]['middle'] = middleID
-            
-            else:  # if tree 1 doesn't have a middle
-                # delete any middle value in tree 1
-                if tree1.BRANCHES[nodeF1.identifier].get('middle'):
-                    del tree1.BRANCHES[nodeF1.identifier]['middle']
-            
-            # overwrite node 1 left child
-            # grab the id of the left child before it's moved
-            leftID = tree2.getMiddle(nodeF2).identifier
-            # this deletes the subTree's dictionary from tree 2
-            tree1.paste(nodeF1.identifier, tree2.remove_subtree(tree2.getLeft(nodeF2).identifier))
-            # update tree 1's dictionary to point to the root of removed subtree
-            tree1.BRANCHES[nodeF1.identifier]['left'] = leftID
-    
-            # overwrite node 1 right child
-            # grab the id of the right child before it's moved
-            rightID = tree2.getRight(nodeF2).identifier
-            # this deletes the subTree's dictionary from tree 2
-            tree1.paste(nodeF1.identifier, tree2.remove_subtree(tree2.getRight(nodeF2).identifier))
-            # update tree 1's dictionary to point to the root of removed subtree
-            tree1.BRANCHES[nodeF1.identifier]['right'] = rightID
-        
-        else:  # if tree 2 does not have any children
-            # delete the children of tree 1
-            if tree1.BRANCHES[nodeF1.identifier].get('left'):
-                del tree1.BRANCHES[nodeF1.identifier]['left']
-
-            if tree1.BRANCHES[nodeF1.identifier].get('right'):
-                del tree1.BRANCHES[nodeF1.identifier]['right']
-            
-            if tree1.BRANCHES[nodeF1.identifier].get('middle'):
-                del tree1.BRANCHES[nodeF1.identifier]['middle']
-        # change node 1's terminal value or operation to that of node 2's
-        nodeF1.data = nodeF2.data
-
-        # *** Overwrite Tree Two *** #
-        if tree1HasChild:  # if tree 1 has children
-            # overwite node 2 middle child
-            if middleChild:  # if tree 1 has a middle
-        
-                # grab the id of the middle child before it's moved
-                middleID = middleChild.identifier
-                # this deletes the subTree's dictionary from tree 1
-                tree2.paste(nodeF2.identifier, midTree)
-                # update tree 2's dictionary to point to the root of removed subtree
-                tree2.BRANCHES[nodeF2.identifier]['middle'] = middleID
-    
-            else:  # if tree 1 doesn't have a middle
-                # delete any middle value in tree 2
-                if tree2.BRANCHES[nodeF2.identifier].get('middle'):
-                    del tree2.BRANCHES[nodeF2.identifier]['middle']
-    
-            # overwrite node 2 left child
-            # grab the id of the left child before it's moved
-            leftID = leftChild.identifier
-            # this deletes the subTree's dictionary from tree 1
-            tree2.paste(nodeF2.identifier, leftTree)
-            # update tree 2's dictionary to point to the root of removed subtree
-            tree2.BRANCHES[nodeF2.identifier]['left'] = leftID
-    
-            # overwrite node 1 right child
-            # grab the id of the right child before it's moved
-            rightID = rightChild.identifier
-            # this deletes the subTree's dictionary from tree 1
-            tree2.paste(nodeF2.identifier, rightTree)
-            # update tree 2's dictionary to point to the root of removed subtree
-            tree2.BRANCHES[nodeF2.identifier]['right'] = rightID
-        
-        else:  # if tree 1 does not have any children
-            # delete the children of tree 1
-            if tree2.BRANCHES[nodeF2.identifier].get('left'):
-                del tree2.BRANCHES[nodeF2.identifier]['left']
-    
-            if tree2.BRANCHES[nodeF2.identifier].get('right'):
-                del tree2.BRANCHES[nodeF2.identifier]['right']
-    
-            if tree2.BRANCHES[nodeF2.identifier].get('middle'):
-                del tree2.BRANCHES[nodeF2.identifier]['middle']
-        
-        # change node 1's terminal value or operation to that of node 2's
-        nodeF2.data = operation
-        
-        # TODO override the operation in n1 & n2
-        
-        return tree1, tree2
     
     def crossover() -> (Hypothesis, Hypothesis):
         """Performs the crossover operation on two trees"""
@@ -1133,12 +1018,36 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
         # + Feature 2
         feature2: ConstructedFeature = parent2.getFeatures(classID)[randIndex]
         tree2: Tree = feature2.tree  # get the tree
+    
+        # TODO fix the error being thrown here
+        # *************** Find the Two Sub-Trees **************** #
+        # Pick Two Random Nodes, one from CF1 & one from CF2
+        nodeF1: Node = tree1.getRandomNode()           # get a random node
+        nodeF2: Node = tree2.getRandomNode()           # get a random node
 
-        sTree1, sTree2 = swap(tree1, tree2)
+        # Get the Branch & Parent of the Subtree from CF1. This will tell use where to add it in CF 2
+        branch1 = tree1.getBranch(nodeF1.ID)
+        p1 = nodeF1.parent
+        # Get the Branch & Parent of the Subtree from CF1. This will tell use where to add it in CF 2
+        branch2 = tree2.getBranch(nodeF2.ID)
+        p2 = nodeF2.parent
+        # Get the Subtree from CF1. This will be move to CF2 (nodeF1 will be root)
+        treeFromFeature1: Tree = tree1.removeSubtree(nodeF1.ID)
+        # Get the Subtree from CF2. This will be move to CF1 (nodeF2 will be root)
+        treeFromFeature2: Tree = tree2.removeSubtree(nodeF2.ID)
+        # ******************************************************* #
+    
+        # ************************** swap the two subtrees ************************** #
+        # BUG: for some reason addSubTree fails because of a duplicate node error
+        # Add the Subtree from CF2 to the tree in CF1 (in the same location that the subtree1 was cut out)
+        feature1.tree.addSubtree(subtree=treeFromFeature2, newParent=p1, orphanBranch=branch1)  # ! error is thrown here
+        # Add the Subtree from CF1 to the tree in CF2 (in the same location that the subtree2 was cut out)
+        feature2.tree.addSubtree(subtree=treeFromFeature1, newParent=p2, orphanBranch=branch2)
+        # **************************************************************************** #
 
         # ************** Create Two New Constructed Features ************** #
-        cf1: ConstructedFeature = ConstructedFeature(classID, sTree1)
-        cf2: ConstructedFeature = ConstructedFeature(classID, sTree2)
+        cf1: ConstructedFeature = ConstructedFeature(classID, feature1.tree)
+        cf2: ConstructedFeature = ConstructedFeature(classID, feature2.tree)
         # ***************************************************************** #
 
         # !!!!!!!!!!!!!! For Testing Only !!!!!!!!!!!!!! #
@@ -1254,6 +1163,8 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
     global TERMINALS
     global DISTANCE_FUNCTION
     
+    # print('setting variables')  # ! debugging only!
+    
     # Read the values in the dictionary into the constants
     FEATURE_NUMBER = values['FEATURE_NUMBER']
     CLASS_IDS = values['CLASS_IDS']
@@ -1268,16 +1179,18 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
     ENTROPY_OF_S = values['ENTROPY_OF_S']
     CLASS_DICTS = values['CLASS_DICTS']
     TERMINALS = dataIn[1]
+
+    # print('variables set')  # ! debugging only!
     
     # *********************** Run the Algorithm *********************** #
-
+    # print('creating initial pop')  # ! debugging only!
     currentPopulation = createInitialPopulation()     # run initialPop/create the initial population
     SYSOUT.write(NO_OVERWRITE + ' Initial population generated '.ljust(50, '-') + SUCCESS)
     oldElite = currentPopulation.candidateHypotheses[0]  # init elitism
 
     # loop, evolving each generation. This is where most of the work is done
     
-    # elites = [oldElite.fitness]  # ! debugging only!
+    elites = [oldElite.fitness]  # ! debugging only!
     
     with alive_bar(GENERATIONS, title="Generations") as bar:  # declare your expected total
 
@@ -1287,10 +1200,9 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
             # update currentPopulation to hold the new population
             # this is done in two steps to avoid potential namespace issues
             currentPopulation = newPopulation
-            # sanityCheckPopReference(currentPopulation)  # ! used in debugging
             oldElite = newElite  # update elitism
             
-            # elites.append(newElite.fitness)  # ! used in debugging
+            elites.append(newElite.fitness)  # ! used in debugging
 
             bar()  # update bar now that a generation is finished
 

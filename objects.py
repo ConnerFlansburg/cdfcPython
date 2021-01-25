@@ -412,7 +412,7 @@ class Tree(libTree):
             printError(msg)  # print message
             printError(f'Node\'s children: {self.children(parent.identifier)}')
             # printError(f'Error on line {lineNm}')
-            # traceback.print_stack()  # print stack trace
+            traceback.print_stack()  # print stack trace
             sys.exit(-1)
             # return None              # attempt recovery
     
@@ -428,7 +428,7 @@ class Tree(libTree):
             printError(msg)  # print message
             printError(f'Node\'s children: {self.children(parent.identifier)}')
             # printError(f'Error on line {lineNm}')
-            # traceback.print_stack()  # print stack trace
+            traceback.print_stack()  # print stack trace
             sys.exit(-1)
             # return None              # attempt recovery
     
@@ -444,7 +444,7 @@ class Tree(libTree):
             printError(msg)  # print message
             printError(f'Node\'s children: {self.children(parent.identifier)}')
             # printError(f'Error on line {lineNm}')
-            # traceback.print_stack()  # print stack trace
+            traceback.print_stack()  # print stack trace
             sys.exit(-1)
             # return None              # attempt recovery
     

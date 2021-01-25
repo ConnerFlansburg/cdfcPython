@@ -641,6 +641,7 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], mType: str, useNormali
         else:  # mType == 'Decision Tree'
             model = DecisionTreeClassifier(random_state=0)
         
+        # print('models created')  # ! debugging only!
         # ********** Get the Training & Testing Data ********** #
         # the Rth bucket becomes our testing data, everything else becomes training data
         # this is done in order to prevent accidental overwrites
@@ -652,19 +653,22 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], mType: str, useNormali
             trainList.insert(oldR, testingList)  # add testing back into train
             testingList = trainList.pop(r)       # then set train & testing
             oldR = r                             # save the current r value for then next loop
-    
+
+        # print('got training models')  # ! debugging only!
         # ********** Flatten the Training Data ********** #
         train: np.ndarray = flattenTrainingData(trainList)  # remove buckets to create a single pool
 
         testing: np.ndarray = np.array(testingList)  # turn testing data into a numpy array, testing doesn't need to be flattened
 
+        # print('flattened training data')  # ! debugging only!
         # ********** 3A Normalize the Training Data (if useNormalize is True) ********** #
         # this is also fitting the data to a distribution
         if useNormalize:
             train, scalar = __transform(train, None)  # now normalize the training, and keep the scalar used
         else:  # this case is not strictly needed, but helps the editor/IDE not throw errors
             scalar = None
-    
+
+        # print('normalized training data')  # ! debugging only!
         # ********** 3B Train the CDFC Model & Transform the Training Data using It ********** #
 
         # SYSOUT.write(f"\nTraining CDFC for {mType}...\n")  # update user
@@ -681,6 +685,7 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], mType: str, useNormali
             pickles[r] = data
 
         # now that we have our train & test data create our hypothesis (train CDFC)
+        # print('calling CDFC...')  # ! debugging only!
         CDFC_Hypothesis = cdfc(data, PASSED_FUNCTION)
         SYSOUT.write(OVERWRITE + ' CDFC Trained '.ljust(50, '-') + SUCCESS)      # replace starting with complete
         
