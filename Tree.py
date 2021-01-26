@@ -128,7 +128,12 @@ class Tree:
     # *** Values *** #
     def getDepth(self, ident: str) -> int:
         
-        if self._nodes.get(ident):
+        # if the root has not been set first
+        if self._root is None:
+            print('Root was not set before calling getDepth')
+            raise Exception
+        
+        elif self._nodes.get(ident):
             
             # grab the target node
             current: Node = self._nodes[ident]
@@ -136,7 +141,7 @@ class Tree:
             depth: int = 0
             
             # walk back up the tree until we reach the root
-            while current is not self._root:
+            while current.ID != self._root.ID:
                 depth += 1  # increment root
                 current = self._nodes[current.parent]
             
@@ -242,14 +247,14 @@ class Tree:
         
         # set the adopted parents to point to the subtree
         if orphanBranch == 'left':
-            self._nodes[newParent].left = subtree.root.ID
+            self._nodes[newParent].left = subtree._root.ID
         elif orphanBranch == 'right':
-            self._nodes[newParent].right = subtree.root.ID
+            self._nodes[newParent].right = subtree._root.ID
         elif orphanBranch == 'middle':
-            self._nodes[newParent].middle = subtree.root.ID
+            self._nodes[newParent].middle = subtree._root.ID
     
         # set the subtree root to point to adopted parents
-        subtree.root.parent = newParent
+        subtree._root.parent = newParent
         # set the subtree's branch
         subtree.branch = orphanBranch
         
@@ -284,7 +289,7 @@ class Tree:
         :rtype: float
         """
     
-        return self.__runNode(featureValues, self.root, classId, terminals)
+        return self.__runNode(featureValues, self._root, classId, terminals)
 
     def __runNode(self, featureValues: typ.Dict[int, float], node: Node,
                   classId: int, terminals: typ.Dict[int, typ.List[int]]) -> typ.Union[int, float]:

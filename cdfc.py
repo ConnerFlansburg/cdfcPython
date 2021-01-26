@@ -21,7 +21,7 @@ from alive_progress import alive_bar, config_handler
 # from treelib import Node as Node
 from decimal import Decimal
 # from pyitlib import discrete_random_variable as drv
-import pprint
+# import pprint
 
 from Tree import Tree
 from Node import Node
@@ -628,6 +628,7 @@ def __grow(classId: int, node: Node, tree: Tree) -> Node:
             raise IndexError("Grow could not find the number of terminals need")
 
 
+# TODO max recursion depth is being reached
 def __full(classId: int, node: Node, tree: Tree):
     """
     Full creates a tree or sub-tree starting at the Node node, and using the Full method.
