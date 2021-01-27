@@ -1,5 +1,6 @@
 
 import typing as typ
+import uuid
 
 
 def countNodes() -> typ.Generator:
@@ -16,17 +17,26 @@ class Node:
     def __init__(self, data, tag, parent: typ.Optional[str] = None, branch: typ.Optional[str] = None,
                  left: typ.Optional[str] = None,  right: typ.Optional[str] = None, middle: typ.Optional[str] = None):
         
-        self._ID = next(countNodes())  # create a unique ID
-        self._tag = tag  # this says if the node stores an op or a terminal
-        self._data = data  # the operation or terminal to be stored in this node
+        self._ID = uuid.uuid4()
+        # self._ID = next(countNodes())  # create a unique ID
+        self._tag: str = tag  # this says if the node stores an op or a terminal
+        self._data: str = data  # the operation or terminal to be stored in this node
         
-        self._parent = parent  # the id of the parent node
-        self._branch = branch  # which branch from the parent this child is on
-        self._left = left       # the id string of left child
-        self._right = right     # the id string of right child
-        self._middle = middle   # the id string of middle child
+        self._parent: typ.Optional[str] = parent  # the id of the parent node
+        self._branch: typ.Optional[str] = branch  # which branch from the parent this child is on
+        self._left: typ.Optional[str] = left       # the id string of left child
+        self._right: typ.Optional[str] = right     # the id string of right child
+        self._middle: typ.Optional[str] = middle   # the id string of middle child
         
         return
+    
+    def __str__(self):
+        return f'[{self.data}, ID: {self._ID} | L:{self._left}, R:{self.right}]'
+
+    # *** ID *** #
+    @property
+    def ID(self):
+        return self._ID
 
     # *** Tag *** #
     @property

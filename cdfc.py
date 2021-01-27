@@ -65,7 +65,7 @@ POPULATION_SIZE = 0                           # POPULATION_SIZE is the populatio
 CL_DICTION = typ.Dict[int, typ.Dict[int, typ.List[float]]]
 CLASS_DICTS: CL_DICTION = {}                  # CLASS_DICTS is a list of dicts (indexed by classId) mapping attribute values to classes
 SEED = 498                                    # SEED the seed used for random values
-random.seed(SEED)
+# random.seed(SEED)  # WARNING: setting this may cause issues with node ID generation!
 # ++++++++++++++++++++++++ console formatting strings +++++++++++++++++++++++++ #
 HDR = '*' * 6
 SUCCESS = u' \u2713\n'+'\033[0m'     # print the checkmark & reset text color
@@ -555,148 +555,6 @@ class Population:
 # ***************** End of Namespaces/Structs & Objects ******************* #
 
 
-def __grow(classId: int, node: Node, tree: Tree) -> Node:
-    """
-    Grow creates a tree or sub-tree starting at the Node node, and using the Grow method.
-    If node is a root Node, grow will build a tree, otherwise grow will build a sub-tree
-    starting at node. Grow assumes that node's data has already been set & makes all
-    changes in place.
-
-    NOTE:
-    During testing whatever calls grow should use the sanity check sanityCheckTree(newTree)
-
-    :param classId: ID of the class that the tree should identify.
-    :param node: The root node of the subtree __grow will create.
-    :param tree: Tree that __grow is building or adding to.
-
-    :type classId: int
-    :type node: Node
-    :type tree: Tree
-    """
-    
-    coin = random.choice(['OP', 'TERM']) == 'TERM'  # flip a coin & decide OP or TERM
-    
-    # *************************** A Terminal was Chosen *************************** #
-    # NOTE: check depth-1 because we will create children
-    if coin == 'TERM' or (tree.getDepth(node.ID) == MAX_DEPTH - 1):  # if we need to add terminals
-
-        # pick the needed amount of terminals
-        terms: typ.List[int] = random.choices(TERMINALS[classId], k=NUM_TERMINALS[node.data])
-        
-        if NUM_TERMINALS[node.data] == 2:                  # if the OP needs 2 children
-            tree.addLeft(parentID=node.ID, data=terms.pop(0))   # create a new left node & add it
-            tree.addRight(parentID=node.ID, data=terms.pop(0))  # create a new left node & add it
-            
-            return tree.root                          # return the root node of the tree
-        
-        elif NUM_TERMINALS[node.data] == 3:                 # if the OP needs 3 children
-            tree.addLeft(parentID=node.ID, data=terms.pop(0))    # create a new left node & add it
-            tree.addRight(parentID=node.ID, data=terms.pop(0))   # create a new right node & add it
-            tree.addMiddle(parentID=node.ID, data=terms.pop(0))  # create a new middle node & add it
-            
-            return tree.root                           # return the root node of the tree
-        
-        else:                                               # if NUM_TERMINALS was not 2 or 3
-            raise IndexError("Grow could not find the number of terminals need")
-    
-    # *************************** A Operation was Chosen *************************** #
-    else:  # if we chose to add an operation
-        
-        if NUM_TERMINALS[node.data] == 2:                              # if the number of terminals needed by node is two
-            ops: typ.List[str] = random.choices(OPS, k=2)              # pick the needed amount of OPs
-            
-            left: Node = tree.addLeft(parentID=node.ID, data=ops.pop(0))    # add the new left node
-            right: Node = tree.addRight(parentID=node.ID, data=ops.pop(0))  # add the new right node
-            
-            __grow(classId, left, tree)                                # call grow on left to set it's children
-            __grow(classId, right, tree)                               # call grow on right to set it's children
-            return tree.root                                      # return the root node of the tree
-        
-        elif NUM_TERMINALS[node.data] == 3:                              # if the number of terminals needed by node is three
-            ops: typ.List[str] = random.choices(OPS, k=3)                # pick the needed amount of OPs
-            
-            left: Node = tree.addLeft(parentID=node.ID, data=ops.pop(0))      # create & add the new left node to the tree
-            right: Node = tree.addRight(parentID=node.ID, data=ops.pop(0))    # create & add the new right node to the tree
-            middle: Node = tree.addMiddle(parentID=node.ID, data=ops.pop(0))  # create & add the new middle node to the tree
-            
-            __grow(classId, left, tree)                                  # call grow on left to set it's children
-            __grow(classId, right, tree)                                 # call grow on right to set it's children
-            __grow(classId, middle, tree)                                # call grow on middle to set it's children
-            return tree.root                                        # return the root node of the tree
-        
-        else:  # if NUM_TERMINALS was not 1 or 2
-            raise IndexError("Grow could not find the number of terminals need")
-
-
-# TODO max recursion depth is being reached
-def __full(classId: int, node: Node, tree: Tree):
-    """
-    Full creates a tree or sub-tree starting at the Node node, and using the Full method.
-    If node is a root Node, full will build a tree, otherwise full will build a sub-tree
-    starting at node. Full assumes that node's data has already been set & makes all
-    changes in place.
-      
-    NOTE:
-    During testing whatever calls full should use the sanity check sanityCheckTree(newTree)
-    
-    :param classId: ID of the class that the tree should identify.
-    :param node: The root node of the subtree __full will create.
-    :param tree: Tree that __full is building or adding to.
-    
-    :type classId: int
-    :type node: Node
-    :type tree: Tree
-    """
-    
-    # *************************** Max Depth Reached *************************** #
-    if tree.getDepth(node.ID) == MAX_DEPTH - 1:
-        
-        # pick the needed amount of terminals
-        terms: typ.List[int] = random.choices(TERMINALS[classId], k=NUM_TERMINALS[node.data])
-        
-        if NUM_TERMINALS[node.data] == 2:      # if the OP needs 2 children
-            tree.addLeft(parentID=node.ID, data=terms.pop(0))   # create a new left node & add it
-            tree.addRight(parentID=node.ID, data=terms.pop(0))  # create a right left node & add it
-            return tree.root              # return the root node of the tree
-        
-        elif NUM_TERMINALS[node.data] == 3:     # if the OP needs 3 children
-            tree.addLeft(parentID=node.ID, data=terms.pop(0))    # create a new left node & add it
-            tree.addRight(parentID=node.ID, data=terms.pop(0))   # create a new right node & add it
-            tree.addMiddle(parentID=node.ID, data=terms.pop(0))  # create a new middle node & add it
-            return tree.root               # return the root node of the tree
-        
-        else:  # if NUM_TERMINALS was not 1 or 2
-            raise IndexError("Grow could not find the number of terminals need")
-    
-    # *************************** If Not at Max Depth *************************** #
-    else:  # if we haven't reached the max depth, add operations
-        
-        if NUM_TERMINALS[node.data] == 2:                              # if the number of terminals needed by node is two
-            ops: typ.List[str] = random.choices(OPS, k=2)              # pick the needed amount of OPs
-
-            left: Node = tree.addLeft(parentID=node.ID, data=ops.pop(0))    # add the new left node
-            right: Node = tree.addRight(parentID=node.ID, data=ops.pop(0))  # add the new right node
-            
-            __full(classId, left, tree)                                # call grow on left to set it's children
-            __full(classId, right, tree)                               # call grow on right to set it's children
-            return tree.root                                      # return the root node of the tree
-        
-        elif NUM_TERMINALS[node.data] == 3:                              # if the number of terminals needed by node is three
-            ops: typ.List[str] = random.choices(OPS, k=3)                # pick the needed amount of OPs
-            
-            left: Node = tree.addLeft(parentID=node.ID, data=ops.pop(0))      # create & add the new left node to the tree
-            right: Node = tree.addRight(parentID=node.ID, data=ops.pop(0))    # create & add the new right node to the tree
-            middle: Node = tree.addMiddle(parentID=node.ID, data=ops.pop(0))  # create & add the new middle node to the tree
-            
-            __full(classId, left, tree)                                   # call grow on left to set it's children
-            __full(classId, right, tree)                                  # call grow on right to set it's children
-            __full(classId, middle, tree)                                 # call grow on middle to set it's children
-            return tree.root                                         # return the root node of the tree
-        
-        else:  # if NUM_TERMINALS was not 1 or 2
-            raise IndexError("Grow could not find the number of terminals need")
-
-
 def createInitialPopulation() -> Population:
     """
     Creates the initial population by calling createHypothesis() the needed number of times.
@@ -725,16 +583,19 @@ def createInitialPopulation() -> Population:
                 ftrs: typ.List[ConstructedFeature] = []  # empty the list of features
                 
                 for k in range(M):  # loop M times so M CFs are created
-                    bar2.text(f'Class:{cid}, M:{k}')
+                    bar2.text(f'Class:{cid}, M:{k+1}')
                     
                     tree = Tree()   # create an empty tree
-                    tree.addRoot()  # create a root node for the tree
+                    
+                    print(f'Root ID:{tree.root.ID}')  # ! debugging
                     
                     if random.choice([True, False]):         # *** use grow *** #
-                        __grow(cid, tree.root, tree)    # create tree using grow
+                        print('Grow chosen')  # ! debugging
+                        tree.grow(cid, tree.root.ID, MAX_DEPTH, TERMINALS)  # create tree using grow
                         print('Grow Finished')
                     else:                                    # *** use full *** #
-                        __full(cid, tree.root, tree)    # create tree using full
+                        print('Full chosen')  # ! debugging
+                        tree.full(cid, tree.root.ID, MAX_DEPTH, TERMINALS)    # create tree using full
                         print('Full Finished')
         
                     cf = ConstructedFeature(cid, tree)       # create constructed feature
@@ -970,15 +831,16 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
         tree: Tree = randCF.tree                                     # get the tree from the CF
         # tree.checkTree()     # ! For Testing purposes only !!
         # tree.sendToStdOut()  # ! For Testing purposes only !!
-        node: Node = randCF.tree.getRandomNode()                     # get a random node from the CF's tree
+        nodeID: str = randCF.tree.getRandomNode()                     # get a random node from the CF's tree
+        node: Node = tree.getNode(nodeID)
         # *********************************************************** #
         
         # ************* Remove the Children of the Node ************* #
-        tree.removeChildren(node.ID)  # delete all the children
+        tree.removeChildren(nodeID)  # delete all the children
         # *********************************************************** #
     
         # ************************* Mutate ************************* #
-        if random.choice(['OPS', 'TERM']) == 'TERM' or tree.getDepth(node.ID) == MAX_DEPTH:
+        if random.choice(['OPS', 'TERM']) == 'TERM' or tree.getDepth2(nodeID) == MAX_DEPTH:
             node.data = random.choice(terminals)  # if we are at max depth or choose TERM,
     
         else:  # if we choose to add an OP
@@ -986,9 +848,9 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
         
             # randomly decide which method to use to construct the new tree (grow or full)
             if random.choice(['Grow', 'Full']) == 'Grow':  # * Grow * #
-                __grow(randCF.className, node, tree)       # tree is changed in place starting with node
+                tree.grow(randCF.className, nodeID, MAX_DEPTH, TERMINALS)  # tree is changed in place starting with node
             else:                                          # * Full * #
-                __full(randCF.className, node, tree)       # tree is changed in place starting with node
+                tree.full(randCF.className, nodeID, MAX_DEPTH, TERMINALS)  # tree is changed in place starting with node
         # *********************************************************** #
 
         # tree.checkTree()     # ! For Testing purposes only !!
@@ -1023,8 +885,8 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
         # TODO fix the error being thrown here
         # *************** Find the Two Sub-Trees **************** #
         # Pick Two Random Nodes, one from CF1 & one from CF2
-        nodeF1: Node = tree1.getRandomNode()           # get a random node
-        nodeF2: Node = tree2.getRandomNode()           # get a random node
+        nodeF1: Node = tree1.getNode(tree1.getRandomNode())  # get a random node
+        nodeF2: Node = tree2.getNode(tree2.getRandomNode())       # get a random node
 
         # Get the Branch & Parent of the Subtree from CF1. This will tell use where to add it in CF 2
         branch1 = tree1.getBranch(nodeF1.ID)
