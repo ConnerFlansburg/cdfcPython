@@ -17,7 +17,7 @@ class Node:
     def __init__(self, data, tag, parent: typ.Optional[str] = None, branch: typ.Optional[str] = None,
                  left: typ.Optional[str] = None,  right: typ.Optional[str] = None, middle: typ.Optional[str] = None):
         
-        self._ID = uuid.uuid4()
+        self._ID: str = str(uuid.uuid4())
         # self._ID = next(countNodes())  # create a unique ID
         self._tag: str = tag  # this says if the node stores an op or a terminal
         self._data: str = data  # the operation or terminal to be stored in this node
@@ -31,7 +31,7 @@ class Node:
         return
     
     def __str__(self):
-        return f'[{self.data}, ID: {self._ID} | L:{self._left}, R:{self.right}]'
+        return f'[{self.data}, ID: {self._ID} | L:{self._left}, R:{self.right}, M:{self.middle}]'
 
     # *** ID *** #
     @property

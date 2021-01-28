@@ -335,7 +335,7 @@ class Hypothesis:
                     print('OVERFLOW ERROR occurred during distance calculation')
                     print(f'value: {pwrFix.to_eng_string()}')
                     # try to round the Decimal to 4 places & then convert to a float
-                    r = 1 / (1 + float(pwrFix.quantize(Decimal('1.0000'))))
+                    r = 1 / (1 + float(pwrFix.quantize(Decimal('1.000000000000'))))
                     return r
                 except (RuntimeError, TypeError, OverflowError):
                     print('Recovery was impossible, exiting')
@@ -575,52 +575,47 @@ def createInitialPopulation() -> Population:
         cfList = []
         size = 0
 
-        barTotal = M * len(CLASS_IDS)
         # *** create M CFs for each class *** #
-        with alive_bar(barTotal, title="Hypotheses") as bar2:  # declare your expected total
-            for cid in CLASS_IDS:  # loop over the class ids
-        
-                ftrs: typ.List[ConstructedFeature] = []  # empty the list of features
-                
-                for k in range(M):  # loop M times so M CFs are created
-                    bar2.text(f'Class:{cid}, M:{k+1}')
-                    
-                    tree = Tree()   # create an empty tree
-                    
-                    print(f'Root ID:{tree.root.ID}')  # ! debugging
-                    
-                    if random.choice([True, False]):         # *** use grow *** #
-                        print('Grow chosen')  # ! debugging
-                        tree.grow(cid, tree.root.ID, MAX_DEPTH, TERMINALS)  # create tree using grow
-                        print('Grow Finished')
-                    else:                                    # *** use full *** #
-                        print('Full chosen')  # ! debugging
-                        tree.full(cid, tree.root.ID, MAX_DEPTH, TERMINALS)    # create tree using full
-                        print('Full Finished')
-        
-                    cf = ConstructedFeature(cid, tree)       # create constructed feature
-                    ftrs.append(cf)                          # add the feature to the list of features
-                    cfList.append(cf)
-                    
-                    size += size
-                    bar2()
+        for cid in CLASS_IDS:  # loop over the class ids
     
-                # add the list of features for class cid to the dictionary, keyed by cid
-                cfDictionary[cid] = ftrs
-                bar2()  # update progress bar
+            ftrs: typ.List[ConstructedFeature] = []  # empty the list of features
+            
+            for k in range(M):  # loop M times so M CFs are created
+                
+                tree = Tree()   # create an empty tree
+                
+                # print(f'Root ID:{tree.root.ID}')  # ! debugging
+
+                if random.choice([True, False]):         # *** use grow *** #
+                    # print('Grow chosen')  # ! debugging
+                    tree.grow(cid, tree.root.ID, MAX_DEPTH, TERMINALS)  # create tree using grow
+                    # print('Grow Finished')
+                else:                                    # *** use full *** #
+                    # print('Full chosen')  # ! debugging
+                    tree.full(cid, tree.root.ID, MAX_DEPTH, TERMINALS)    # create tree using full
+                    # print('Full Finished')
+    
+                cf = ConstructedFeature(cid, tree)       # create constructed feature
+                ftrs.append(cf)                          # add the feature to the list of features
+                cfList.append(cf)
+                
+                size += size
+
+            # add the list of features for class cid to the dictionary, keyed by cid
+            cfDictionary[cid] = ftrs
             
         # create a hypothesis & return it
         return Hypothesis(cfs=cfList, fDict=cfDictionary, size=size)
 
     hypothesis: typ.List[Hypothesis] = []
 
-    # with alive_bar(POPULATION_SIZE, title="Initial Population") as bar:  # declare your expected total
-    # creat a number hypotheses equal to pop size
-    for p in range(POPULATION_SIZE):  # iterate as usual
-        print(f'Creating Initial Population {p}/{POPULATION_SIZE}')
-        hyp = createHypothesis()       # create a Hypothesis
-        hypothesis.append(hyp)         # add the new hypothesis to the list
-        # bar()                          # update progress bar
+    with alive_bar(POPULATION_SIZE, title="Initial Population") as bar:  # declare your expected total
+        # creat a number hypotheses equal to pop size
+        for p in range(POPULATION_SIZE):  # iterate as usual
+            # print(f'Creating Initial Population {p}/{POPULATION_SIZE}')
+            hyp = createHypothesis()       # create a Hypothesis
+            hypothesis.append(hyp)         # add the new hypothesis to the list
+            bar()                          # update progress bar
 
     pop = Population(hypothesis, 0)
     
@@ -888,22 +883,25 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
         nodeF1: Node = tree1.getNode(tree1.getRandomNode())  # get a random node
         nodeF2: Node = tree2.getNode(tree2.getRandomNode())       # get a random node
 
+        branch1: str
+        p1: str
+        treeFromFeature1: Tree
         # Get the Branch & Parent of the Subtree from CF1. This will tell use where to add it in CF 2
-        branch1 = tree1.getBranch(nodeF1.ID)
-        p1 = nodeF1.parent
-        # Get the Branch & Parent of the Subtree from CF1. This will tell use where to add it in CF 2
-        branch2 = tree2.getBranch(nodeF2.ID)
-        p2 = nodeF2.parent
         # Get the Subtree from CF1. This will be move to CF2 (nodeF1 will be root)
-        treeFromFeature1: Tree = tree1.removeSubtree(nodeF1.ID)
+        treeFromFeature1, p1, branch1 = tree1.removeSubtree(nodeF1.ID)
+        
+        branch2: str
+        p2: str
+        treeFromFeature2: Tree
+        # Get the Branch & Parent of the Subtree from CF1. This will tell use where to add it in CF 2
         # Get the Subtree from CF2. This will be move to CF1 (nodeF2 will be root)
-        treeFromFeature2: Tree = tree2.removeSubtree(nodeF2.ID)
+        treeFromFeature2, p2, branch2 = tree2.removeSubtree(nodeF2.ID)
         # ******************************************************* #
     
         # ************************** swap the two subtrees ************************** #
         # BUG: for some reason addSubTree fails because of a duplicate node error
         # Add the Subtree from CF2 to the tree in CF1 (in the same location that the subtree1 was cut out)
-        feature1.tree.addSubtree(subtree=treeFromFeature2, newParent=p1, orphanBranch=branch1)  # ! error is thrown here
+        feature1.tree.addSubtree(subtree=treeFromFeature2, newParent=p1, orphanBranch=branch1)
         # Add the Subtree from CF1 to the tree in CF2 (in the same location that the subtree2 was cut out)
         feature2.tree.addSubtree(subtree=treeFromFeature1, newParent=p2, orphanBranch=branch2)
         # **************************************************************************** #
