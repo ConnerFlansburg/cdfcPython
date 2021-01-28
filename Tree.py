@@ -375,7 +375,33 @@ class Tree:
             return subtree, parentOfSubtreeID, orphanBranch
     
         else:  # if the key is bad, raise an error
-            raise NotInTreeError(newRootID)  # ! this is being hit when called by removeChildren
+            raise NotInTreeError(newRootID)
+
+    # ! call this after crossover & use it to hut down what's causing the duplicates
+    def checkForDuplicateKeys(self, otherTree: "Tree"):
+        """ Given two trees, check them for duplicate keys """
+
+        # ! duplicate nodes are being found after initial pop generation
+        # check that there aren't any duplicate keys
+        duplicates = []
+        for key1 in otherTree._nodes.keys():  # for every key in subtree,
+            if key1 in self._nodes.keys():  # if that key is also in this tree,
+                duplicates.append(key1)  # add the key to the list of copies
+
+        try:
+            if duplicates:  # if duplicates were found, raise an error
+                raise DuplicateNodeError(keyList=duplicates)
+        except DuplicateNodeError as err:
+            lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+            log.error(f'line = {lineNm}, {str(err)}')  # log the error
+            traceback.print_stack()  # print stack trace
+            printError(f'On line {lineNm} DuplicateNodeError encountered')  # print message
+            print('Duplicate(s):')
+            pprint.pprint(duplicates)  # print the list of duplicate nodes
+            print('Subtree:')
+            pprint.pprint(list(otherTree._nodes.keys()))
+    
+            sys.exit(-1)  # exit on error; recovery not possible
 
     def addSubtree(self, subtree: "Tree", newParent: str, orphanBranch: str):
         # check that parent id is valid
@@ -395,29 +421,10 @@ class Tree:
         # set the subtree's branch
         subtree.branch = orphanBranch
         
-        # ! duplicate nodes are being found after initial pop generation
-        # check that there aren't any duplicate keys
-        duplicates = []
-        for key1 in subtree._nodes.keys():  # for every key in subtree,
-            if key1 in self._nodes.keys():  # if that key is also in this tree,
-                duplicates.append(key1)     # add the key to the list of copies
-                
-        try:
-            if duplicates:                  # if duplicates were found, raise an error
-                raise DuplicateNodeError(keyList=duplicates)
-        except DuplicateNodeError as err:
-            lineNm = sys.exc_info()[-1].tb_lineno       # get the line number of error
-            log.error(f'line = {lineNm}, {str(err)}')   # log the error
-            traceback.print_stack()                     # print stack trace
-            printError(f'On line {lineNm} DuplicateNodeError encountered')  # print message
-            print('Duplicate(s):')
-            pprint.pprint(duplicates)  # print the list of duplicate nodes
-            print('Subtree:')
-            pprint.pprint(list(subtree._nodes.keys()))
-            
-            sys.exit(-1)  # exit on error; recovery not possible
+        # check for duplicate nodes
+        self.checkForDuplicateKeys(subtree)
         
-        # add subtree to dictionary of nodes
+        # it is now safe to add subtree to dictionary of nodes
         self._nodes.update(subtree._nodes)
         
         # delete the subtree from memory now that it's been copied
