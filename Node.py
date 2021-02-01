@@ -86,10 +86,6 @@ class Node:
     @left.setter
     def left(self, newLeft: str):
         self._left = newLeft
-    
-    @left.deleter
-    def left(self):
-        del self._left
 
     # *** Right *** #
     @property
@@ -99,10 +95,6 @@ class Node:
     @right.setter
     def right(self, newRight: str):
         self._right = newRight
-    
-    @right.deleter
-    def right(self):
-        del self._right
 
     # *** Middle *** #
     @property
@@ -112,10 +104,6 @@ class Node:
     @middle.setter
     def middle(self, newMiddle: str):
         self._middle = newMiddle
-    
-    @middle.deleter
-    def middle(self):
-        del self._middle
 
     # *** Children *** #
     @property

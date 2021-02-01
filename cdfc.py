@@ -7,22 +7,22 @@ Github Repo: https://github.com/brom94/cdfcPython.git
 """
 
 import collections as collect
-import copy
 import logging as log
 import math
 import random
 import sys
+# import traceback
 import typing as typ
 import warnings
 from pathlib import Path
 import Distances as Dst
 import numpy as np
 from alive_progress import alive_bar, config_handler
-# from treelib import Node as Node
 from decimal import Decimal
 # from pyitlib import discrete_random_variable as drv
 # import pprint
-
+from formatting import printError
+from _collections import defaultdict
 from Tree import Tree
 from Node import Node
 # from objects import Tree
@@ -66,6 +66,7 @@ CL_DICTION = typ.Dict[int, typ.Dict[int, typ.List[float]]]
 CLASS_DICTS: CL_DICTION = {}                  # CLASS_DICTS is a list of dicts (indexed by classId) mapping attribute values to classes
 SEED = 498                                    # SEED the seed used for random values
 # random.seed(SEED)  # WARNING: setting this may cause issues with node ID generation!
+GLOBAL_COUNTER: int = 0                       # GLOBAL_COUNTER is used during debugging to know how often an event happens
 # ++++++++++++++++++++++++ console formatting strings +++++++++++++++++++++++++ #
 HDR = '*' * 6
 SUCCESS = u' \u2713\n'+'\033[0m'     # print the checkmark & reset text color
@@ -121,6 +122,10 @@ class ConstructedFeature:
         self.size = tree.size                         # the individual size (the size of the tree)
         self.relevantFeatures = TERMINALS[className]  # holds the indexes of the relevant features
         # sanityCheckCF(self)  # ! testing purposes only!
+
+    def __str__(self):
+        strValue: str = f'||CF for Class {self.className}| Size: {self.size}||'
+        return strValue
 
     def transform(self, instance: Instance) -> float:
         """
@@ -179,27 +184,60 @@ class Hypothesis:
     cfList: typ.List[ConstructedFeature] = []
     # + averageInfoGain & maxInfoGain must be low enough that they will always be overwritten + #
     
-    def __init__(self, size: int, cfs: cfsType, fDict: fDictType = None) -> None:
+    def __init__(self, size: int, cfs: cfsType = None, fDict: fDictType = None) -> None:
         """Constructor for the Hypothesis object"""
-        self.size: int = size                                         # the number of nodes in all the cfs
+        self._size: int = size                                         # the number of nodes in all the cfs
 
-        if fDict:  # if a dictionary was passed, just copy the info in
-            self.features = fDict
-            self.cfList = cfs
-            
-        else:  # if a dictionary was not passed
-            # create a list of all the Constructed Features (regardless of class)
-            self.cfList = cfs
-            
-            for c in cfs:  # add the CFs to the dictionary, keyed by their class id
-                if c.className in self.features.keys():   # if the entry already exists
-                    self.features[c.className].append(c)  # append c to the list
-                else:                                     # if the entry doesn't exist
-                    self.features[c.className] = [c]  # create a list with c and add it to the dictionary
+        if (fDict is None) and (cfs is None):
+            raise Exception  # both can't be none
+        
+        if cfs is None:
+            cfs = []
+            for ls in list(fDict.values()):
+                cfs.extend(ls)
+        
+        # if the dictionary was not passed, then we need to build it
+        if fDict is None:
 
-    def getFeatures(self, classId) -> typ.List[ConstructedFeature]:
+            ftrDictionary: defaultdict[int, list] = defaultdict(list)
+            for ftr in cfs:  # add the CFs to the dictionary, keyed by their class id
+                classID = ftr.className  # get the class ID of the feature
+                # add the feature to a list of features of the same class
+                ftrDictionary[classID].append(ftr)
+
+            # change it from a defaultdict to a dict
+            fDict = dict(ftrDictionary)
+
+        # set fDict & cfList
+        self.features = fDict
+        self.cfList = cfs
+                    
+    def __str__(self) -> str:
+        strValue: str = f'Hypothesis\n'
+        # strValue += f'\tFitness: {self.fitness}\n'    # print fitness
+        for k in self.features.keys():                # for each key
+            strValue += f'\tClass {k}:\n'             # print the key
+            for ftr in self.features[k]:              # loop over the feature list
+                strValue += f'\t\t{ftr}\n'            # convert each CF
+        strValue += f'\tCF List:\n'
+        for cf in self.cfList:  # loop over the cf list
+            strValue += f'\t\t{cf}\n'  # print the cf
+        
+        return strValue
+
+    def getFeatures(self, classId: int) -> typ.Tuple[ConstructedFeature]:
         """ Gets a list of CFs for a given class"""
-        return self.features[classId]
+        return tuple(self.features[classId])
+
+    @property
+    def size(self):
+        return self._size
+    
+    def updateSize(self):
+        size: int = 0
+        for cf in self.cfList:
+            size += cf.size
+        self._size = size
 
     @property
     def fitness(self) -> typ.Union[int, float]:
@@ -235,6 +273,8 @@ class Hypothesis:
         :return: Fitness value of a Hypothesis.
         :rtype: float
         """
+        global GLOBAL_COUNTER  # ! debugging
+        GLOBAL_COUNTER += 1    # ! debugging
         
         def DbCalculation(S: typ.List[Instance]) -> float:
             """ Used to calculate Db """
@@ -424,22 +464,40 @@ class Hypothesis:
 
         gainSum = 0  # the info gain of the hypothesis
         
-        for classId in CLASS_IDS:  # Loop over all the class ids
-            for f in self.features[classId]:  # Loop over all the features for that class id
-
-                # ********* Entropy calculation ********* #
-                condEntropy = __conditionalEntropy(f)  # find the conditional entropy
+        try:
+            # ! this is throwing a key error. Why?
+            # ! this does iterate through the class ids correctly...
+            for classId in CLASS_IDS:  # Loop over all the class ids
+                for f in self.features[classId]:  # Loop over all the features for that class id
     
-                # ******** Info Gain calculation ******* #
-                # ? maybe the problem is with ENTROPY_OF_S? should it be a dict?
-                # ?  Not all classes have the same entropy, right?
-                f.infoGain = ENTROPY_OF_S - condEntropy  # H(class) - H(class|f)
-                gainSum += f.infoGain                    # update the info sum
-    
-                # updates the max info gain of the hypothesis if needed
-                if self.maxInfoGain < f.infoGain:
-                    self.maxInfoGain = f.infoGain
-
+                    # ********* Entropy calculation ********* #
+                    condEntropy = __conditionalEntropy(f)  # find the conditional entropy
+        
+                    # ******** Info Gain calculation ******* #
+                    # ? maybe the problem is with ENTROPY_OF_S? should it be a dict?
+                    # ?  Not all classes have the same entropy, right?
+                    f.infoGain = ENTROPY_OF_S - condEntropy  # H(class) - H(class|f)
+                    gainSum += f.infoGain                    # update the info sum
+        
+                    # updates the max info gain of the hypothesis if needed
+                    if self.maxInfoGain < f.infoGain:
+                        self.maxInfoGain = f.infoGain
+        except KeyError as err:
+            lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+            # traceback.print_stack()
+            
+            printError(f'Encountered KeyError: {str(err)}, on line: {lineNm}')  # print the error
+            printError(f'Encountered during fitness calculation number {GLOBAL_COUNTER}')
+            printError(f'Class IDs: {CLASS_IDS}')
+            printError(f'Class Keys in Hypothesis: {list(self.features.keys())}')
+            printError('Features in Hypothesis:')
+            
+            for k in self.features.keys():       # for each key
+                printError(f'Key {k}:')                 # print the key
+                for ftr in self.features[k]:  # loop over the feature list
+                    printError(f'\t{ftr}')
+            sys.exit(-1)
+            
         # calculate the average info gain using formula 3
         term1 = gainSum+self.maxInfoGain
         term2 = (M+1)*(math.log(LABEL_NUMBER, 2))
@@ -551,6 +609,8 @@ class Population:
         self.candidateHypotheses: typ.List[Hypothesis] = candidateHypotheses
         # this is the number of this generation
         self.generation = generationNumber
+        # this will store the elite
+        self.elite: typ.Optional[Hypothesis] = None
 
 # ***************** End of Namespaces/Structs & Objects ******************* #
 
@@ -577,15 +637,15 @@ def createInitialPopulation() -> Population:
 
         # *** create M CFs for each class *** #
         for cid in CLASS_IDS:  # loop over the class ids
-    
+            
+            # print(f'Creating CFs for class {cid}...')  # ! debugging only
+            
             ftrs: typ.List[ConstructedFeature] = []  # empty the list of features
             
             for k in range(M):  # loop M times so M CFs are created
                 
                 tree = Tree()   # create an empty tree
                 
-                # print(f'Root ID:{tree.root.ID}')  # ! debugging
-
                 if random.choice([True, False]):         # *** use grow *** #
                     # print('Grow chosen')  # ! debugging
                     tree.grow(cid, tree.root.ID, MAX_DEPTH, TERMINALS)  # create tree using grow
@@ -598,23 +658,37 @@ def createInitialPopulation() -> Population:
                 cf = ConstructedFeature(cid, tree)       # create constructed feature
                 ftrs.append(cf)                          # add the feature to the list of features
                 cfList.append(cf)
-                
-                size += size
 
+                # ! the CF is created correctly
+                # print(f'\t {k} CF is {cf}')  # ! debugging
+                
+                size += cf.size
+
+            # ! CID is iterating correctly, however the dictionary is getting only 1 key
             # add the list of features for class cid to the dictionary, keyed by cid
             cfDictionary[cid] = ftrs
             
+        # !!! For debugging only !!!
+        # print('Hypothesis Created')
+        # for k in cfDictionary.keys():  # for each key
+        #     print(f'Key {k}:')  # print the key
+        #     for ftr in cfDictionary[k]:  # loop over the feature list
+        #         print(f'\t{ftr}')
+        # print('\n')
+        # !!! For debugging only !!!
+        
         # create a hypothesis & return it
         return Hypothesis(cfs=cfList, fDict=cfDictionary, size=size)
 
     hypothesis: typ.List[Hypothesis] = []
 
+    # print(f'Class IDs: {CLASS_IDS}')  # ! debugging
     with alive_bar(POPULATION_SIZE, title="Initial Population") as bar:  # declare your expected total
         # creat a number hypotheses equal to pop size
         for p in range(POPULATION_SIZE):  # iterate as usual
-            # print(f'Creating Initial Population {p}/{POPULATION_SIZE}')
             hyp = createHypothesis()       # create a Hypothesis
             hypothesis.append(hyp)         # add the new hypothesis to the list
+            # print(hyp)  # ! debugging only
             bar()                          # update progress bar
 
     pop = Population(hypothesis, 0)
@@ -669,7 +743,7 @@ def sanityCheckCF(cf: ConstructedFeature):
 # *************************************************************** #
 
 
-def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Population, Hypothesis]:
+def evolve(population: Population, passedElite: Hypothesis, bar) -> Population:
     """
     evolve is used by CDFC during the evolution step to create the next generation of the algorithm.
     This is done by randomly choosing between mutation & crossover based on the mutation rate.
@@ -707,7 +781,7 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
         # **************** Tournament Selection **************** #
         # get a list including every valid index in candidateHypotheses
         positions: typ.List[int] = list(range(len(p.candidateHypotheses)))
-        first = None  # the tournament winner
+        first: typ.Optional[Hypothesis] = None  # the tournament winner
         score = 0     # the winning score
         for i in range(TOURNEY):  # compare TOURNEY number of random hypothesis
             
@@ -722,8 +796,8 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
                 first = candidate  # then  set it
 
             elif score < fitness:  # if first is set, but knight is more fit,
-                first = candidate  # then update it
-                score = fitness    # then update the score to higher fitness
+                first = candidate  # then update it,
+                score = fitness    # update the score to higher fitness,
                 
         try:
             if first is None:
@@ -804,8 +878,8 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
             sys.exit(-1)  # exit on error; recovery not possible
     
         # log.debug('Finished Tournament method')
-    
-        return copy.deepcopy(p.candidateHypotheses[firstIndex]), copy.deepcopy(p.candidateHypotheses[secondIndex])
+
+        return p.candidateHypotheses[firstIndex], p.candidateHypotheses[secondIndex]
         # ************ End of Tournament Selection ************* #
 
     def mutate() -> Hypothesis:
@@ -819,14 +893,11 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
         # ******************* Fetch Values Needed ******************* #
         parent: Hypothesis = __tournament(population)                # get copy of a parent Hypothesis using tournament
         randClass: int = random.choice(CLASS_IDS)                    # get a random class
-        indexOptions = range(len(parent.features[randClass]))
-        randIndex: int = random.choice(indexOptions)                 # get a random index
+        randIndex: int = random.randint(0, M-1)                      # get a random index that's valid in cfList
         randCF: ConstructedFeature = parent.cfList[randIndex]        # get a random Constructed Feature
         terminals = randCF.relevantFeatures                          # save the indexes of the relevant features
         tree: Tree = randCF.tree                                     # get the tree from the CF
-        # tree.checkTree()     # ! For Testing purposes only !!
-        # tree.sendToStdOut()  # ! For Testing purposes only !!
-        nodeID: str = randCF.tree.getRandomNode()                     # get a random node from the CF's tree
+        nodeID: str = randCF.tree.getRandomNode()                    # get a random node from the CF's tree
         node: Node = tree.getNode(nodeID)
         # *********************************************************** #
         
@@ -835,7 +906,7 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
         # *********************************************************** #
     
         # ************************* Mutate ************************* #
-        if random.choice(['OPS', 'TERM']) == 'TERM' or tree.getDepth2(nodeID) == MAX_DEPTH:
+        if random.choice(['OPS', 'TERM']) == 'TERM' or tree.getDepth(nodeID) == MAX_DEPTH:
             node.data = random.choice(terminals)  # if we are at max depth or choose TERM,
     
         else:  # if we choose to add an OP
@@ -880,58 +951,66 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
         # TODO fix the error being thrown here
         # *************** Find the Two Sub-Trees **************** #
         # Pick Two Random Nodes, one from CF1 & one from CF2
-        nodeF1: Node = tree1.getNode(tree1.getRandomNode())  # get a random node
-        nodeF2: Node = tree2.getNode(tree2.getRandomNode())       # get a random node
 
         branch1: str
         p1: str
         treeFromFeature1: Tree
         # Get the Branch & Parent of the Subtree from CF1. This will tell use where to add it in CF 2
         # Get the Subtree from CF1. This will be move to CF2 (nodeF1 will be root)
-        treeFromFeature1, p1, branch1 = tree1.removeSubtree(nodeF1.ID)
+        treeFromFeature1, p1, branch1 = tree1.removeSubtree(tree1.getRandomNode())
+        # tree1.checkForDuplicateKeys(treeFromFeature1)  # ! debugging
         
         branch2: str
         p2: str
         treeFromFeature2: Tree
         # Get the Branch & Parent of the Subtree from CF1. This will tell use where to add it in CF 2
         # Get the Subtree from CF2. This will be move to CF1 (nodeF2 will be root)
-        treeFromFeature2, p2, branch2 = tree2.removeSubtree(nodeF2.ID)
+        treeFromFeature2, p2, branch2 = tree2.removeSubtree(tree2.getRandomNode())
+        # tree2.checkForDuplicateKeys(treeFromFeature2)  # ! debugging
         # ******************************************************* #
     
         # ************************** swap the two subtrees ************************** #
-        # BUG: for some reason addSubTree fails because of a duplicate node error
         # Add the Subtree from CF2 to the tree in CF1 (in the same location that the subtree1 was cut out)
-        feature1.tree.addSubtree(subtree=treeFromFeature2, newParent=p1, orphanBranch=branch1)
+        tree1.addSubtree(subtree=treeFromFeature2, newParent=p1, orphanBranch=branch1)
         # Add the Subtree from CF1 to the tree in CF2 (in the same location that the subtree2 was cut out)
-        feature2.tree.addSubtree(subtree=treeFromFeature1, newParent=p2, orphanBranch=branch2)
+        tree2.addSubtree(subtree=treeFromFeature1, newParent=p2, orphanBranch=branch2)
         # **************************************************************************** #
 
         # ************** Create Two New Constructed Features ************** #
-        cf1: ConstructedFeature = ConstructedFeature(classID, feature1.tree)
-        cf2: ConstructedFeature = ConstructedFeature(classID, feature2.tree)
+        cf1: ConstructedFeature = ConstructedFeature(classID, tree1)
+        cf2: ConstructedFeature = ConstructedFeature(classID, tree2)
         # ***************************************************************** #
 
-        # !!!!!!!!!!!!!! For Testing Only !!!!!!!!!!!!!! #
-        # Print the trees to see if crossover broke them/performed correctly
-        # print('Crossover Finished')
-        # print('Parent Tree 1:')
-        # print('1st Swapped Tree:')
-        # tree1.sendToStdOut()
-        # tree1.checkTree()
-        # print('Parent Tree 2:')
-        # print('2nd Swapped Tree:')
-        # tree2.sendToStdOut()
-        # tree2.checkTree()
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
+        # ******************* Create Two New Hypotheses ******************* #
+        # BUG the cf lists here create Hypoths with only 1 class
         
-        # ********* Update Parent1 & Parent2 with the New CFs ********* #
-        parent1.features[classID][randIndex] = cf1
-        parent2.features[classID][randIndex] = cf2
-        parent1.updateFitness()  # force an update of the fitness score
-        parent2.updateFitness()  # force an update of the fitness score
-        # ************************************************************* #
+        # Get all the CFs of the old parent
+        allCFs: dict[int, list[ConstructedFeature]] = parent1.features
+        # replace the one that changed
+        allCFs[classID][randIndex] = cf1  # override the previous entry
+        h1: Hypothesis = Hypothesis(size=0, fDict=allCFs)
 
-        return parent1, parent2
+        # Get all the CFs of the old parent
+        allCFs: dict[int, list[ConstructedFeature]] = parent2.features
+        # replace the one that changed
+        allCFs[classID][randIndex] = cf2  # override the previous entry
+        h2: Hypothesis = Hypothesis(size=0, fDict=allCFs)
+        
+
+        # !!! debugging !!! #
+        # global GLOBAL_COUNTER
+        # GLOBAL_COUNTER = 0     # (reset counter to find if problem is in the 1st fit call after crossover)
+        # print('H1')
+        # print(h1)
+        # print('H2')
+        # print(h2)
+        # !!! debugging !!! #
+        
+        h1.updateFitness()  # force an update of the fitness score
+        h2.updateFitness()  # force an update of the fitness score
+        # ***************************************************************** #
+
+        return h1, h2
 
     # ******************* Evolution ******************* #
     # create a new population with no hypotheses (made here crossover & mutate can access it)
@@ -980,16 +1059,11 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> typ.Tuple[Po
             
             if betterH.fitness > elite.fitness:           # if one of the new hypotheses has a
                 elite = betterH                           # better fitness, then update elite
-                
-                # ! this is being hit meaning crossover is giving references to old CFs
-                # print('Elitism Updated')  # ! debugging only
-                # if betterH is elite:  # ! debugging only
-                #     raise AssertionError  # ! debugging only
             # ************** End of Elitism *************** #
             
         # ************* End of Crossover ************* #
-
-    return newPopulation, elite
+    newPopulation.elite = elite
+    return newPopulation
 
 
 def cdfc(dataIn, distanceFunction) -> Hypothesis:
@@ -1056,14 +1130,14 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
     with alive_bar(GENERATIONS, title="Generations") as bar:  # declare your expected total
 
         for gen in range(GENERATIONS):  # iterate as usual
-            
-            newPopulation, newElite = evolve(currentPopulation, oldElite, bar)  # generate a new population by evolving the old one
+            newPopulation: Population
+            newElite: Hypothesis
+            newPopulation = evolve(currentPopulation, oldElite, bar)  # generate a new population by evolving the old one
             # update currentPopulation to hold the new population
             # this is done in two steps to avoid potential namespace issues
             currentPopulation = newPopulation
-            oldElite = newElite  # update elitism
             
-            elites.append(newElite.fitness)  # ! used in debugging
+            elites.append(newPopulation.elite.fitness)  # ! used in debugging
 
             bar()  # update bar now that a generation is finished
 
@@ -1075,5 +1149,6 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
     # ****************** Return the Best Hypothesis ******************* #
 
     bestHypothesis: Hypothesis = max(currentPopulation.candidateHypotheses, key=lambda x: x.fitness)
+    bestHypothesis = max([bestHypothesis, currentPopulation.elite.fitness],  key=lambda x: x.fitness)
 
     return bestHypothesis  # return the best hypothesis generated

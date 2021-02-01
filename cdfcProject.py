@@ -92,7 +92,7 @@ def parseFile(train: np.ndarray) -> typ.Dict[any, any]:
     classes = []  # this will hold classIds and how often they occur
     classSet = set()  # this will hold how many classes there are
     classToOccur = {}  # maps a classId to the number of times it occurs
-    ids = []  # this will be a list of all labels/ids with no repeats
+    ids: typ.List[int] = []  # this will be a list of all labels/ids with no repeats
     
     # set global variables using the now transformed data
     # each line in train will be an instances
@@ -194,6 +194,7 @@ def parseFile(train: np.ndarray) -> typ.Dict[any, any]:
         ENTROPY_OF_S -= pi * math.log(pi, 2)     # calculation entropy summation
     # ***************************************************************** #
 
+    # print(ids)  # ! debugging only !
     # this dictionary will hold the parsed constants that will be sent to cdfc
     constants = {
         'FEATURE_NUMBER': FEATURE_NUMBER,

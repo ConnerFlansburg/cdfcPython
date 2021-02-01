@@ -52,10 +52,6 @@ class Tree:
     @root.setter
     def root(self, newRoot):
         self._root = newRoot
-
-    @root.deleter
-    def root(self):
-        del self._root
     
     def __addRoot(self) -> str:
         """Adds a root node to the tree"""
@@ -167,7 +163,7 @@ class Tree:
             return None
 
     # *** Values *** #
-    def getDepth2(self, ID: str) -> int:
+    def getDepth(self, ID: str) -> int:
         
         try:
             # if the node isn't in the tree at all
@@ -231,49 +227,25 @@ class Tree:
                 return
         # if the key is invalid
         else:
-            print(f'Node key:{currentID}, Node:{self._nodes.get(currentID)}')
-            raise NotInTreeError(currentID)  # ! for some reason this is getting a node
-        
-    def getDepth(self, ident: str) -> int:
-        
-        # if the root has not been set first
-        if self._root is None:
-            print('Root was not set before calling getDepth')
-            raise Exception
-        # if the id is valid
-        elif self._nodes.get(ident):
-            
-            depth: int = 0  # start depth off at zero
-            nKey: str = ident  # stores node id key in a variable
-            
-            while True:
-            
-                # if this is the root, break
-                if 'root' in self._nodes[nKey].tag:
-                    break
-                if nKey == self._root.ID:
-                    break
-                # increment the depth since we aren't at the root yet
-                depth += 1
-                
-                # grab the target node
-                current: Node = self._nodes[nKey]
-                # update node id key to hold parent's id
-                nKey = self._nodes[current.parent].ID
-            
-            print('getDepth returned (while)')  # ! debugging
-            return depth
-        
-        else:  # if the key is bad, raise an error
-            raise NotInTreeError(ident)
+            try:
+                raise NotInTreeError(currentID)
+            except NotInTreeError as err:
+                traceback.print_stack()                     # print stack trace
+                lineNm = sys.exc_info()[-1].tb_lineno       # get the line number of error
+                log.error(f'line = {lineNm}, {str(err)}')   # log the error
+                printError(f'line = {lineNm}, {str(err)}')  # print message
+                sys.exit(-1)  # exit on error; recovery not possible
     
     def getBranch(self, childID: str) -> str:
         return self._nodes[childID].branch
     
     # *** Operations *** #
     def getRandomNode(self) -> str:
-        """ Get a random node from the tree (root and leaves are allowed)"""
-        return random.choice(list(self._nodes.keys()))
+        """ Get a random node from the tree (leaves are allowed)"""
+        options: list[str] = list(self._nodes.keys())
+        options.remove(self._root.ID)
+        
+        return random.choice(options)
     
     def removeChildren(self, nodeID: str):
         """
@@ -342,7 +314,6 @@ class Tree:
             raise NotInTreeError(cid)
     
     def removeSubtree(self, newRootID: str) -> ("Tree", str, str):
-        # TODO make the parent of newRootId point to Null
         
         # if the node is in the tree
         if self._nodes.get(newRootID):
@@ -367,10 +338,12 @@ class Tree:
             # it's members have been removed from this tree
             
             # so build the new subtree using copyDictionary
-            subtree = Tree(root=rt, nodes=self._copyDictionary)
+            subtree: Tree = Tree(root=rt, nodes=self._copyDictionary)
             
-            # reset the value of copDictionary
+            # reset the value of copyDictionary
             self._copyDictionary = {}
+            
+            # self.checkForDuplicateKeys(subtree)  # ! debugging
             
             return subtree, parentOfSubtreeID, orphanBranch
     
@@ -396,17 +369,28 @@ class Tree:
             log.error(f'line = {lineNm}, {str(err)}')  # log the error
             traceback.print_stack()  # print stack trace
             printError(f'On line {lineNm} DuplicateNodeError encountered')  # print message
+            
             print('Duplicate(s):')
             pprint.pprint(duplicates)  # print the list of duplicate nodes
             print('Subtree:')
             pprint.pprint(list(otherTree._nodes.keys()))
-    
+            
+            for k in duplicates:  # loop over the duplicates
+                # print the data
+                same = self._nodes.get(k) is otherTree._nodes.get(k)
+                print(f'For Key: {k}')
+                print(f'Do they share a memory address? {same}')
+                print(f'Data in Original Node: {self._nodes.get(k).data}')
+                print(f'Data in Subtree Node: {otherTree._nodes.get(k).data}')
+                print(f'Children of Original Node: {self._nodes.get(k).children}')
+                print(f'Children of Subtree Node: {otherTree._nodes.get(k).children}\n')
+                
             sys.exit(-1)  # exit on error; recovery not possible
 
     def addSubtree(self, subtree: "Tree", newParent: str, orphanBranch: str):
         # check that parent id is valid
         if not (self._nodes.get(newParent)):
-            raise NotInTreeError(newParent)
+            raise NotInTreeError(newParent)  # ! this is being raised because the nodeID is None
         
         # set the adopted parents to point to the subtree
         if orphanBranch == 'left':
@@ -570,7 +554,7 @@ class Tree:
         # *************************** A Terminal was Chosen *************************** #
         # NOTE: check depth-1 because we will create children
         # print(f'Grow Node ID: {node.ID}, ID Passed {nodeID}')  # ! debugging
-        if coin == 'TERM' or (self.getDepth2(node.ID) == MAX_DEPTH - 1):  # if we need to add terminals
+        if coin == 'TERM' or (self.getDepth(node.ID) == MAX_DEPTH - 1):  # if we need to add terminals
         
             # pick the needed amount of terminals
             terms: typ.List[int] = random.choices(TERMINALS[classId], k=NUM_TERMINALS[node.data])
@@ -643,7 +627,7 @@ class Tree:
             node: Node = self._nodes[nodeID]
             
             # *************************** Max Depth Reached *************************** #
-            if self.getDepth2(node.ID) == (MAX_DEPTH - 1):
+            if self.getDepth(node.ID) == (MAX_DEPTH - 1):
 
                 # pick the needed amount of terminals
                 terms: typ.List[int] = random.choices(TERMINALS[classId], k=NUM_TERMINALS[node.data])
@@ -692,7 +676,7 @@ class Tree:
         except RecursionError as err:
             lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
             print(f'{str(err)}, line = {lineNm}')
-            print(f'Node ID: {nodeID},\nDepth: {self.getDepth2(nodeID)}')
+            print(f'Node ID: {nodeID},\nDepth: {self.getDepth(nodeID)}')
             sys.exit(-1)  # exit on error; recovery not possible
 
 
