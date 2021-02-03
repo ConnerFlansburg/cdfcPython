@@ -3,6 +3,7 @@ import typing as typ
 from Node import Node
 import random
 import sys
+import uuid
 import logging as log
 import traceback
 from formatting import printError
@@ -20,7 +21,7 @@ sys.setrecursionlimit(10000)                                # set the recursion 
 
 class Tree:
     
-    def __init__(self, root: typ.Optional[Node] = None, nodes: typ.Optional[typ.Dict[str, Node]] = None):
+    def __init__(self, root: typ.Optional[Node] = None, nodes: typ.Optional[typ.Dict[str, Node]] = None, ID: str = None):
         """ Trees are almost always made empty & then built by adding to them."""
         if nodes is None:
             nodes = {}
@@ -29,7 +30,12 @@ class Tree:
             op = random.choice(OPS)
             root: Node = Node(tag=f'root: {op}', data=op)  # create a root node for the tree
             nodes[root.ID] = root  # add to the node dictionary
-            
+        
+        if ID is None:
+            self._ID: str = str(uuid.uuid4())
+        else:
+            self._ID: str = ID
+        
         self._root: Node = root  # set the root as root
 
         # this dictionary will hold the nodes in the tree, keyed by their id value
@@ -40,6 +46,28 @@ class Tree:
         self._copyDictionary: typ.Dict[str, Node] = {}
         
         self._rValue = None  # this will be used by recursive search
+
+    def __eq__(self, tree2: "Tree"):
+        """
+        Allows two trees to be compared using ==. This is done
+        by comparing the ID values of each tree.
+        """
+        
+        if self._ID == tree2.ID:
+            return True
+        else:
+            return False
+
+    def __neq__(self, tree2: "Tree"):
+        """
+        Allows two trees to be compared using !=. This is done
+        by comparing the ID values of each tree.
+        """
+    
+        if self._ID != tree2.ID:
+            return True
+        else:
+            return False
 
     def __str__(self):
         # call recursive print starting with root
@@ -72,6 +100,11 @@ class Tree:
             else:
                 out += '\t' * (level + 1) + '\033[91;1m[\u2718 -- Right Child Missing]\033[00m'
         return out
+
+    # *** ID *** #
+    @property
+    def ID(self):
+        return self._ID
 
     # *** Root *** #
     @property
