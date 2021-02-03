@@ -3,15 +3,6 @@ import typing as typ
 import uuid
 
 
-def countNodes() -> typ.Generator:
-    """Used to generate unique node IDs."""
-    
-    num = 0
-    while True:
-        yield num
-        num += 1
-
-
 class Node:
     
     def __init__(self, data, tag, parent: typ.Optional[str] = None, branch: typ.Optional[str] = None,
