@@ -31,8 +31,23 @@ class Node:
         return
     
     def __str__(self):
-        return f'[{self.data}, ID: {self._ID} | L:{self._left}, R:{self.right}, M:{self.middle}]'
-
+        # + verbose v2
+        # out: str = f'[{self.data}, ID: {self._ID} | L:{self._left}, R:{self.right}, M:{self.middle}]'
+        # + verbose v1
+        # out: str = f'[ID: {self._ID} | Data: {self.data}]'
+        # + condensed
+        out: str = f'[{self.data}]'
+        return out
+    
+    def __repr__(self):
+        return self.__str__()
+    
+    def __copy__(self) -> "Node":
+        """ This tells copy.copy() how a node should be copied """
+        new: Node = Node(self._data, self._tag, self._parent, self._branch,
+                         self._left, self._right, self._middle)
+        return new
+        
     # *** ID *** #
     @property
     def ID(self):
@@ -73,10 +88,6 @@ class Node:
     @branch.setter
     def branch(self, newBranch):
         self._branch = newBranch
-
-    @property
-    def ID(self):
-        return self._ID
 
     # *** Left *** #
     @property

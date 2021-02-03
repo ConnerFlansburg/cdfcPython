@@ -7,15 +7,15 @@ import logging as log
 import traceback
 from formatting import printError
 import pprint
+from copy import deepcopy
+# from copy import copy as cpy
 
-# typing alias for tree nodes. They will either have a terminal index (int) or an OP (str)
-TREE_DATA = typ.Union[int, str]
-# OPS is the list of valid operations on the tree
-OPS: typ.Final = ['add', 'subtract', 'times', 'max', 'if']
+TREE_DATA = typ.Union[int, str]  # typing alias for tree nodes. They will either have a terminal index (int) or an OP (str)
 
-NUM_TERMINALS = {'add': 2, 'subtract': 2,     # NUM_TERMINALS is a dict that, when given an OP as a key, give the number of terminals it needs
+OPS: typ.Final = ['add', 'subtract', 'times', 'max', 'if']  # OPS is the list of valid operations on the tree
+NUM_TERMINALS = {'add': 2, 'subtract': 2,                   # NUM_TERMINALS is a dict that, when given an OP as a key, give the number of terminals it needs
                  'times': 2, 'max': 2, 'if': 3}
-sys.setrecursionlimit(10000)                                  # set the recursion limit for the program
+sys.setrecursionlimit(10000)                                # set the recursion limit for the program
 
 
 class Tree:
@@ -37,9 +37,41 @@ class Tree:
         
         # the values below are used by methods & should not be set
         # this dictionary is used when copying a subtree 8 should never be used elsewhere
-        self._copyDictionary = {}
+        self._copyDictionary: typ.Dict[str, Node] = {}
         
         self._rValue = None  # this will be used by recursive search
+
+    def __str__(self):
+        # call recursive print starting with root
+        return self.__print_tree(self._root.ID, 0)
+    
+    def __repr__(self):
+        return self.__str__()
+        
+    def __print_tree(self, currentID: str, level: int) -> str:
+    
+        # add the current node using the Node str() method
+        out: str = "\t"*level + str(self._nodes[currentID])+'\n'
+        
+        # if there are children, print them
+        if self._nodes[currentID].hasChildren:
+            
+            # print the left child
+            if self._nodes.get(currentID).left:
+                out += self.__print_tree(self._nodes.get(currentID).left, level+1)
+            else:
+                out += '\t'*(level+1)+'\033[91;1m[\u2718 -- Left Child Missing]\033[00m'
+            
+            # print the middle child (if one exists)
+            if self._nodes.get(currentID).hasMiddle:
+                out += self.__print_tree(self._nodes[currentID].middle, level+1)
+            
+            # print the right child
+            if self._nodes.get(currentID).right:
+                out += self.__print_tree(self._nodes.get(currentID).right, level+1)
+            else:
+                out += '\t' * (level + 1) + '\033[91;1m[\u2718 -- Right Child Missing]\033[00m'
+        return out
 
     # *** Root *** #
     @property
@@ -179,7 +211,7 @@ class Tree:
             elif self._nodes.get(ID):
             
                 # run rSearch
-                self._rSearch(ID, self._root.ID, 0)  # ! There's a bug thrown here
+                self.__search(ID, self._root.ID, 0)  # ! There's a bug thrown here
                 
                 # if rValue is none, then the node could not be found
                 if self._rValue is None:
@@ -195,47 +227,96 @@ class Tree:
             log.error(f'line = {lineNm}, {str(err)}')   # log the error
             printError(f'line = {lineNm}, {str(err)}')  # print message
             print(f'Root: {self._root},')
-            pprint.pprint(self._nodes)
-            traceback.print_stack()  # print stack trace
+            pprint.pprint(self)
+            printError(''.join(traceback.format_stack()))  # print stack trace
             sys.exit(-1)  # exit on error; recovery not possible
+
+    # BUG: this throws a NodeNotInTree error we getting depth
+    def __search(self, targetID: str, currentID: str, depth: int):
+        
+        # *** check for a bad ID *** #
+        try:
             
-    def _rSearch(self, targetID: str, currentID: str, depth: int):
-        
-        # if the key is valid
-        if self._nodes.get(currentID):
-        
-            if currentID != targetID:
-        
-                depth += 1  # increment depth
-        
-                # if the current node has children run recursive search
-                if self._nodes[currentID].hasChildren:
-                    
-                    if self._nodes[currentID].left:  # if there is a left child
-                        self._rSearch(targetID, self._nodes[currentID].left, depth)
-                    if self._nodes[currentID].right:  # if there is a right child
-                        self._rSearch(targetID, self._nodes[currentID].right, depth)
-                    if self._nodes[currentID].hasMiddle:
-                        self._rSearch(targetID, self._nodes[currentID].middle, depth)
-        
-                # if this is not the node, and it doesn't have children, return up stack
-                else:
-                    return
+            if targetID is None:
+                printError('search target was None')
+                sys.exit(-1)
             
-            else:  # if we have found the node, set rValue
-                self._rValue = depth
-                return
-        # if the key is invalid
-        else:
-            try:
+            if currentID is None:
+                printError('search was passed a None ID')
+                sys.exit(-1)
+            
+            # is the target ID in the tree?
+            if targetID not in list(self._nodes.keys()):
+                printError('target ID of search was not in the tree')
+                raise NotInTreeError(targetID)
+            
+            # is the node ID in the list of valid keys for the tree?
+            if currentID not in list(self._nodes.keys()):
                 raise NotInTreeError(currentID)
-            except NotInTreeError as err:
-                traceback.print_stack()                     # print stack trace
-                lineNm = sys.exc_info()[-1].tb_lineno       # get the line number of error
-                log.error(f'line = {lineNm}, {str(err)}')   # log the error
-                printError(f'line = {lineNm}, {str(err)}')  # print message
-                sys.exit(-1)  # exit on error; recovery not possible
+        
+            # does get() work on the node ID?
+            if self._nodes.get(currentID) is None:
+                # is it storing a None, or does the key not exist?
+                # if the key does not exist this will raise a key error
+                if self._nodes[currentID] is None:
+                    # if the key is valid, then a None is being stored here
+                    raise NullNodeError(currentID)
+        
+        except NotInTreeError as err:  # catch errors that check the key is valid
+            lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+            printError(f'NotInTreeError encountered on line {lineNm}')
+            if err.key == targetID:  # if the target ID threw the error
+                printError(f'The target of search() is not in the tree')
+                printError(f'Invalid ID = {targetID}')
+            else:                    # if the search discovered an invalid ID
+                printError(f'search found an invalid ID while searching for target')
+                printError(f'Invalid ID = {currentID}')
+            printError(''.join(traceback.format_stack()))  # print stack trace
+            sys.exit(-1)  # exit on error; recovery not possible
+        
+        except KeyError:  # catch any error from indexing key
+            lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+            printError(f'KeyError encountered on line {lineNm}')
+            printError(f'get() works for ID {currentID}, but index notation fails')
+            printError(''.join(traceback.format_stack()))  # print stack trace
+            sys.exit(-1)  # exit on error; recovery not possible
     
+        except NullNodeError:  # this will be reached if the tree is storing Nones
+            lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+            printError(f'NullNodeError encountered on line {lineNm}')
+            printError(f'ID {currentID} is a valid key value, but the object it keys to is None')
+            printError(''.join(traceback.format_stack()))  # print stack trace
+            sys.exit(-1)  # exit on error; recovery not possible
+        
+        # *** Do the Search *** #
+        # if we have reached the target node, return depth
+        if currentID == targetID:
+            return depth
+        
+        # if this is not the target depth then call search on the children
+        else:
+            depthLeft: int = 0
+            depthRight: int = 0
+            depthMiddle: int = 0
+            
+            # if this node is not an operation, but a terminal
+            if not (self._nodes[currentID].data in OPS):
+                #  we have reached a leaf node, so return
+                return 0
+            
+            # if this node is an operation, it will have children; search them
+            else:
+                if self._nodes[currentID].left:  # if there is a left, search it
+                    depthLeft: int = self.__search(targetID, self._nodes[currentID].left, depth+1)
+                    
+                if self._nodes[currentID].right:  # if there is a right, search it
+                    depthRight: int = self.__search(targetID, self._nodes[currentID].right, depth+1)
+                    
+                if self._nodes[currentID].middle:  # if there is a middle, search it
+                    depthMiddle: int = self.__search(targetID, self._nodes[currentID].middle, depth+1)
+        # everything but the actual depth should return 0, so add them together
+        return depthLeft + depthRight + depthMiddle
+
     def getBranch(self, childID: str) -> str:
         return self._nodes[childID].branch
     
@@ -259,98 +340,183 @@ class Tree:
         
         if nodeID is None:
             print('removeChildren was passed a node ID of None ')
-            raise Exception
+            raise NotInTreeError(nodeID)
         
         # delete the children & any of their children
         for child in self._nodes[nodeID].children:
-            self.__delete(child)
+            self.__rDelete(child)
+
+        # !!! debugging only !!! #
+        # self.checkForDuplicateKeys(subtree)  # ! debugging
+        # print('removeChildren is checking for missing IDs...')
+        # self.checkForMissingKeys()
+        # print('No missing keys detected\n')
+        # !!! debugging only !!! #
+        
         return
     
-    def __delete(self, ID):
+    def __rDelete(self, currentID: str, copy: bool = False):
+        """ This can be used to delete a subtree or copy it  """
         
-        # if the id is valid
-        if self._nodes.get(ID):
-            node: Node = self._nodes[ID]
-            # if there's a left child
-            if node.left:
-                self.__delete(node.left)
-            # if there's a right child
-            if node.right:
-                self.__delete(node.right)
-            # if there's a middle child
-            if node.middle:
-                self.__delete(node.middle)
-            # after the children have been deleted,
-            # delete this node from the dictionary
-            del self._nodes[ID]
-        
-        # if we've hit the bottom of the tree
-        elif ID is None:
-            return
+        if self._nodes.get(currentID):  # if the current node is in the tree
+    
+            # *** Recursion *** #
+            # delete the left node
+            self.__rDelete(self._nodes[currentID].left)
+            # delete the right node
+            self.__rDelete(self._nodes[currentID].right)
+            # delete the middle node
+            self.__rDelete(self._nodes[currentID].middle)
+            # *** End of Recursion *** #
+    
+            # after we have reached the leaves of the tree, return up
+            # the stack, deleting/copying as we go
+    
+            # *** Copy *** #
+            if copy:  # if we are creating a subtree
+                # this should not raise a key error because of the earlier IF statement
+                # TODO: experiment with these 3 options & decide on one
+                # + So dictionaries copying a dictionary would require using copy, but we
+                # +     aren't copying a dictionary, but a Node. Does a Node need a copy call?
+                # +     Custom objects typically need copy calls. Deepcopy is needed for nest objects,
+                # +     so a tree would require deepcopy, but a node just needs copy?
+                # self._copyDictionary[currentID] = self._nodes[currentID]
+                self._copyDictionary[currentID] = deepcopy(self._nodes[currentID])
+                # self._copyDictionary[currentID] = cpy(self._nodes[currentID])
+            # *** End of Copy *** #
+    
+            # *** Delete *** #
+            # NOTE: we don't want to set the parent to point to None.
+            # This is because we want to copy their structure into subtree
+            
+            # check that children have been deleted, if not raise error
+            # if self._nodes[currentID].hasChildren:
+            #     printError('Recursive delete attempt to delete a parent who\'s children were not None')
+            #     raise Exception
+            
+            del self._nodes[currentID]  # delete the current node from the original tree
+            # *** End of Delete *** #
 
-        else:
-            raise NotInTreeError(ID)
-    
-    def _copy(self, cid: str):
-        
-        # check the the node is in the tree
-        if self._nodes.get(cid):
-            
-            current: Node = self._nodes[cid]
-            # call copy on each of the children (if any)
-            if current.left is not None:
-                self._copy(current.left)
-            if current.right is not None:
-                self._copy(current.right)
-            if current.middle is not None:
-                self._copy(current.middle)
-            
-            # after we have reached the leaves of the subtree,
-            # return back up the stack, copying as we go
-            self._copyDictionary[cid] = self._nodes.pop(cid)
+        # if we have hit the bottom of the tree, or node didn't have child
+        elif currentID is None:
             return
-        
-        else:  # if the key is bad, raise an error
-            raise NotInTreeError(cid)
+        else:  # if the node is not in the tree, raise an error
+            raise NotInTreeError(currentID)
     
+    # BUG: currently this is returning a parentID of none.
     def removeSubtree(self, newRootID: str) -> ("Tree", str, str):
         
         # if the node is in the tree
         if self._nodes.get(newRootID):
     
-            # get the parents id
-            parentOfSubtreeID = self._nodes[newRootID].parent
-            orphanBranch = self._nodes[newRootID].branch
+            # get the parents id & branch
+            parentOfSubtreeID: str = self._nodes[newRootID].parent
+            orphanBranch: str = self._nodes[newRootID].branch
+            
+            if parentOfSubtreeID is None:  # see if the parent is None
+                printError('Parent Stored in Node was stored as None')
+                raise MissingNodeError(role='Parent', ID=newRootID)
             
             # set the new root to be a root
             self._nodes[newRootID].parent = None
             self._nodes[newRootID].branch = None
             
-            # make sure the copy dictionary is empty
-            self._copyDictionary = {}
-
-            # get the root of the subtree
-            rt = self._nodes[newRootID]
+            # we don't need to set the parents to none as adding the next
+            # subtree will do this for us. This is done for debugging
+            # if orphanBranch == 'left':
+            #     self._nodes[parentOfSubtreeID].left = None
+            # elif orphanBranch == 'right':
+            #     self._nodes[parentOfSubtreeID].right = None
+            # elif orphanBranch == 'middle':
+            #     self._nodes[parentOfSubtreeID].middle = None
+            # else:
+            #     raise InvalidBranchError(f'removeSubtree found an invalid branch: {orphanBranch}')
             
-            self._copy(newRootID)  # call copy (recursive)
+            self._copyDictionary = {}             # make sure the copy dictionary is empty
+            rt = self._nodes[newRootID]           # get the root of the subtree
+            self.__rDelete(newRootID, copy=True)  # copy the subtree & delete it from original
+            # copyDictionary now contains the subtree, so build
+            # the new subtree using a copy of copyDictionary
+            subtree: Tree = Tree(root=rt, nodes=deepcopy(self._copyDictionary))
+            self._copyDictionary = {}             # reset the value of copyDictionary
             
-            # copyDictionary now contains the subtree, and
-            # it's members have been removed from this tree
-            
-            # so build the new subtree using copyDictionary
-            subtree: Tree = Tree(root=rt, nodes=self._copyDictionary)
-            
-            # reset the value of copyDictionary
-            self._copyDictionary = {}
-            
+            # !!! debugging only !!! #
             # self.checkForDuplicateKeys(subtree)  # ! debugging
+            # print('removeSubtree is checking for missing IDs...')  # !!!!! THIS IS GETTING RAISED !!!!! #
+            # self.checkForMissingKeys(originalDict=self._nodes, subtreeDict=subtree._nodes)
+            # print('No missing keys detected\n')
+            # if parentOfSubtreeID is None:  # see if the parent is None before returning it
+            #     printError('Parent ID was invalidate by removeSubtree')
+            #     raise MissingNodeError(role='Parent', ID=newRootID)
+            # !!! debugging only !!! #
             
+            # BUG: parentOfSubtreeID is None
             return subtree, parentOfSubtreeID, orphanBranch
     
         else:  # if the key is bad, raise an error
             raise NotInTreeError(newRootID)
+    
+    # ! this should be used in debugging only !
+    # ? is there a way to if the subtree is getting extra IDs from the original that it doesn't need?
+    def checkForMissingKeys(self, originalDict=None, subtreeDict=None):
+        keys = list(self._nodes.keys())
+        childIDs = []
+        nodeID: typ.Optional[str] = None
+        try:
+            # + if the error is thrown here than tree not every ID is a key (the nodes exist, they just can't be found)
+            for nodeID in keys:  # loop over every node id in the tree
+                # try to find every node in the tree
+                self.__search(targetID=nodeID, currentID=self.root.ID, depth=0)
+                # get the ids of all the children
+                childIDs += self._nodes[nodeID].children
+        
+        except KeyError:
+            lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+            if nodeID:  # if for some reason we can't add to childIDs
+                printError(f'KeyError encountered line {lineNm}')
+                printError(f'Node ID {nodeID} could not be accessed while fetching children')
+            else:  # some unexpected KeyError
+                printError(f'Unpredicted KeyError thrown on line {lineNm}')
+        
+        except NotInTreeError as err:
+            lineNm = sys.exc_info()[-1].tb_lineno       # get the line number of error
+            printError(''.join(traceback.format_stack()))  # print stack trace
+            log.error(f'line = {lineNm}, {str(err)}')   # log the error
+            
+            printError(f'NotInTree error encountered on line {lineNm}, for ID {err.key}')
+            printError(f'Not every valid key is in the tree')
+            
+            # print the two dictionaries
+            if originalDict and subtreeDict:
+                print('Original Tree:')
+                pprint.pprint(list(originalDict.keys()))
+                print('Generated Subtree:')
+                pprint.pprint(list(subtreeDict.keys()))
+            
+            sys.exit(-1)  # exit on error; recovery not possible
+        
+        try:
+            # + if the error is triggered here that nodes have children that are not in the tree
+            for nodeID in childIDs:  # now loop over the collected child ids
+                self.__search(nodeID, self.root.ID, 0)  # try to find every child
+        except NotInTreeError as err:
+            lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+            printError(''.join(traceback.format_stack()))  # print stack trace
+            log.error(f'line = {lineNm}, {str(err)}')  # log the error
+    
+            printError(f'NotInTree error encountered on line {lineNm}, for ID {err.key}')
+            printError(f'Nodes have children that are not in the tree')
 
-    # ! call this after crossover & use it to hut down what's causing the duplicates
+            # print the two dictionaries
+            if originalDict and subtreeDict:
+                print('Original Tree:')
+                pprint.pprint(list(originalDict.keys()))
+                print('Generated Subtree:')
+                pprint.pprint(list(subtreeDict.keys()))
+    
+            sys.exit(-1)  # exit on error; recovery not possible
+
+    # ! call this after crossover `& use it to hut down what's causing the duplicates
     def checkForDuplicateKeys(self, otherTree: "Tree"):
         """ Given two trees, check them for duplicate keys """
 
@@ -367,7 +533,7 @@ class Tree:
         except DuplicateNodeError as err:
             lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
             log.error(f'line = {lineNm}, {str(err)}')  # log the error
-            traceback.print_stack()  # print stack trace
+            printError(''.join(traceback.format_stack()))  # print stack trace
             printError(f'On line {lineNm} DuplicateNodeError encountered')  # print message
             
             print('Duplicate(s):')
@@ -389,8 +555,10 @@ class Tree:
 
     def addSubtree(self, subtree: "Tree", newParent: str, orphanBranch: str):
         # check that parent id is valid
-        if not (self._nodes.get(newParent)):
-            raise NotInTreeError(newParent)  # ! this is being raised because the nodeID is None
+        if newParent is None:
+            print('addSubtree was given a None (root?) newParent')
+        if not (self._nodes.get(newParent)):  # ! this is being raised because the nodeID is None
+            raise MissingNodeError(msg=f'addSubtree could not find it\'s new parent')
         
         # set the adopted parents to point to the subtree
         if orphanBranch == 'left':
@@ -399,6 +567,8 @@ class Tree:
             self._nodes[newParent].right = subtree._root.ID
         elif orphanBranch == 'middle':
             self._nodes[newParent].middle = subtree._root.ID
+        else:
+            raise InvalidBranchError(f'addSubtree encountered an invalid branch: {orphanBranch}')
     
         # set the subtree root to point to adopted parents
         subtree._root.parent = newParent
@@ -406,7 +576,7 @@ class Tree:
         subtree.branch = orphanBranch
         
         # check for duplicate nodes
-        self.checkForDuplicateKeys(subtree)
+        # self.checkForDuplicateKeys(subtree)
         
         # it is now safe to add subtree to dictionary of nodes
         self._nodes.update(subtree._nodes)
@@ -523,7 +693,7 @@ class Tree:
             lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
             log.error(f'line = {lineNm}, {str(err)}')  # log the error
             printError(f'line = {lineNm}, {str(err)}')  # print message
-            traceback.print_stack()  # print stack trace
+            printError(''.join(traceback.format_stack()))  # print stack trace
             sys.exit(-1)  # exit on error; recovery not possible
 
     # ******************* Growing the Tree ******************* #
@@ -699,11 +869,62 @@ class DuplicateNodeError(Exception):
         return self.message
 
 
-class NotInTreeError(Exception):
-    """ Thrown if a node id is not in the tree """
+class MissingNodeError(Exception):
+    """
+    Thrown if a node ID should exist (like a leaf's parent), but is not in the tree.
+    This often means that the tree has been corrupted in some way.
+    """
     
-    def __init__(self, key: str):
-        self.key: str = key
+    def __init__(self, role=None, ID=None, msg=None):
+        self.role = role
+        self.ID = ID
+        if role and ID:
+            self.message = f'{role} Node for Node ID {ID} is missing from the tree'
+        elif role:
+            self.message = f'{role} Node is missing from the tree'
+        elif ID:
+            self.message = f'Node ID {ID} is missing necessary values'
+        elif msg:
+            self.message = msg
+        else:
+            self.message = f'Node is missing necessary values'
+        
+        super().__init__(self.message)
+    
+    def __str__(self):
+        return self.message
+
+
+class InvalidBranchError(Exception):
+    
+    def __init__(self, msg: str):
+        self.message: str = msg
+        super().__init__(self.message)
+    
+    def __str__(self):
+        return self.message
+
+
+class NullNodeError(Exception):
+    """ Thrown if a node id is in the tree, but that node is None """
+
+    def __init__(self, key: typ.Optional[str]):
+        self.key: typ.Optional[str] = key
+        self.message: str = f'NullNodeError: ID {key} valid, but stores a None instead of a Node'
+        super().__init__(self.message)
+    
+    def __str__(self):
+        return self.message
+
+
+class NotInTreeError(Exception):
+    """
+    Thrown if a node id is simply not in the tree.
+    This often means that the node passed was incorrect
+    """
+    
+    def __init__(self, key: typ.Optional[str]):
+        self.key: typ.Optional[str] = key
         self.message: str = f'Node with ID {key} is not in the tree'
         super().__init__(self.message)
     

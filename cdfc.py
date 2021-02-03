@@ -25,8 +25,9 @@ from formatting import printError
 from _collections import defaultdict
 from Tree import Tree
 from Node import Node
-# from objects import Tree
 from objects import cdfcInstance as Instance
+from copy import deepcopy
+# from copy import copy as cpy
 
 # ! Next Steps
 # TODO fix accuracy issue
@@ -66,7 +67,7 @@ CL_DICTION = typ.Dict[int, typ.Dict[int, typ.List[float]]]
 CLASS_DICTS: CL_DICTION = {}                  # CLASS_DICTS is a list of dicts (indexed by classId) mapping attribute values to classes
 SEED = 498                                    # SEED the seed used for random values
 # random.seed(SEED)  # WARNING: setting this may cause issues with node ID generation!
-GLOBAL_COUNTER: int = 0                       # GLOBAL_COUNTER is used during debugging to know how often an event happens
+GLOBAL_COUNTER: typ.Dict[str, int] = {}       # GLOBAL_COUNTER is used during debugging to know how often an event happens
 # ++++++++++++++++++++++++ console formatting strings +++++++++++++++++++++++++ #
 HDR = '*' * 6
 SUCCESS = u' \u2713\n'+'\033[0m'     # print the checkmark & reset text color
@@ -124,8 +125,14 @@ class ConstructedFeature:
         # sanityCheckCF(self)  # ! testing purposes only!
 
     def __str__(self):
+        # + simple
         strValue: str = f'||CF for Class {self.className}| Size: {self.size}||'
+        # + verbose
+        # strValue: str = f'CF -- Class:{self.className}\n{str(self.tree)}'
         return strValue
+    
+    def __repr__(self):
+        return self.__str__()
 
     def transform(self, instance: Instance) -> float:
         """
@@ -273,8 +280,14 @@ class Hypothesis:
         :return: Fitness value of a Hypothesis.
         :rtype: float
         """
-        global GLOBAL_COUNTER  # ! debugging
-        GLOBAL_COUNTER += 1    # ! debugging
+        # !!! debugging !!! #
+        # global GLOBAL_COUNTER
+        # # if None set, otherwise increment
+        # if GLOBAL_COUNTER.get('newFitness'):
+        #     GLOBAL_COUNTER['newFitness'] = 1
+        # else:
+        #     GLOBAL_COUNTER['newFitness'] += 1
+        # !!! debugging !!! #
         
         def DbCalculation(S: typ.List[Instance]) -> float:
             """ Used to calculate Db """
@@ -484,10 +497,10 @@ class Hypothesis:
                         self.maxInfoGain = f.infoGain
         except KeyError as err:
             lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-            # traceback.print_stack()
+            # printError(''.join(traceback.format_stack()))  # print stack trace
             
             printError(f'Encountered KeyError: {str(err)}, on line: {lineNm}')  # print the error
-            printError(f'Encountered during fitness calculation number {GLOBAL_COUNTER}')
+            # printError(f"Encountered during fitness calculation number {GLOBAL_COUNTER['newFitness']}")
             printError(f'Class IDs: {CLASS_IDS}')
             printError(f'Class Keys in Hypothesis: {list(self.features.keys())}')
             printError('Features in Hypothesis:')
@@ -521,7 +534,6 @@ class Hypothesis:
         self._fitness = final
         return final
 
-    # TODO check runCDFC & _transform
     def runCDFC(self, data: np.array) -> np.array:
         """
         runCDFC transforms a dataset using the trees in the constructed features, and is use by cdfcProject
@@ -659,24 +671,20 @@ def createInitialPopulation() -> Population:
                 ftrs.append(cf)                          # add the feature to the list of features
                 cfList.append(cf)
 
-                # ! the CF is created correctly
                 # print(f'\t {k} CF is {cf}')  # ! debugging
                 
                 size += cf.size
 
-            # ! CID is iterating correctly, however the dictionary is getting only 1 key
             # add the list of features for class cid to the dictionary, keyed by cid
             cfDictionary[cid] = ftrs
             
         # !!! For debugging only !!!
         # print('Hypothesis Created')
-        # for k in cfDictionary.keys():  # for each key
-        #     print(f'Key {k}:')  # print the key
-        #     for ftr in cfDictionary[k]:  # loop over the feature list
-        #         print(f'\t{ftr}')
-        # print('\n')
+        # for cf in cfList:  # for each cf
+        #     cf.tree.checkForMissingKeys()
+        # # + if we pass this point then the key problem comes from changes made by mutation and crossover
+        # print('\tNo missing keys detected\n')
         # !!! For debugging only !!!
-        
         # create a hypothesis & return it
         return Hypothesis(cfs=cfList, fDict=cfDictionary, size=size)
 
@@ -685,11 +693,9 @@ def createInitialPopulation() -> Population:
     # print(f'Class IDs: {CLASS_IDS}')  # ! debugging
     with alive_bar(POPULATION_SIZE, title="Initial Population") as bar:  # declare your expected total
         # creat a number hypotheses equal to pop size
-        for p in range(POPULATION_SIZE):  # iterate as usual
-            hyp = createHypothesis()       # create a Hypothesis
-            hypothesis.append(hyp)         # add the new hypothesis to the list
-            # print(hyp)  # ! debugging only
-            bar()                          # update progress bar
+        for p in range(POPULATION_SIZE):           # iterate as usual
+            hypothesis.append(createHypothesis())  # create & add the new hypothesis to the list
+            bar()                                  # update progress bar
 
     pop = Population(hypothesis, 0)
     
@@ -988,14 +994,13 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> Population:
         allCFs: dict[int, list[ConstructedFeature]] = parent1.features
         # replace the one that changed
         allCFs[classID][randIndex] = cf1  # override the previous entry
-        h1: Hypothesis = Hypothesis(size=0, fDict=allCFs)
+        h1: Hypothesis = Hypothesis(size=0, fDict=deepcopy(allCFs))
 
         # Get all the CFs of the old parent
         allCFs: dict[int, list[ConstructedFeature]] = parent2.features
         # replace the one that changed
         allCFs[classID][randIndex] = cf2  # override the previous entry
-        h2: Hypothesis = Hypothesis(size=0, fDict=allCFs)
-        
+        h2: Hypothesis = Hypothesis(size=0, fDict=deepcopy(allCFs))
 
         # !!! debugging !!! #
         # global GLOBAL_COUNTER
@@ -1027,13 +1032,19 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> Population:
         # bar()
     
         # ***************** Mutate ***************** #
-        if probability < MUTATION_RATE:            # if probability is less than mutation rate, mutate
-            
+        # if probability < MUTATION_RATE:            # if probability is less than mutation rate, mutate
+        if True:  # ! debugging
             bar.text('mutating...')                # update user
             newHypoth = mutate()                   # perform mutation
             # add the new hypoth to the population
             newPopulation.candidateHypotheses.append(newHypoth)
 
+            # ! debugging only ! #
+            # print('Mutation created Hypothesis, checking...')
+            # for cf in newHypoth.cfList:        # for each CF
+            #     cf.tree.checkForMissingKeys()  # ! this one gets triggered
+            # print('\tNo missing keys detected\n')
+            # ! debugging only ! #
             # ****************** Elitism ****************** #
             if newHypoth.fitness > elite.fitness:  # if the new hypothesis has a better fitness
                 elite = newHypoth                  # update elite
@@ -1050,6 +1061,15 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> Population:
             # add the new hypoth to the population
             newPopulation.candidateHypotheses.append(newHypoth1)
             newPopulation.candidateHypotheses.append(newHypoth2)
+            
+            # ! debugging only ! #
+            # print('Crossover created Hypothesis, checking...')
+            # for cf in newHypoth1.cfList:       # for each CF
+            #     cf.tree.checkForMissingKeys()  # check the tree
+            # for cf in newHypoth2.cfList:       # for each CF
+            #     cf.tree.checkForMissingKeys()  # check the tree
+            # print('\tNo missing keys detected\n')
+            # ! debugging only ! #
 
             # ****************** Elitism ****************** #
             if newHypoth1.fitness >= newHypoth2.fitness:  # if newHypoth1 has a greater or equal fitness
@@ -1063,7 +1083,7 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> Population:
             
         # ************* End of Crossover ************* #
     newPopulation.elite = elite
-    return newPopulation
+    return newPopulation  # ? should this pass a deepcopy of population?
 
 
 def cdfc(dataIn, distanceFunction) -> Hypothesis:
@@ -1130,14 +1150,14 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
     with alive_bar(GENERATIONS, title="Generations") as bar:  # declare your expected total
 
         for gen in range(GENERATIONS):  # iterate as usual
-            newPopulation: Population
-            newElite: Hypothesis
-            newPopulation = evolve(currentPopulation, oldElite, bar)  # generate a new population by evolving the old one
-            # update currentPopulation to hold the new population
-            # this is done in two steps to avoid potential namespace issues
-            currentPopulation = newPopulation
             
-            elites.append(newPopulation.elite.fitness)  # ! used in debugging
+            newPopulation: Population  # type hinting
+            newElite: Hypothesis       # type hinting
+            
+            # generate a new population by evolving the old one
+            currentPopulation = evolve(currentPopulation, oldElite, bar)
+            
+            elites.append(currentPopulation.elite.fitness)  # ! used in debugging
 
             bar()  # update bar now that a generation is finished
 
