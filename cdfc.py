@@ -45,8 +45,8 @@ CROSSOVER_RATE: typ.Final = 0.8               # CROSSOVER_RATE is the chance tha
 ELITISM_RATE: typ.Final = 1                   # ELITISM_RATE is the elitism rate
 GENERATIONS: typ.Final = 50                   # GENERATIONS is the number of generations the GP should run for
 # GENERATIONS: typ.Final = 25                    # ! value for testing/debugging to increase speed
-MAX_DEPTH: typ.Final = 8                      # MAX_DEPTH is the max depth trees are allowed to be & is used in grow/full
-# MAX_DEPTH: typ.Final = 5                      # ! value for testing/debugging to make trees more readable
+# MAX_DEPTH: typ.Final = 8                      # MAX_DEPTH is the max depth trees are allowed to be & is used in grow/full
+MAX_DEPTH: typ.Final = 3                      # ! value for testing/debugging to make trees more readable
 MUTATION_RATE: typ.Final = 0.2                # MUTATION_RATE is the chance that a candidate will be mutated
 # ! changes here must also be made in the tree object, and the grow & full functions ! #
 OPS: typ.Final = ['add', 'subtract',          # OPS is the list of valid operations on the tree
@@ -80,6 +80,8 @@ sys.setrecursionlimit(10000)                                  # set the recursio
 np.seterr(divide='ignore')                                    # suppress divide by zero warnings from numpy
 suppressMessage = 'invalid value encountered in true_divide'  # suppress the divide by zero error from Python
 warnings.filterwarnings('ignore', message=suppressMessage)
+suppressMessage2 = 'RuntimeWarning: overflow encountered in float_power'
+warnings.filterwarnings('ignore', message=suppressMessage2)
 
 config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', title_length=0, length=20)  # the global config for the loading bars
 # config_handler.set_global(spinner='dots_reverse', bar='smooth', unknown='stars', force_tty=True, title_length=0, length=10)  # the global config for the loading bars
@@ -218,7 +220,25 @@ class Hypothesis:
         # set fDict & cfList
         self.features = fDict
         self.cfList = cfs
-                    
+
+    def __lt__(self, hyp2: "Hypothesis"):
+        return self.fitness < hyp2.fitness
+
+    def __le__(self, hyp2):
+        return self.fitness <= hyp2.fitness
+
+    def __eq__(self, hyp2: "Hypothesis"):
+        return self.fitness == hyp2.fitness
+
+    def __ne__(self, hyp2: "Hypothesis"):
+        return self.fitness != hyp2.fitness
+
+    def __gt__(self, hyp2: "Hypothesis"):
+        return self.fitness > hyp2.fitness
+
+    def __ge__(self, hyp2: "Hypothesis"):
+        return self.fitness >= hyp2.fitness
+    
     def __str__(self) -> str:
         strValue: str = f'Hypothesis\n'
         # strValue += f'\tFitness: {self.fitness}\n'    # print fitness
@@ -682,7 +702,7 @@ def createInitialPopulation() -> Population:
         # print('Hypothesis Created')
         # for cf in cfList:  # for each cf
         #     cf.tree.checkForMissingKeys()
-        # # + if we pass this point then the key problem comes from changes made by mutation and crossover
+        # # if we pass this point then the key problem comes from changes made by mutation and crossover
         # print('\tNo missing keys detected\n')
         # !!! For debugging only !!!
         # create a hypothesis & return it
@@ -698,8 +718,8 @@ def createInitialPopulation() -> Population:
             bar()                                  # update progress bar
 
     pop = Population(hypothesis, 0)
-    
-    sanityCheckPopReference(pop)  # ! testing purposes only!
+    print(pop.candidateHypotheses[2].cfList[1].tree)  # ! debugging only
+    # sanityCheckPopReference(pop)  # ! testing purposes only!
     # sanityCheckPop(hypothesis)  # ! testing purposes only!
     return pop
 
@@ -896,15 +916,26 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> Population:
         This will create a new CF and overwrite the one it chose to mutate.
         """
         
-        # ******************* Fetch Values Needed ******************* #
-        parent: Hypothesis = __tournament(population)                # get copy of a parent Hypothesis using tournament
-        randClass: int = random.choice(CLASS_IDS)                    # get a random class
-        randIndex: int = random.randint(0, M-1)                      # get a random index that's valid in cfList
-        randCF: ConstructedFeature = parent.cfList[randIndex]        # get a random Constructed Feature
-        terminals = randCF.relevantFeatures                          # save the indexes of the relevant features
-        tree: Tree = randCF.tree                                     # get the tree from the CF
-        nodeID: str = randCF.tree.getRandomNode()                    # get a random node from the CF's tree
+        # !!!!!!!!!!!!!!!!!!!!! Debugging Only !!!!!!!!!!!!!!!!!!!!! #
+        parent: Hypothesis = population.candidateHypotheses[2]
+        randIndex: int = 1
+        randCF: ConstructedFeature = parent.cfList[1]
+        randClass: int = randCF.className
+        terminals = randCF.relevantFeatures
+        tree: Tree = randCF.tree
+        nodeID: str = randCF.tree.getRandomNode()
         node: Node = tree.getNode(nodeID)
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
+        
+        # ******************* Fetch Values Needed ******************* #
+        # parent: Hypothesis = __tournament(population)                # get copy of a parent Hypothesis using tournament
+        # randClass: int = random.choice(CLASS_IDS)                    # get a random class
+        # randIndex: int = random.randint(0, M-1)                      # get a random index that's valid in cfList
+        # randCF: ConstructedFeature = parent.cfList[randIndex]        # get a random Constructed Feature
+        # terminals = randCF.relevantFeatures                          # save the indexes of the relevant features
+        # tree: Tree = randCF.tree                                     # get the tree from the CF
+        # nodeID: str = randCF.tree.getRandomNode()                    # get a random node from the CF's tree
+        # node: Node = tree.getNode(nodeID)
         # *********************************************************** #
         
         # ************* Remove the Children of the Node ************* #
@@ -954,7 +985,6 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> Population:
         feature2: ConstructedFeature = parent2.getFeatures(classID)[randIndex]
         tree2: Tree = feature2.tree  # get the tree
     
-        # TODO fix the error being thrown here
         # *************** Find the Two Sub-Trees **************** #
         # Pick Two Random Nodes, one from CF1 & one from CF2
 
@@ -1032,8 +1062,8 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> Population:
         # bar()
     
         # ***************** Mutate ***************** #
-        # if probability < MUTATION_RATE:            # if probability is less than mutation rate, mutate
-        if True:  # ! debugging
+        if probability < MUTATION_RATE:            # if probability is less than mutation rate, mutate
+        # if False:  # ! debugging
             bar.text('mutating...')                # update user
             newHypoth = mutate()                   # perform mutation
             # add the new hypoth to the population
@@ -1168,7 +1198,7 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
 
     # ****************** Return the Best Hypothesis ******************* #
 
-    bestHypothesis: Hypothesis = max(currentPopulation.candidateHypotheses, key=lambda x: x.fitness)
-    bestHypothesis = max([bestHypothesis, currentPopulation.elite.fitness],  key=lambda x: x.fitness)
+    bestHypothesis: Hypothesis = max(currentPopulation.candidateHypotheses)
+    bestHypothesis = max([bestHypothesis, currentPopulation.elite])
 
     return bestHypothesis  # return the best hypothesis generated
