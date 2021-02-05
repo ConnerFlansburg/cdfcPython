@@ -23,7 +23,7 @@ class Node:
     
     def __str__(self):
         # + verbose v2
-        out: str = f'[{self.data}, ID: {self._ID} | L:{self._left}, R:{self.right}, M:{self.middle}]'
+        out: str = f'[{self.data} || {self._ID} || L:{self._left}, R:{self.right}, M:{self.middle}]'
         # + verbose v1
         # out: str = f'[ID: {self._ID} | Data: {self.data}]'
         # + condensed

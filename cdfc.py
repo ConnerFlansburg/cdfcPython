@@ -917,25 +917,25 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> Population:
         """
         
         # !!!!!!!!!!!!!!!!!!!!! Debugging Only !!!!!!!!!!!!!!!!!!!!! #
-        parent: Hypothesis = population.candidateHypotheses[2]
-        randIndex: int = 1
-        randCF: ConstructedFeature = parent.cfList[1]
-        randClass: int = randCF.className
-        terminals = randCF.relevantFeatures
-        tree: Tree = randCF.tree
-        nodeID: str = randCF.tree.getRandomNode()
-        node: Node = tree.getNode(nodeID)
+        # parent: Hypothesis = population.candidateHypotheses[2]
+        # randIndex: int = 1
+        # randCF: ConstructedFeature = parent.cfList[1]
+        # randClass: int = randCF.className
+        # terminals = randCF.relevantFeatures
+        # tree: Tree = randCF.tree
+        # nodeID: str = randCF.tree.getRandomNode()
+        # node: Node = tree.getNode(nodeID)
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
         
         # ******************* Fetch Values Needed ******************* #
-        # parent: Hypothesis = __tournament(population)                # get copy of a parent Hypothesis using tournament
-        # randClass: int = random.choice(CLASS_IDS)                    # get a random class
-        # randIndex: int = random.randint(0, M-1)                      # get a random index that's valid in cfList
-        # randCF: ConstructedFeature = parent.cfList[randIndex]        # get a random Constructed Feature
-        # terminals = randCF.relevantFeatures                          # save the indexes of the relevant features
-        # tree: Tree = randCF.tree                                     # get the tree from the CF
-        # nodeID: str = randCF.tree.getRandomNode()                    # get a random node from the CF's tree
-        # node: Node = tree.getNode(nodeID)
+        parent: Hypothesis = __tournament(population)                # get copy of a parent Hypothesis using tournament
+        randClass: int = random.choice(CLASS_IDS)                    # get a random class
+        randIndex: int = random.randint(0, M-1)                      # get a random index that's valid in cfList
+        randCF: ConstructedFeature = parent.cfList[randIndex]        # get a random Constructed Feature
+        terminals = randCF.relevantFeatures                          # save the indexes of the relevant features
+        tree: Tree = randCF.tree                                     # get the tree from the CF
+        nodeID: str = randCF.tree.getRandomNode()                    # get a random node from the CF's tree
+        node: Node = tree.getNode(nodeID)
         # *********************************************************** #
         
         # ************* Remove the Children of the Node ************* #
@@ -972,9 +972,15 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> Population:
         # * Find Random Parents * #
         parent1, parent2 = __crossoverTournament(population)  # type: Hypothesis
 
+        # !!!!! Debugging Only !!!!! #
+        parent1: Hypothesis = population.candidateHypotheses[2]
+        randIndex = 1
+        classID = parent1.cfList[1].className
+        # !!!!! Debugging Only !!!!! #
+
         # * Get CFs from the Same Class * #
-        randIndex = random.randint(0, M-1)    # get a random index that's valid in cfList
-        classID = random.choice(CLASS_IDS)    # choose a random class
+        # randIndex = random.randint(0, M-1)    # get a random index that's valid in cfList
+        # classID = random.choice(CLASS_IDS)    # choose a random class
 
         # get a the chosen random features from both parents parent
         # + Feature 1
@@ -1005,6 +1011,14 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> Population:
         # tree2.checkForDuplicateKeys(treeFromFeature2)  # ! debugging
         # ******************************************************* #
     
+        # !!!!!!!!!!!!!!!!!!! Debugging Only !!!!!!!!!!!!!!!!!!! #
+        print('Crossover Operation\nParent 1:')
+        print(parent1.cfList[1].tree)
+        print('Subtree from Parent 2:')
+        print(treeFromFeature2)
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
+        # TODO make sure we update the parents to point to new nodes
+        
         # ************************** swap the two subtrees ************************** #
         # Add the Subtree from CF2 to the tree in CF1 (in the same location that the subtree1 was cut out)
         tree1.addSubtree(subtree=treeFromFeature2, newParent=p1, orphanBranch=branch1)
@@ -1018,8 +1032,6 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> Population:
         # ***************************************************************** #
 
         # ******************* Create Two New Hypotheses ******************* #
-        # BUG the cf lists here create Hypoths with only 1 class
-        
         # Get all the CFs of the old parent
         allCFs: dict[int, list[ConstructedFeature]] = parent1.features
         # replace the one that changed
@@ -1032,14 +1044,18 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> Population:
         allCFs[classID][randIndex] = cf2  # override the previous entry
         h2: Hypothesis = Hypothesis(size=0, fDict=deepcopy(allCFs))
 
-        # !!! debugging !!! #
+        # !!!!!!!!!!!!!!!!!!! Debugging Only !!!!!!!!!!!!!!!!!!! #
+        print('Crossover Complete\nParent 1:')
+        print(f'Parent ID of swapped Node:{p1}')
+        print(parent1.cfList[1].tree)
+        
         # global GLOBAL_COUNTER
         # GLOBAL_COUNTER = 0     # (reset counter to find if problem is in the 1st fit call after crossover)
         # print('H1')
         # print(h1)
         # print('H2')
         # print(h2)
-        # !!! debugging !!! #
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
         
         h1.updateFitness()  # force an update of the fitness score
         h2.updateFitness()  # force an update of the fitness score
@@ -1062,8 +1078,8 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> Population:
         # bar()
     
         # ***************** Mutate ***************** #
-        if probability < MUTATION_RATE:            # if probability is less than mutation rate, mutate
-        # if False:  # ! debugging
+        # if probability < MUTATION_RATE:            # if probability is less than mutation rate, mutate
+        if False:  # ! debugging
             bar.text('mutating...')                # update user
             newHypoth = mutate()                   # perform mutation
             # add the new hypoth to the population
