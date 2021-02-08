@@ -23,7 +23,7 @@ class Node:
     
     def __str__(self):
         # + verbose v2
-        out: str = f'[{self.data} || {self._ID} || L:{self._left}, R:{self.right}, M:{self.middle}]'
+        out: str = f'[{self.data} || {self._ID} || L:{self._left}, M:{self.middle}, R:{self.right} ]'
         # + verbose v1
         # out: str = f'[ID: {self._ID} | Data: {self.data}]'
         # + condensed
@@ -111,7 +111,7 @@ class Node:
     @property
     def children(self):
         return self._left, self._right, self._middle
-    
+
     @property
     def hasChildren(self):
         """ This will return True is the node has a left & right child """
