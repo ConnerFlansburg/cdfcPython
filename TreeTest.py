@@ -1,10 +1,10 @@
-from Tree import Tree, NotInTreeError, InvalidBranchError, RootNotSetError, DuplicateNodeError, MissingNodeError, NullNodeError
+from Tree import Tree, NotInTreeError
 from Node import Node
 import sys
 import typing as typ
-import logging as log
 import traceback
 from formatting import printError
+
 
 MAX_DEPTH: int = 4
 
@@ -19,6 +19,7 @@ def create_tree1() -> Tree:
 
     # * Create a New Tree Object * #
     test_tree: Tree = Tree()
+    test_tree.ID = 'TREE_1'
 
     # * Create a New Root Node * #
     root: Node = Node(tag='root: add', data='add')  # create a root node for the tree
@@ -48,7 +49,7 @@ def create_tree1() -> Tree:
     
     # * Root -> Right is MAX so add two children * #
     test_tree.addLeft(parentID=root_right, data='if')  # create a IF node
-    test_tree.addRight(parentID=root_right, data='times')  # create a ADD node
+    test_tree.addRight(parentID=root_right, data='add')  # create a ADD node
     # get the IDs of both children
     root_right_left: str = test_tree.getLeft(root_right).ID
     root_right_right: str = test_tree.getRight(root_right).ID
@@ -96,7 +97,7 @@ def create_tree1() -> Tree:
                        root_left_right_right_left, root_left_right_right_Right,
                        root_right_right_right, root_right_right_left, root_right_left_left,
                        root_right_left_middle, root_right_left_right]
-    
+    print('Tree 1 Created:')
     print_init(test_tree)  # print the constructed tree
     
     return test_tree
@@ -106,6 +107,7 @@ def create_tree2() -> Tree:
 
     # * Create a New Tree Object * #
     test_tree: Tree = Tree()
+    test_tree.ID = 'TREE_2'
     
     # * Create a New Root Node * #
     root: Node = Node(tag='root: add', data='add')  # create a root node for the tree
@@ -161,6 +163,7 @@ def create_tree2() -> Tree:
                        root_right_left, root_right_middle, root_right_right,
                        root_right_right_left, root_right_right_right]
 
+    print('Tree 2 Created:')
     print_init(test_tree)  # print the constructed tree
     
     return test_tree
@@ -171,9 +174,11 @@ def remove_from_tree(test_tree: Tree, test_node: Node) -> Tree:
     """ Removes a subtree from the passed tree & returns it """
     subtree: Tree
     subtree, _, _ = test_tree.removeSubtree(test_node.ID)
-    
+    print(f'Removed Node\'s ID: {test_node.ID}')
     print('Tree after subtree removal:')
     print_init(test_tree)
+    print('Subtree Removed:')
+    print_init(subtree)
     
     return subtree
 # *************************************************** #
@@ -188,11 +193,52 @@ def cross_tree(test_tree: Tree, test_subtree: Tree, parent: str, branch: str):
     print_init(test_tree)
     
     pass
+
+
+def check_cross(test_tree1: Tree, test_tree2: Tree):
+    
+    # * Get Two Nodes to Test * #
+    # tree1_node should be ADD -Left-> 4, -Right-> 9
+    parent_of_node1: Node = test_tree1.getRight(test_tree1.root.ID)  # go left
+    tree1_node: Node = test_tree1.getRight(parent_of_node1.ID)       # go left
+    print(f'Tree 1, parent: {parent_of_node1}')
+    print(f'Tree 1, node 1: {tree1_node}')
+    
+    # tree2_node should be TERMINAL 16
+    parent_of_node2: Node = test_tree2.getLeft(test_tree2.root.ID)  # go left
+    tree2_node: Node = test_tree2.getRight(parent_of_node2.ID)      # go right
+    print(f'Tree 2, parent: {parent_of_node2}')
+    print(f'Tree 2, node 2: {tree2_node}')
+    
+    # * Remove two Subtrees * #
+    subtree_of_tree1: Tree = remove_from_tree(test_tree1, tree1_node)
+    subtree_of_tree2: Tree = remove_from_tree(test_tree2, tree2_node)
+    
+    # * Perform Swap * #
+    cross_tree(test_tree1, subtree_of_tree2, parent_of_node1.ID, 'left')
+    cross_tree(test_tree2, subtree_of_tree1, parent_of_node2.ID, 'right')
 # *************************************************** #
+
+
+def check_rDelete(test_tree: Tree):
+    
+    # * Get the Node to delete
+    # Do Root, Left, Left to get the node TIMES -Left-> 12; -Right-> ADD
+    node: Node = test_tree.getLeft(test_tree.root.ID)
+    node = test_tree.getRight(node.ID)
+    
+    # * Preform the Recursive Delete * #
+    test_tree.testDelete(node.ID, True)
+    print(f'Tree after rDelete:\n{test_tree}')
+    
+    # * Create Subtree * #
+    subtree: Tree = Tree(root=node, nodes=test_tree.copyDictionary, ID=test_tree.ID)
+    print(f'Subtree Created:\n{subtree}')
 
 
 def print_init(tree: Tree):
     # printError(f'Print Init Root ID = {tree.root.ID}')
+    print(tree.ID)
     print_tree(tree, tree.root.ID, "", True)
     print('\n')  # print a new line
     
@@ -220,18 +266,18 @@ def print_tree(tree: Tree, nodeID: str, indent: str, isLast: bool):
     
     if nodeID == tree.root.ID:  # if this is the root of a tree
         print(f'{indent}{str(node)}')  # print this node
-        indent += "   "
+        indent += "    "
         print(f"{indent}\u2503")
     elif isLast:  # if this is the last child of a node
-        print(f'{indent}\u2517\u2501{str(node)}')  # print this node
-        indent += "   "
+        print(f'{indent}\u2517\u2501\u2501{str(node)}')  # print this node
+        indent += "     "
         if isLeaf:  # if it is a leaf, don't print the extra bar
             print(f"{indent}")
         else:
             print(f"{indent}\u2503")
     else:  # if this is not the last child
-        print(f'{indent}\u2523\u2501{str(node)}')  # print this node
-        indent += "\u2503   "
+        print(f'{indent}\u2523\u2501\u2501{str(node)}')  # print this node
+        indent += "\u2503     "
         if isLeaf:  # if it is a leaf, don't print the extra bar
             print(f"{indent}")
         else:
@@ -255,24 +301,9 @@ def test_main():
         # * Create the Test Trees * #
         test_tree1 = create_tree1()  # create tree 1
         test_tree2 = create_tree2()  # create tree 2
-        
-        # * Get Two Nodes to Test * #
-    
-        # tree1_node should be ADD -Left-> 4, -Right-> 9
-        parent_of_node1: Node = test_tree1.getLeft(test_tree1.root.ID)  # go left
-        tree1_node: Node = test_tree1.getLeft(parent_of_node1.ID)       # go left
-    
-        # tree2_node should be TERMINAL 16
-        parent_of_node2: Node = test_tree2.getLeft(test_tree2.root.ID)  # go left
-        tree2_node: Node = test_tree2.getRight(parent_of_node2.ID)      # go right
-    
-        # * Remove two Subtrees * #
-        subtree_of_tree1: Tree = remove_from_tree(test_tree1, tree1_node)
-        subtree_of_tree2: Tree = remove_from_tree(test_tree2, tree2_node)
-    
-        # * Perform Swap * #
-        cross_tree(test_tree1, subtree_of_tree2, parent_of_node1.ID, 'left')
-        cross_tree(test_tree2, subtree_of_tree1, parent_of_node2.ID, 'right')
+
+        check_rDelete(test_tree1)  # * Test __rDelete * #
+        # check_cross(test_tree1, test_tree2)  # * Test Crossover * #
         
     except KeyError as err:
         lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error

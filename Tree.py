@@ -8,6 +8,7 @@ import logging as log
 import traceback
 from formatting import printError
 import pprint
+from copy import copy as cpy
 from copy import deepcopy
 from io import StringIO
 from contextlib import redirect_stdout
@@ -99,6 +100,7 @@ class Tree:
     def __print_tree(self) -> str:
         out = StringIO()  # creat the string variable
         with redirect_stdout(out):  # redirect standard out
+            print(f'Tree {self.ID}')  # print the tree's id
             self.__rPrint(self.root.ID, "", True)
             print('\n')  # print a new line
         # turn it into a string & return
@@ -147,7 +149,16 @@ class Tree:
     @property
     def ID(self):
         return self._ID
+    
+    @ID.setter
+    def ID(self, newID):
+        self._ID = newID
 
+    # *** Copy Dictionary *** #
+    @property
+    def copyDictionary(self):
+        return self._copyDictionary
+    
     # *** Root *** #
     @property
     def root(self):
@@ -429,6 +440,9 @@ class Tree:
         
         return
     
+    def testDelete(self, currentID: str, copy: bool = False):
+        self.__rDelete(currentID, copy)
+    
     def __rDelete(self, currentID: str, copy: bool = False):
         """ This can be used to delete a subtree or copy it  """
         
@@ -455,8 +469,8 @@ class Tree:
                 # +     Custom objects typically need copy calls. Deepcopy is needed for nest objects,
                 # +     so a tree would require deepcopy, but a node just needs copy?
                 # self._copyDictionary[currentID] = self._nodes[currentID]
-                self._copyDictionary[currentID] = deepcopy(self._nodes[currentID])
-                # self._copyDictionary[currentID] = cpy(self._nodes[currentID])
+                # self._copyDictionary[currentID] = deepcopy(self._nodes[currentID])
+                self._copyDictionary[currentID] = cpy(self._nodes[currentID])
             # *** End of Copy *** #
     
             # *** Delete *** #
@@ -486,7 +500,7 @@ class Tree:
                 printError(''.join(traceback.format_stack()))  # print stack trace
                 sys.exit(-1)  # exit on error; recovery not possible
     
-    # BUG: currently this is returning a parentID of none.
+    # ! BUG: currently the subtree this creates has a different ID than the original & the children aren't added
     def removeSubtree(self, newRootID: str) -> ("Tree", str, str):
         
         # if the node is in the tree
