@@ -136,7 +136,7 @@ class Node:
             return False
     
     def isLeaf(self):
-        if self._left is None:
+        if self.hasChildren is False:
             return True
         else:
             return False

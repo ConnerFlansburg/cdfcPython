@@ -1,9 +1,14 @@
-from Tree import Tree
+from Tree import Tree, NotInTreeError, InvalidBranchError, RootNotSetError, DuplicateNodeError, MissingNodeError, NullNodeError
 from Node import Node
+import sys
 import typing as typ
+import logging as log
+import traceback
+from formatting import printError
 
 MAX_DEPTH: int = 4
 
+# TODO: test print tree
 # TODO: write methods
 TERMINAL_NODES1: typ.List[str] = []
 TERMINAL_NODES2: typ.List[str] = []
@@ -11,11 +16,21 @@ TERMINAL_NODES2: typ.List[str] = []
 
 def create_tree1() -> Tree:
     """ Creates a tree of a predetermined structure """
+
+    # * Create a New Tree Object * #
+    test_tree: Tree = Tree()
+
+    # * Create a New Root Node * #
+    root: Node = Node(tag='root: add', data='add')  # create a root node for the tree
+    rootID = root.ID  # get the root ID  (this will be tested later)
     
-    op = 'add'  # the root node will have the add operation
-    root: Node = Node(tag=f'root: {op}', data=op)  # create a root node for the tree
-    rootID = root.ID  # get the root ID
-    test_tree: Tree = Tree(root=root)
+    # * Override the Old Root in the Tree * #
+    test_tree.overrideRoot(root)
+    
+    # * Test RootID * #
+    if test_tree.root.ID != rootID:  # print error if there's a problem with root's ID
+        printError(f'Root ID {rootID} & {test_tree.root.ID} do not match')
+        rootID = test_tree.root.ID  # update rootID to avoid issues
     
     # * Root is ADD so create two children * #
     test_tree.addLeft(parentID=rootID, data='subtract')  # create a SUBTRACT node
@@ -88,11 +103,21 @@ def create_tree1() -> Tree:
 
 
 def create_tree2() -> Tree:
+
+    # * Create a New Tree Object * #
+    test_tree: Tree = Tree()
     
-    op = 'max'                                     # the root node will have the MAX operation
-    root: Node = Node(tag=f'root: {op}', data=op)  # create a root node for the tree
-    rootID = root.ID                               # get the root ID
-    test_tree: Tree = Tree(root=root)              # create a tree with the built root
+    # * Create a New Root Node * #
+    root: Node = Node(tag='root: add', data='add')  # create a root node for the tree
+    rootID = root.ID  # get the root ID  (this will be tested later)
+    
+    # * Override the Old Root in the Tree * #
+    test_tree.overrideRoot(root)
+    
+    # * Test RootID * #
+    if test_tree.root.ID != rootID:  # print error if there's a problem with root's ID
+        printError(f'Root ID {rootID} & {test_tree.root.ID} do not match')
+        rootID = test_tree.root.ID  # update rootID to avoid issues
     
     # * Root is MAX so create two children * #
     test_tree.addLeft(parentID=rootID, data='times')  # create a TIMES node
@@ -142,49 +167,75 @@ def create_tree2() -> Tree:
 
 
 # ********************* Remove ********************* #
-def remove_from_tree(test_tree: Tree):
-    """ Removes a subtree from the created tree """
-    pass
-
-
-def remove_check():
-    """ Checks that the subtree was removed correctly """
-    pass
+def remove_from_tree(test_tree: Tree, test_node: Node) -> Tree:
+    """ Removes a subtree from the passed tree & returns it """
+    subtree: Tree
+    subtree, _, _ = test_tree.removeSubtree(test_node.ID)
+    
+    print('Tree after subtree removal:')
+    print_init(test_tree)
+    
+    return subtree
 # *************************************************** #
 
 
 # ******************** Crossover ******************** #
-def cross_tree(test_tree: Tree):
+def cross_tree(test_tree: Tree, test_subtree: Tree, parent: str, branch: str):
     """ Performs the Crossover operation on the tree """
-    pass
-
-
-def cross_check():
-    """
-    Called by cross_tree & is used to check
-    that the operations was performed as expected
-    """
+    test_tree.addSubtree(test_subtree, parent, branch)
+    
+    print('Tree after crossover')
+    print_init(test_tree)
+    
     pass
 # *************************************************** #
 
 
-# TODO: test print_tree
-def print_init(tree: Tree) -> str:
-    return print_tree(tree, tree.root.ID, "", True)
+def print_init(tree: Tree):
+    # printError(f'Print Init Root ID = {tree.root.ID}')
+    print_tree(tree, tree.root.ID, "", True)
+    print('\n')  # print a new line
+    
+    return
 
 
-def print_tree(tree: Tree, nodeID: str, indent: str, isLast: bool) -> str:
-    out: str = indent  # out will be the output string
+def print_tree(tree: Tree, nodeID: str, indent: str, isLast: bool):
     
-    node: Node = tree.getNode(nodeID)
+    if nodeID is None:
+        return
     
-    if isLast:  # if this is the last child of a node
-        out += "\u2517"
-        indent += " "
+    try:
+        
+        node: Node = tree.getNode(nodeID)
+    
+    except NotInTreeError:
+        lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+        message: str = ''.join(traceback.format_stack())  # traceback to message
+        message += f'\nNotInTreeError encountered on line {lineNm} in TreeTest.py'
+        message += f'\nKey = {nodeID}\n{tree}'  # print the tree & node
+        printError(message)  # print message
+        sys.exit(-1)  # exit on error; recovery not possible
+    
+    isLeaf: bool = node.isLeaf()
+    
+    if nodeID == tree.root.ID:  # if this is the root of a tree
+        print(f'{indent}{str(node)}')  # print this node
+        indent += "   "
+        print(f"{indent}\u2503")
+    elif isLast:  # if this is the last child of a node
+        print(f'{indent}\u2517\u2501{str(node)}')  # print this node
+        indent += "   "
+        if isLeaf:  # if it is a leaf, don't print the extra bar
+            print(f"{indent}")
+        else:
+            print(f"{indent}\u2503")
     else:  # if this is not the last child
-        out += "\u2523"
-        indent += "\u2503 "
-    out += str(node)+'\n'  # print this node
+        print(f'{indent}\u2523\u2501{str(node)}')  # print this node
+        indent += "\u2503   "
+        if isLeaf:  # if it is a leaf, don't print the extra bar
+            print(f"{indent}")
+        else:
+            print(f"{indent}\u2503")
     
     children = ('left', 'middle', 'right')
     
@@ -195,17 +246,46 @@ def print_tree(tree: Tree, nodeID: str, indent: str, isLast: bool) -> str:
             print_tree(tree, node.middle, indent, False)
         elif child == 'right' and (node.left is not None):
             print_tree(tree, node.right, indent, True)
-    return out
+    return
 
 
 def test_main():
+
+    try:
+        # * Create the Test Trees * #
+        test_tree1 = create_tree1()  # create tree 1
+        test_tree2 = create_tree2()  # create tree 2
+        
+        # * Get Two Nodes to Test * #
     
-    # * Create the Test Trees * #
-    test_tree1 = create_tree1()  # create tree 1
-    test_tree2 = create_tree2()  # create tree 2
+        # tree1_node should be ADD -Left-> 4, -Right-> 9
+        parent_of_node1: Node = test_tree1.getLeft(test_tree1.root.ID)  # go left
+        tree1_node: Node = test_tree1.getLeft(parent_of_node1.ID)       # go left
     
-    # * Test Crossover * #
+        # tree2_node should be TERMINAL 16
+        parent_of_node2: Node = test_tree2.getLeft(test_tree2.root.ID)  # go left
+        tree2_node: Node = test_tree2.getRight(parent_of_node2.ID)      # go right
     
+        # * Remove two Subtrees * #
+        subtree_of_tree1: Tree = remove_from_tree(test_tree1, tree1_node)
+        subtree_of_tree2: Tree = remove_from_tree(test_tree2, tree2_node)
+    
+        # * Perform Swap * #
+        cross_tree(test_tree1, subtree_of_tree2, parent_of_node1.ID, 'left')
+        cross_tree(test_tree2, subtree_of_tree1, parent_of_node2.ID, 'right')
+        
+    except KeyError as err:
+        lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+        message: str = ''.join(traceback.format_stack())  # traceback to message
+        message += f'\nKeyError encountered on line {lineNm} in TreeTest.py'
+        message += f'\n{str(err)}'  # print the message
+        printError(message)  # print message
+        print('Tree 1')
+        print(test_tree1)
+        print('\nTree2')
+        print(test_tree2)
+        sys.exit(-1)  # exit on error; recovery not possible
+
 
 if __name__ == "__main__":
     test_main()

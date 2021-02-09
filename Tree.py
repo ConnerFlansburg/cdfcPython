@@ -9,6 +9,8 @@ import traceback
 from formatting import printError
 import pprint
 from copy import deepcopy
+from io import StringIO
+from contextlib import redirect_stdout
 # from copy import copy as cpy
 
 TREE_DATA = typ.Union[int, str]  # typing alias for tree nodes. They will either have a terminal index (int) or an OP (str)
@@ -21,7 +23,7 @@ sys.setrecursionlimit(10000)                                # set the recursion 
 
 class Tree:
     
-    def __init__(self, root: typ.Optional[Node] = None, nodes: typ.Optional[typ.Dict[str, Node]] = None, ID: str = None):
+    def __init__(self, root: Node = None, nodes: typ.Dict[str, Node] = None, ID: str = None):
         """ Trees are almost always made empty & then built by adding to them."""
         if nodes is None:
             nodes = {}
@@ -71,7 +73,7 @@ class Tree:
         try:  # attempt to use better print method
             out = f'Tree ID {self.ID}\n'
             # call recursive print starting with root
-            out += self.__print_tree(self._root.ID, level=0)
+            out += self.__print_tree()
         # if we aren't able to use the nicer print, use simple
         except Exception as err:
             printError(f'Encountered an error while printing tree: {str(err)}')
@@ -93,31 +95,53 @@ class Tree:
         for n in vls:  # loop over the nodes
             out += f'\t{n}\n'
         return out
-
-    def __print_tree(self, currentID: str, level: int) -> str:
     
-        # add the current node using the Node str() method
-        out: str = "\t"*level + str(self._nodes[currentID])+'\n'
-        
-        # if there are children, print them
-        if self._nodes.get(currentID).hasChildren:
-            
-            # print the left child
-            if self._nodes.get(currentID).left:
-                out += self.__print_tree(self._nodes.get(currentID).left, level+1)
+    def __print_tree(self) -> str:
+        out = StringIO()  # creat the string variable
+        with redirect_stdout(out):  # redirect standard out
+            self.__rPrint(self.root.ID, "", True)
+            print('\n')  # print a new line
+        # turn it into a string & return
+        return out.getvalue()
+
+    def __rPrint(self, nodeID: str, indent: str, isLast: bool):
+    
+        if nodeID is None:
+            return
+    
+        node: Node = self.getNode(nodeID)
+    
+        isLeaf: bool = node.isLeaf()
+    
+        if nodeID == self.root.ID:  # if this is the root of a tree
+            print(f'{indent}{str(node)}')  # print this node
+            indent += "   "
+            print(f"{indent}\u2503")
+        elif isLast:  # if this is the last child of a node
+            print(f'{indent}\u2517\u2501{str(node)}')  # print this node
+            indent += "   "
+            if isLeaf:  # if it is a leaf, don't print the extra bar
+                print(f"{indent}")
             else:
-                out += '\t'*(level+1)+'\033[91;1m[\u2718 -- Left Child Missing]\033[00m'
-            
-            # print the middle child (if one exists)
-            if self._nodes.get(currentID).hasMiddle:
-                out += self.__print_tree(self._nodes[currentID].middle, level+1)
-            
-            # print the right child
-            if self._nodes.get(currentID).right:
-                out += self.__print_tree(self._nodes.get(currentID).right, level+1)
+                print(f"{indent}\u2503")
+        else:  # if this is not the last child
+            print(f'{indent}\u2523\u2501{str(node)}')  # print this node
+            indent += "\u2503   "
+            if isLeaf:  # if it is a leaf, don't print the extra bar
+                print(f"{indent}")
             else:
-                out += '\t' * (level + 1) + '\033[91;1m[\u2718 -- Right Child Missing]\033[00m'
-        return out
+                print(f"{indent}\u2503")
+    
+        children = ('left', 'middle', 'right')
+    
+        for child in children:
+            if child == 'left' and (node.left is not None):
+                self.__rPrint(node.left, indent, False)
+            elif child == 'middle' and (node.left is not None):
+                self.__rPrint(node.middle, indent, False)
+            elif child == 'right' and (node.left is not None):
+                self.__rPrint(node.right, indent, True)
+        return
 
     # *** ID *** #
     @property
@@ -143,7 +167,12 @@ class Tree:
         self._nodes[new.ID] = new                     # add to the node dictionary
         self._root = new                              # set the root
         return self._root.ID
-      
+    
+    def overrideRoot(self, new_root: Node):
+        """ This should only be used to test the Tree object """
+        self._nodes[new_root.ID] = new_root  # add the new root to dict
+        self._root = new_root                # update the root property
+    
     # *** Size *** #
     @property
     def size(self):
