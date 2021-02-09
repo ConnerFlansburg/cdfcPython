@@ -1,16 +1,15 @@
 from Tree import Tree
 from Node import Node
-from formatting import printError
 import typing as typ
 
 MAX_DEPTH: int = 4
 
 # TODO: write methods
-# TODO: call them in IF statement at bottom
-TERMINAL_NODES: typ.List[str] = []
+TERMINAL_NODES1: typ.List[str] = []
+TERMINAL_NODES2: typ.List[str] = []
 
 
-def create_tree() -> Tree:
+def create_tree1() -> Tree:
     """ Creates a tree of a predetermined structure """
     
     op = 'add'  # the root node will have the add operation
@@ -77,12 +76,66 @@ def create_tree() -> Tree:
     root_right_left_right: str = test_tree.getRight(root_right_left).ID
     
     # * Create a list of all the Terminal Node IDS (these are the tree's leaves) * #
-    global TERMINAL_NODES
-    TERMINAL_NODES = [root_left_left_left, root_left_left_right, root_left_right_left,
-                      root_left_right_right_left, root_left_right_right_Right,
-                      root_right_right_right, root_right_right_left, root_right_left_left,
-                      root_right_left_middle, root_right_left_right]
+    global TERMINAL_NODES1
+    TERMINAL_NODES1 = [root_left_left_left, root_left_left_right, root_left_right_left,
+                       root_left_right_right_left, root_left_right_right_Right,
+                       root_right_right_right, root_right_right_left, root_right_left_left,
+                       root_right_left_middle, root_right_left_right]
     
+    print_init(test_tree)  # print the constructed tree
+    
+    return test_tree
+
+
+def create_tree2() -> Tree:
+    
+    op = 'max'                                     # the root node will have the MAX operation
+    root: Node = Node(tag=f'root: {op}', data=op)  # create a root node for the tree
+    rootID = root.ID                               # get the root ID
+    test_tree: Tree = Tree(root=root)              # create a tree with the built root
+    
+    # * Root is MAX so create two children * #
+    test_tree.addLeft(parentID=rootID, data='times')  # create a TIMES node
+    test_tree.addRight(parentID=rootID, data='if')    # create a IF node
+    # get the IDs of both children
+    root_left: str = test_tree.getLeft(rootID).ID    # TIMES
+    root_right: str = test_tree.getRight(rootID).ID  # IF
+
+    # * Root -> Left is TIMES so create two children * #
+    test_tree.addLeft(parentID=root_left, data='add')  # create a TIMES node
+    test_tree.addRight(parentID=root_left, data=41)    # create a TERMINAL node
+    # get the IDs of both children
+    root_left_left: str = test_tree.getLeft(root_left).ID    # ADD
+    root_left_right: str = test_tree.getRight(root_left).ID  # TERMINAL
+
+    # * Root -> Left -> Left is ADD so create two children * #
+    test_tree.addLeft(parentID=root_left_left, data=75)   # create a TIMES node
+    test_tree.addRight(parentID=root_left_left, data=76)  # create a TERMINAL node
+    # get the IDs of both children
+    root_left_left_left: str = test_tree.getLeft(root_left_left).ID    # TERMINAL
+    root_left_left_right: str = test_tree.getRight(root_left_left).ID  # TERMINAL
+
+    # * Root -> Right is IF so create three children * #
+    test_tree.addLeft(parentID=root_right, data=16)           # create a TERMINAL node
+    test_tree.addMiddle(parentID=root_right, data=20)         # create a TERMINAL node
+    test_tree.addRight(parentID=root_right, data='subtract')  # create a SUBTRACT node
+    # get the IDs of both children
+    root_right_left: str = test_tree.getLeft(root_right).ID      # TERMINAL
+    root_right_middle: str = test_tree.getMiddle(root_right).ID  # TERMINAL
+    root_right_right: str = test_tree.getRight(root_right).ID    # SUBTRACT
+    
+    # * Root -> Right -> Right is SUBTRACT so create three children * #
+    test_tree.addLeft(parentID=root_right_right, data=30)   # create a TERMINAL node
+    test_tree.addRight(parentID=root_right_right, data=10)  # create a TERMINAL node
+    # get the IDs of both children
+    root_right_right_left: str = test_tree.getLeft(root_right_right).ID    # TERMINAL
+    root_right_right_right: str = test_tree.getRight(root_right_right).ID  # TERMINAL
+    
+    global TERMINAL_NODES2
+    TERMINAL_NODES2 = [root_left_right, root_left_left_left, root_left_left_right,
+                       root_right_left, root_right_middle, root_right_right,
+                       root_right_right_left, root_right_right_right]
+
     print_init(test_tree)  # print the constructed tree
     
     return test_tree
@@ -147,9 +200,11 @@ def print_tree(tree: Tree, nodeID: str, indent: str, isLast: bool) -> str:
 
 def test_main():
     
-    test_tree: Tree = create_tree()  # create the tree
+    # * Create the Test Trees * #
+    test_tree1 = create_tree1()  # create tree 1
+    test_tree2 = create_tree2()  # create tree 2
     
-    cross_tree(test_tree)  # test crossover
+    # * Test Crossover * #
     
 
 if __name__ == "__main__":
