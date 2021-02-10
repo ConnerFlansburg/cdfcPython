@@ -424,7 +424,7 @@ class Tree:
         
         # delete the children & any of their children
         for child in self._nodes[nodeID].children:
-            self.__rDelete(child)
+            self.__rDelete(child, rootID=child)
 
         # remove the references to the now deleted children
         self._nodes[nodeID].left = None
@@ -440,37 +440,52 @@ class Tree:
         
         return
     
-    def testDelete(self, currentID: str, copy: bool = False):
-        self.__rDelete(currentID, copy)
+    def testDelete(self, currentID: str, rootID: str, copy: bool = False):
+        self.__rDelete(currentID, rootID, copy)
     
-    def __rDelete(self, currentID: str, copy: bool = False):
+    def __rDelete(self, currentID: str, rootID: str, makeCopy: bool = False):
         """ This can be used to delete a subtree or copy it  """
+        
+        if currentID == rootID:  # if we are looking at the root of the subtree
+            # delete the parents reference to it
+            current: Node = self.getNode(currentID)  # get the current Node
+            parentID: str = current.parent           # get the parents ID
+            parent: Node = self.getNode(parentID)    # get the parent Node
+            branch: str = current.branch             # get what branch of parent current is on
+            
+            # set the parent's reference to the subtree root to be None
+            if branch == 'left':
+                parent.left = None
+            elif branch == 'right':
+                parent.right = None
+            elif branch == 'middle':
+                parent.middle = None
+            else:
+                raise InvalidBranchError(f'__rDelete found an invalid branch for Node ID {currentID}')
         
         if self._nodes.get(currentID):  # if the current node is in the tree
     
             # *** Recursion *** #
             # delete the left node
-            self.__rDelete(self._nodes[currentID].left)
+            self.__rDelete(self._nodes[currentID].left, rootID, makeCopy)
             # delete the right node
-            self.__rDelete(self._nodes[currentID].right)
+            self.__rDelete(self._nodes[currentID].right, rootID, makeCopy)
             # delete the middle node
-            self.__rDelete(self._nodes[currentID].middle)
+            self.__rDelete(self._nodes[currentID].middle, rootID, makeCopy)
             # *** End of Recursion *** #
     
             # after we have reached the leaves of the tree, return up
             # the stack, deleting/copying as we go
     
             # *** Copy *** #
-            if copy:  # if we are creating a subtree
+            if makeCopy:  # if we are creating a subtree
                 # this should not raise a key error because of the earlier IF statement
                 # TODO: experiment with these 3 options & decide on one
                 # + So dictionaries copying a dictionary would require using copy, but we
                 # +     aren't copying a dictionary, but a Node. Does a Node need a copy call?
                 # +     Custom objects typically need copy calls. Deepcopy is needed for nest objects,
                 # +     so a tree would require deepcopy, but a node just needs copy?
-                # self._copyDictionary[currentID] = self._nodes[currentID]
-                # self._copyDictionary[currentID] = deepcopy(self._nodes[currentID])
-                self._copyDictionary[currentID] = cpy(self._nodes[currentID])
+                self._copyDictionary[currentID] = self._nodes[currentID]
             # *** End of Copy *** #
     
             # *** Delete *** #
@@ -499,7 +514,7 @@ class Tree:
                 print('\n')
                 printError(''.join(traceback.format_stack()))  # print stack trace
                 sys.exit(-1)  # exit on error; recovery not possible
-    
+
     # ! BUG: currently the subtree this creates has a different ID than the original & the children aren't added
     def removeSubtree(self, newRootID: str) -> ("Tree", str, str):
         
@@ -518,9 +533,9 @@ class Tree:
             self._nodes[newRootID].parent = None
             self._nodes[newRootID].branch = None
             
-            self._copyDictionary = {}             # make sure the copy dictionary is empty
-            rt = self._nodes[newRootID]           # get the root of the subtree
-            self.__rDelete(newRootID, copy=True)  # copy the subtree & delete it from original
+            self._copyDictionary = {}                 # make sure the copy dictionary is empty
+            rt = self._nodes[newRootID]               # get the root of the subtree
+            self.__rDelete(newRootID, rootID=newRootID, makeCopy=True)  # copy the subtree & delete it from original
             
             # set the parent to point to None, remove the now invalid id from searches
             if orphanBranch == 'left':

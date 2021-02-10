@@ -228,7 +228,7 @@ def check_rDelete(test_tree: Tree):
     node = test_tree.getRight(node.ID)
     
     # * Preform the Recursive Delete * #
-    test_tree.testDelete(node.ID, True)
+    test_tree.testDelete(node.ID, rootID=node.ID, copy=True)
     print(f'Tree after rDelete:\n{test_tree}')
     
     # * Create Subtree * #
@@ -302,9 +302,9 @@ def test_main():
         test_tree1 = create_tree1()  # create tree 1
         test_tree2 = create_tree2()  # create tree 2
 
-        check_rDelete(test_tree1)  # * Test __rDelete * #
-        # check_cross(test_tree1, test_tree2)  # * Test Crossover * #
-        
+        # check_rDelete(test_tree1)  # * Test __rDelete * #
+        check_cross(test_tree1, test_tree2)  # * Test Crossover * #
+
     except KeyError as err:
         lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
         message: str = ''.join(traceback.format_stack())  # traceback to message
@@ -312,9 +312,9 @@ def test_main():
         message += f'\n{str(err)}'  # print the message
         printError(message)  # print message
         print('Tree 1')
-        print(test_tree1)
+        # print(test_tree1)
         print('\nTree2')
-        print(test_tree2)
+        # print(test_tree2)
         sys.exit(-1)  # exit on error; recovery not possible
 
 
