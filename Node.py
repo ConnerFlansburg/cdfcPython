@@ -5,12 +5,11 @@ import uuid
 
 class Node:
     
-    def __init__(self, data, tag, parent: typ.Optional[str] = None, branch: typ.Optional[str] = None,
+    def __init__(self, data, parent: typ.Optional[str] = None, branch: typ.Optional[str] = None,
                  left: typ.Optional[str] = None,  right: typ.Optional[str] = None, middle: typ.Optional[str] = None):
         
         self._ID: str = str(uuid.uuid4())
         # self._ID = next(countNodes())  # create a unique ID
-        self._tag: str = tag  # this says if the node stores an op or a terminal
         self._data: str = data  # the operation or terminal to be stored in this node
         
         self._parent: typ.Optional[str] = parent  # the id of the parent node

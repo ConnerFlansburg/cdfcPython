@@ -19,6 +19,8 @@ NUM_TERMINALS = {'add': 2, 'subtract': 2,                   # NUM_TERMINALS is a
                  'times': 2, 'max': 2, 'if': 3}
 sys.setrecursionlimit(10000)                                # set the recursion limit for the program
 
+# TODO: add documentation to classes & methods
+
 
 class Tree:
     
@@ -175,7 +177,7 @@ class Tree:
     def __addRoot(self) -> str:
         """Adds a root node to the tree"""
         op = random.choice(OPS)
-        new: Node = Node(tag=f'root: {op}', data=op)  # create a root node for the tree
+        new: Node = Node(data=op)  # create a root node for the tree
         self._nodes[new.ID] = new                     # add to the node dictionary
         self._root = new                              # set the root
         return self._root.ID
@@ -198,7 +200,7 @@ class Tree:
     def addLeft(self, parentID: str, data: TREE_DATA) -> str:
 
         # create the new node (id will be made by node's init)
-        new = Node(tag=f'{data}', data=data, parent=parentID, branch='left')
+        new = Node(data=data, parent=parentID, branch='left')
         
         # make the parent aware of it
         self._nodes[parentID].left = new.ID  # type: str
@@ -211,7 +213,7 @@ class Tree:
     def addRight(self, parentID: str, data: TREE_DATA) -> str:
         
         # create the new node (id will be made by node's init)
-        new = Node(tag=f'{data}', data=data, parent=parentID, branch='right')
+        new = Node(data=data, parent=parentID, branch='right')
 
         # make the parent aware of it
         self._nodes[parentID].right = new.ID  # type: str
@@ -224,7 +226,7 @@ class Tree:
     def addMiddle(self, parentID: str, data: TREE_DATA) -> str:
         
         # create the new node (id will be made by node's init)
-        new = Node(tag=f'{data}', data=data, parent=parentID, branch='middle')
+        new = Node(data=data, parent=parentID, branch='middle')
 
         # make the parent aware of it
         self._nodes[parentID].middle = new.ID  # type: str
@@ -312,7 +314,7 @@ class Tree:
     # *** Operations *** #
     def getRandomNode(self) -> str:
         """ Get a random node from the tree (leaves are allowed)"""
-        options: list[str] = list(self._nodes.keys())
+        options: typ.List[str] = list(self._nodes.keys())
         options.remove(self._root.ID)
         
         return random.choice(options)
@@ -381,8 +383,6 @@ class Tree:
                     parent.right = None
                 elif branch == 'middle':
                     parent.middle = None
-                else:
-                    raise InvalidBranchError(f'__rDelete found an invalid branch for Node ID {currentID}')
         
         if self._nodes.get(currentID):  # if the current node is in the tree
     
@@ -432,6 +432,9 @@ class Tree:
             # get the parents id & branch
             parentOfSubtreeID: str = self._nodes[newRootID].parent
             orphanBranch: str = self._nodes[newRootID].branch
+            if orphanBranch is None:
+                printError(f'Found None branch on Node with ID {newRootID}')
+                print(self)
             
             if parentOfSubtreeID is None:  # see if the parent is None
                 printError('Parent Stored in Node was stored as None')
@@ -500,9 +503,9 @@ class Tree:
         if self._nodes.get(newParent) is None:
             raise MissingNodeError(msg=f'addSubtree could not find it\'s new parent')
         # check that we aren't adding the subtree back onto it's original tree
-        if self.ID == subtree.ID:
-            printError(f'AddSubtree attempted to add itself back to it\'s original tree')
-            raise AssertionError
+        # if self.ID == subtree.ID:
+        #     printError(f'AddSubtree attempted to add itself back to it\'s original tree')
+        #     raise AssertionError
         # *** End of Error Checking *** #
         
         # set the adopted parents to point to the subtree
@@ -513,12 +516,13 @@ class Tree:
         elif orphanBranch == 'middle':
             self._nodes[newParent].middle = subtree._root.ID
         else:
-            raise InvalidBranchError(f'addSubtree encountered an invalid branch: {orphanBranch}')
+            message: str = f"addSubtree encountered an invalid branch\nParent: {newParent}\nBranch: {orphanBranch}\n Subtree:\n{subtree}"
+            raise InvalidBranchError(message)
     
         # set the subtree root to point to adopted parents
         subtree._root.parent = newParent
         # set the subtree's branch
-        subtree.branch = orphanBranch
+        subtree._root.branch = orphanBranch
         
         # check for duplicate nodes
         # self.checkForDuplicateKeys(subtree)
@@ -552,10 +556,12 @@ class Tree:
         try:
             value = self.__runNode(featureValues, self._root, classId, terminals)
         except Exception as err:
-            printError(f'Run Tree found an error: {str(err)}')
+            lineNm = sys.exc_info()[-1].tb_lineno
+            printError(f'runTree found an error on line {lineNm}: {str(err)}')
             print('')
             print(self)
             sys.exit(-1)
+            
         return value
 
     def __runNode(self, featureValues: typ.Dict[int, float], node: Node,
@@ -646,9 +652,15 @@ class Tree:
             printError(f'line = {lineNm}, {str(err)}')  # print message
             printError(''.join(traceback.format_stack()))  # print stack trace
             sys.exit(-1)  # exit on error; recovery not possible
+        except Exception as err:
+            lineNm = sys.exc_info()[-1].tb_lineno
+            printError(f'runNode found an error on line {lineNm}: {str(err)}')
+            print('')
+            print(self)
+            sys.exit(-1)
 
     # ******************* Growing the Tree ******************* #
-    def grow(self, classId: int, nodeID: str, MAX_DEPTH: int, TERMINALS: typ.Dict[int, typ.List[int]]):
+    def grow(self, classId: int, nodeID: str, MAX_DEPTH: int, TERMINALS: typ.Dict[int, typ.List[int]], depth: int):
         """
         Grow creates a tree or sub-tree starting at the Node node, and using the Grow method.
         If node is a root Node, grow will build a tree, otherwise grow will build a sub-tree
@@ -675,7 +687,7 @@ class Tree:
             # *************************** A Terminal was Chosen *************************** #
             # NOTE: check depth-1 because we will create children
             # print(f'Grow Node ID: {node.ID}, ID Passed {nodeID}')  # ! debugging
-            if coin == 'TERM' or (self.getDepth(node.ID, self.root.ID) == MAX_DEPTH - 1):  # if we need to add terminals
+            if coin == 'TERM' or (depth == MAX_DEPTH - 1):  # if we need to add terminals
             
                 # pick the needed amount of terminals
                 terms: typ.List[int] = random.choices(TERMINALS[classId], k=NUM_TERMINALS[node.data])
@@ -705,8 +717,8 @@ class Tree:
                     leftID: str = self.addLeft(parentID=node.ID, data=ops.pop(0))  # add the new left node
                     rightID: str = self.addRight(parentID=node.ID, data=ops.pop(0))  # add the new right node
                 
-                    self.grow(classId, leftID, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS)  # call grow on left to set it's children
-                    self.grow(classId, rightID, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS)  # call grow on right to set it's children
+                    self.grow(classId, leftID, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS, depth=depth+1)  # call grow on left to set it's children
+                    self.grow(classId, rightID, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS, depth=depth+1)  # call grow on right to set it's children
                     return
                 
                 elif NUM_TERMINALS[node.data] == 3:  # if the number of terminals needed by node is three
@@ -716,9 +728,9 @@ class Tree:
                     right: str = self.addRight(parentID=node.ID, data=ops.pop(0))  # create & add the new right node to the tree
                     middle: str = self.addMiddle(parentID=node.ID, data=ops.pop(0))  # create & add the new middle node to the tree
                 
-                    self.grow(classId, left, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS)  # call grow on left to set it's children
-                    self.grow(classId, right, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS)  # call grow on right to set it's children
-                    self.grow(classId, middle, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS)  # call grow on middle to set it's children
+                    self.grow(classId, left, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS, depth=depth+1)  # call grow on left to set it's children
+                    self.grow(classId, right, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS, depth=depth+1)  # call grow on right to set it's children
+                    self.grow(classId, middle, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS, depth=depth+1)  # call grow on middle to set it's children
                     return
             
                 else:  # if NUM_TERMINALS was not 1 or 2
@@ -730,7 +742,7 @@ class Tree:
             # self.__print_tree_simple()
             sys.exit(-1)  # exit on error; recovery not possible
 
-    def full(self, classId: int, nodeID: str, MAX_DEPTH: int, TERMINALS: typ.Dict[int, typ.List[int]]):
+    def full(self, classId: int, nodeID: str, MAX_DEPTH: int, TERMINALS: typ.Dict[int, typ.List[int]], depth: int):
         """
         Full creates a tree or sub-tree starting at the Node node, and using the Full method.
         If node is a root Node, full will build a tree, otherwise full will build a sub-tree
@@ -740,11 +752,13 @@ class Tree:
         NOTE:
         During testing whatever calls full should use the sanity check sanityCheckTree(newTree)
  
+        :param depth: How deep full is in the current tree
         :param classId: ID of the class that the tree should identify.
         :param nodeID: The root node of the subtree __full will create.
         :param MAX_DEPTH: Max depth of trees
         :param TERMINALS: Terminals values
 
+        :type depth: int
         :type classId: int
         :type nodeID: str
         :type MAX_DEPTH: int
@@ -754,7 +768,7 @@ class Tree:
             node: Node = self._nodes[nodeID]
             
             # *************************** Max Depth Reached *************************** #
-            if self.getDepth(node.ID, self.root.ID) == (MAX_DEPTH - 1):
+            if depth == (MAX_DEPTH - 1):
 
                 # pick the needed amount of terminals
                 terms: typ.List[int] = random.choices(TERMINALS[classId], k=NUM_TERMINALS[node.data])
@@ -782,8 +796,8 @@ class Tree:
                     leftID: str = self.addLeft(parentID=node.ID, data=ops.pop(0))  # add the new left node
                     rightID: str = self.addRight(parentID=node.ID, data=ops.pop(0))  # add the new right node
                 
-                    self.full(classId, leftID, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS)  # call full on left to set it's children
-                    self.full(classId, rightID, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS)  # call full on right to set it's children
+                    self.full(classId, leftID, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS, depth=depth+1)  # call full on left to set it's children
+                    self.full(classId, rightID, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS, depth=depth+1)  # call full on right to set it's children
                     return
                 
                 elif NUM_TERMINALS[node.data] == 3:  # if the number of terminals needed by node is three
@@ -793,9 +807,9 @@ class Tree:
                     rightID: str = self.addRight(parentID=node.ID, data=ops.pop(0))  # create & add the new right node to the tree
                     middleID: str = self.addMiddle(parentID=node.ID, data=ops.pop(0))  # create & add the new middle node to the tree
     
-                    self.full(classId, leftID, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS)  # call full on left to set it's children
-                    self.full(classId, rightID, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS)  # call full on right to set it's children
-                    self.full(classId, middleID, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS)  # call full on middle to set it's children
+                    self.full(classId, leftID, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS, depth=depth+1)  # call full on left to set it's children
+                    self.full(classId, rightID, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS, depth=depth+1)  # call full on right to set it's children
+                    self.full(classId, middleID, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS, depth=depth+1)  # call full on middle to set it's children
                     return
             
                 else:  # if NUM_TERMINALS was not 1 or 2

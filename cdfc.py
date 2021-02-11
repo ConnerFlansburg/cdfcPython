@@ -680,11 +680,11 @@ def createInitialPopulation() -> Population:
                 
                 if random.choice([True, False]):         # *** use grow *** #
                     # print('Grow chosen')  # ! debugging
-                    tree.grow(cid, tree.root.ID, MAX_DEPTH, TERMINALS)  # create tree using grow
+                    tree.grow(cid, tree.root.ID, MAX_DEPTH, TERMINALS, 0)  # create tree using grow
                     # print('Grow Finished')
                 else:                                    # *** use full *** #
                     # print('Full chosen')  # ! debugging
-                    tree.full(cid, tree.root.ID, MAX_DEPTH, TERMINALS)    # create tree using full
+                    tree.full(cid, tree.root.ID, MAX_DEPTH, TERMINALS, 0)    # create tree using full
                     # print('Full Finished')
     
                 cf = ConstructedFeature(cid, tree)       # create constructed feature
@@ -718,7 +718,7 @@ def createInitialPopulation() -> Population:
             bar()                                  # update progress bar
 
     pop = Population(hypothesis, 0)
-    print(pop.candidateHypotheses[2].cfList[1].tree)  # ! debugging only
+    # print(pop.candidateHypotheses[2].cfList[1].tree)  # ! debugging only
     # sanityCheckPopReference(pop)  # ! testing purposes only!
     # sanityCheckPop(hypothesis)  # ! testing purposes only!
     return pop
@@ -943,7 +943,7 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> Population:
         # *********************************************************** #
     
         # ************************* Mutate ************************* #
-        if random.choice(['OPS', 'TERM']) == 'TERM' or tree.getDepth(nodeID) == MAX_DEPTH:
+        if random.choice(['OPS', 'TERM']) == 'TERM' or tree.getDepth(nodeID, tree.root) == MAX_DEPTH:
             node.data = random.choice(terminals)  # if we are at max depth or choose TERM,
     
         else:  # if we choose to add an OP
@@ -951,9 +951,9 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> Population:
         
             # randomly decide which method to use to construct the new tree (grow or full)
             if random.choice(['Grow', 'Full']) == 'Grow':  # * Grow * #
-                tree.grow(randCF.className, nodeID, MAX_DEPTH, TERMINALS)  # tree is changed in place starting with node
+                tree.grow(randCF.className, nodeID, MAX_DEPTH, TERMINALS, 0)  # tree is changed in place starting with node
             else:                                          # * Full * #
-                tree.full(randCF.className, nodeID, MAX_DEPTH, TERMINALS)  # tree is changed in place starting with node
+                tree.full(randCF.className, nodeID, MAX_DEPTH, TERMINALS, 0)  # tree is changed in place starting with node
         # *********************************************************** #
 
         # tree.checkTree()     # ! For Testing purposes only !!
@@ -973,14 +973,14 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> Population:
         parent1, parent2 = __crossoverTournament(population)  # type: Hypothesis
 
         # !!!!! Debugging Only !!!!! #
-        parent1: Hypothesis = population.candidateHypotheses[2]
-        randIndex = 1
-        classID = parent1.cfList[1].className
+        # parent1: Hypothesis = population.candidateHypotheses[2]
+        # randIndex = 1
+        # classID = parent1.cfList[1].className
         # !!!!! Debugging Only !!!!! #
 
         # * Get CFs from the Same Class * #
-        # randIndex = random.randint(0, M-1)    # get a random index that's valid in cfList
-        # classID = random.choice(CLASS_IDS)    # choose a random class
+        randIndex = random.randint(0, M-1)    # get a random index that's valid in cfList
+        classID = random.choice(CLASS_IDS)    # choose a random class
 
         # get a the chosen random features from both parents parent
         # + Feature 1
@@ -1012,10 +1012,10 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> Population:
         # ******************************************************* #
     
         # !!!!!!!!!!!!!!!!!!! Debugging Only !!!!!!!!!!!!!!!!!!! #
-        print('Crossover Operation\nParent 1:')
-        print(parent1.cfList[1].tree)
-        print('Subtree from Parent 2:')
-        print(treeFromFeature2)
+        # print('Crossover Operation\nParent 1:')
+        # print(parent1.cfList[1].tree)
+        # print('Subtree from Parent 2:')
+        # print(treeFromFeature2)
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
         # TODO make sure we update the parents to point to new nodes
         
@@ -1033,21 +1033,23 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> Population:
 
         # ******************* Create Two New Hypotheses ******************* #
         # Get all the CFs of the old parent
-        allCFs: dict[int, list[ConstructedFeature]] = parent1.features
+        allCFs: typ.Dict[int, typ.List[ConstructedFeature]] = parent1.features
         # replace the one that changed
         allCFs[classID][randIndex] = cf1  # override the previous entry
         h1: Hypothesis = Hypothesis(size=0, fDict=deepcopy(allCFs))
+        h1.updateSize()
 
         # Get all the CFs of the old parent
-        allCFs: dict[int, list[ConstructedFeature]] = parent2.features
+        allCFs: typ.Dict[int, typ.List[ConstructedFeature]] = parent2.features
         # replace the one that changed
         allCFs[classID][randIndex] = cf2  # override the previous entry
         h2: Hypothesis = Hypothesis(size=0, fDict=deepcopy(allCFs))
+        h2.updateSize()
 
         # !!!!!!!!!!!!!!!!!!! Debugging Only !!!!!!!!!!!!!!!!!!! #
-        print('Crossover Complete\nParent 1:')
-        print(f'Parent ID of swapped Node:{p1}')
-        print(parent1.cfList[1].tree)
+        # print('Crossover Complete\nParent 1:')
+        # print(f'Parent ID of swapped Node:{p1}')
+        # print(parent1.cfList[1].tree)
         
         # global GLOBAL_COUNTER
         # GLOBAL_COUNTER = 0     # (reset counter to find if problem is in the 1st fit call after crossover)
@@ -1191,7 +1193,7 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
 
     # loop, evolving each generation. This is where most of the work is done
     
-    elites = [oldElite.fitness]  # ! debugging only!
+    # elites = [oldElite.fitness]  # ! debugging only!
     
     with alive_bar(GENERATIONS, title="Generations") as bar:  # declare your expected total
 
@@ -1203,7 +1205,7 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
             # generate a new population by evolving the old one
             currentPopulation = evolve(currentPopulation, oldElite, bar)
             
-            elites.append(currentPopulation.elite.fitness)  # ! used in debugging
+            # elites.append(currentPopulation.elite.fitness)  # ! used in debugging
 
             bar()  # update bar now that a generation is finished
 

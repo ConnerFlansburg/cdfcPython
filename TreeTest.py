@@ -8,6 +8,7 @@ from formatting import printError
 
 # TODO: test tree search methods
 # TODO: test getDepth
+# TODO: Convert to better proper test class
 
 MAX_DEPTH: int = 4
 
