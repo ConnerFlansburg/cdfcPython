@@ -6,10 +6,11 @@ import traceback
 from formatting import printError
 
 
+# TODO: test tree search methods
+# TODO: test getDepth
+
 MAX_DEPTH: int = 4
 
-# TODO: test print tree
-# TODO: write methods
 TERMINAL_NODES1: typ.List[str] = []
 TERMINAL_NODES2: typ.List[str] = []
 
@@ -245,6 +246,34 @@ def check_cross(test_tree1: Tree, test_tree2: Tree):
 # *************************************************** #
 
 
+# ******************** Get Depth ******************** #
+def test_getDepth(test_tree: Tree):
+    
+    # * Get the Node to delete
+    # Do Root, Left, Left to get the node TIMES -Left-> 12; -Right-> ADD
+    node: Node = test_tree.getLeft(test_tree.root.ID)
+    node = test_tree.getRight(node.ID)
+    
+    # print the tree before getting depth
+    print(f'Getting Depth of Node: \n{node}\n In Tree:\n{test_tree}')
+    test_tree.getNode(node.ID)  # get the depth of the Node
+
+
+def test_search(test_tree: Tree):
+    
+    # * Get the Node to delete
+    # Do Root, Left, Left to get the node TIMES -Left-> 12; -Right-> ADD
+    node: Node = test_tree.getLeft(test_tree.root.ID)
+    test_node = test_tree.getRight(node.ID)
+    
+    # print the tree before searching it
+    print(f'Searching for Node: \n{test_node}\n In Tree:\n{test_tree}')
+    # test_tree.test_search(test_node.ID)
+    depth: int = test_tree.getDepth(test_node.ID, test_node.ID, depth=0)
+    print(f'Node was found at depth {depth}')
+# *************************************************** #
+
+
 def print_init(tree: Tree):
     # printError(f'Print Init Root ID = {tree.root.ID}')
     print(tree.ID)
@@ -309,11 +338,13 @@ def test_main():
     try:
         # * Create the Test Trees * #
         test_tree1 = create_tree1()  # create tree 1
-        test_tree2 = create_tree2()  # create tree 2
+        # test_tree2 = create_tree2()  # create tree 2
 
         # check_rDelete(test_tree1)  # * Test __rDelete * #
         # check_remove_from_tree(test_tree1)  # * Test removeFromTree * #
-        check_cross(test_tree1, test_tree2)  # * Test Crossover * #
+        # check_cross(test_tree1, test_tree2)  # * Test Crossover * #
+        
+        test_search(test_tree1)  # * Test __rSearch * #
 
     except KeyError as err:
         lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error

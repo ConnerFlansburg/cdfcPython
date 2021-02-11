@@ -111,10 +111,10 @@ class Tree:
         # This should print an error if nodeID was invalid
         if node is None:
             thisNode = '\u2612'
+            isLeaf: bool = True
         else:
             thisNode: str = str(node)
-        
-        isLeaf: bool = node.isLeaf()
+            isLeaf: bool = node.isLeaf()
     
         if nodeID == self.root.ID:  # if this is the root of a tree
             print(f'{indent}{thisNode}')  # print this node
@@ -138,11 +138,11 @@ class Tree:
         children = ('left', 'middle', 'right')
     
         for child in children:
-            if child == 'left':
+            if child == 'left' and (node.left is not None):
                 self.__rPrint(node.left, indent, False)
-            elif child == 'middle':
+            elif child == 'middle' and (node.middle is not None):
                 self.__rPrint(node.middle, indent, False)
-            elif child == 'right':
+            elif child == 'right' and (node.right is not None):
                 self.__rPrint(node.right, indent, True)
         return
     
@@ -287,117 +287,24 @@ class Tree:
             return None
 
     # *** Values *** #
-    def getDepth(self, ID: str) -> int:
-        
-        try:
-            # if the node isn't in the tree at all
-            if ID not in self._nodes.keys():
-                raise NotInTreeError(ID)
-            
-            # if the root has not been set first
-            if self._root is None:
-                print('Root was not set before calling getDepth')
-                raise Exception
-            
-            # if the id is valid
-            elif self._nodes.get(ID):
-            
-                # run rSearch
-                level: int = self.__search(ID, self._root.ID, depth=0)
-                
-                # if rValue is none, then the node could not be found
-                if level is None:
-                    printError('Search returned a depth of None')
-                    raise NotInTreeError(ID)
-                elif (level == 0) and ID != self._root.ID:
-                    printError('Search returned a depth of 0 for a non-root Node')
-                    raise NotInTreeError(ID)
-                
-                # if rValue is not None, then it was found so return depth
-                else:
-                    return level
+    def getDepth(self, targetID, currentID, depth=0) -> int:
     
-            else:  # if the key is bad, raise an error
-                raise NotInTreeError(ID)
-        except NotInTreeError as err:
-            lineNm = sys.exc_info()[-1].tb_lineno       # get the line number of error
-            log.error(f'NotInTreeError encountered on line {lineNm} in Tree.py')   # log the error
-            printError(f'NotInTreeError encountered on line {lineNm} in Tree.py')  # print message
-            printError(str(err.message)+'\n')  # print the Node ID that's missing
-            printError(''.join(traceback.format_stack()))  # print stack trace
-            print(f'Tree {self.ID}')      # print the trees ID
-            print(self)                   # print the tree
-            sys.exit(-1)  # exit on error; recovery not possible
-
-    def __search(self, targetID: str, currentID: str, depth: int) -> int:
-        # if the target of the search is the root, return 0
-        if targetID == self.root.ID:
+        # * If the Current Node is Root Return Depth * #
+        if currentID == self.root.ID:
             return depth
         
-        # *** check for a bad ID *** #
-        try:
-            
-            if targetID is None:
-                printError('search target was None')
-                sys.exit(-1)
-            
-            if currentID is None:
-                printError('search was passed a None ID')
-                sys.exit(-1)
-            
-            # is the target ID in the tree?
-            if targetID not in list(self._nodes.keys()):
-                printError('target ID of search was not in the tree')
-                raise NotInTreeError(targetID)
-            
-            # if the current ID is not in the tree
-            if currentID not in [self._nodes.keys()]:
-                raise NotInTreeError(currentID)
-        
-        except NotInTreeError as err:  # catch errors that check the key is valid
-            lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
-            printError(f'NotInTreeError encountered on line {lineNm} of Tree.py')
-            if err.key == targetID:  # if the target ID threw the error
-                printError(f'Target Node with ID {targetID} could not be found in tree by search()')
-            else:                    # if the search discovered an invalid ID
-                # ! this is being reach. How?
-                printError(f'Node with ID {targetID} was encountered by search() in Tree.py, and is invalid')
-            print(self)  # print the tree
-            print('\n')
-            printError(''.join(traceback.format_stack()))  # print stack trace
-            sys.exit(-1)  # exit on error; recovery not possible
-        
-        # *** Do the Search *** #
-        # if we have reached the target node, return depth
-        if currentID == targetID:
-            return depth
-        
-        # if this is not the target depth then call search on the children
-        else:
-            depthLeft: int = 0
-            depthRight: int = 0
-            depthMiddle: int = 0
+        # * Get the Current Node * #
+        current: Node = self._nodes.get(currentID)
+        if current is None:  # if the Node could not be indexed
+            raise NotInTreeError(f'newSearch could not find Node with ID {currentID}')
 
-            if self._nodes.get(currentID) is None:
-                # if this is none then we have overshot a leaf, so just return
-                return 0
-            # if this node is not an operation, but a terminal
-            if self._nodes.get(currentID).data not in OPS:
-                #  we have reached a leaf node, so return
-                return 0
-            
-            # if this node is an operation, it will have children; search them
-            else:
-                if self._nodes.get(currentID).left:  # if there is a left, search it
-                    depthLeft: int = self.__search(targetID, self._nodes.get(currentID).left, depth+1)
-                    
-                if self._nodes.get(currentID).right:  # if there is a right, search it
-                    depthRight: int = self.__search(targetID, self._nodes.get(currentID).right, depth+1)
-                    
-                if self._nodes.get(currentID).middle:  # if there is a middle, search it
-                    depthMiddle: int = self.__search(targetID, self._nodes.get(currentID).middle, depth+1)
-        # everything but the actual depth should return 0, so add them together
-        return depthLeft + depthRight + depthMiddle
+        # * Get the Parent of the Current Node * #
+        parent = self._nodes.get(current.parent)
+        if parent is None:  # if the Node could not be indexed
+            raise NotInTreeError(f'newSearch could not find parent of Node with ID {currentID}')
+        
+        # * Step Up the Tree Increasing Depth * #
+        return self.getDepth(targetID, parent.ID, depth+1)
 
     def getBranch(self, childID: str) -> str:
         return self._nodes[childID].branch
@@ -546,66 +453,6 @@ class Tree:
     
         else:  # if the key is bad, raise an error
             raise NotInTreeError(newRootID)
-    
-    # ! this should be used in debugging only !
-    # ? is there a way to if the subtree is getting extra IDs from the original that it doesn't need?
-    def checkForMissingKeys(self, originalDict=None, subtreeDict=None):
-        keys = list(self._nodes.keys())
-        childIDs = []
-        nodeID: typ.Optional[str] = None
-        try:
-            # + if the error is thrown here than tree not every ID is a key (the nodes exist, they just can't be found)
-            for nodeID in keys:  # loop over every node id in the tree
-                # try to find every node in the tree
-                self.__search(targetID=nodeID, currentID=self.root.ID, depth=0)
-                # get the ids of all the children
-                childIDs += self._nodes[nodeID].children
-        
-        except KeyError:
-            lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
-            if nodeID:  # if for some reason we can't add to childIDs
-                printError(f'KeyError encountered line {lineNm}')
-                printError(f'Node ID {nodeID} could not be accessed while fetching children')
-            else:  # some unexpected KeyError
-                printError(f'Unpredicted KeyError thrown on line {lineNm}')
-        
-        except NotInTreeError as err:
-            lineNm = sys.exc_info()[-1].tb_lineno       # get the line number of error
-            printError(''.join(traceback.format_stack()))  # print stack trace
-            log.error(f'line = {lineNm}, {str(err)}')   # log the error
-            
-            printError(f'NotInTree error encountered on line {lineNm}, for ID {err.key}')
-            printError(f'Not every valid key is in the tree')
-            
-            # print the two dictionaries
-            if originalDict and subtreeDict:
-                print('Original Tree:')
-                pprint.pprint(list(originalDict.keys()))
-                print('Generated Subtree:')
-                pprint.pprint(list(subtreeDict.keys()))
-            
-            sys.exit(-1)  # exit on error; recovery not possible
-        
-        try:
-            # + if the error is triggered here that nodes have children that are not in the tree
-            for nodeID in childIDs:  # now loop over the collected child ids
-                self.__search(nodeID, self.root.ID, 0)  # try to find every child
-        except NotInTreeError as err:
-            lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
-            printError(''.join(traceback.format_stack()))  # print stack trace
-            log.error(f'line = {lineNm}, {str(err)}')  # log the error
-    
-            printError(f'NotInTree error encountered on line {lineNm}, for ID {err.key}')
-            printError(f'Nodes have children that are not in the tree')
-
-            # print the two dictionaries
-            if originalDict and subtreeDict:
-                print('Original Tree:')
-                pprint.pprint(list(originalDict.keys()))
-                print('Generated Subtree:')
-                pprint.pprint(list(subtreeDict.keys()))
-    
-            sys.exit(-1)  # exit on error; recovery not possible
 
     # ! call this after crossover `& use it to hut down what's causing the duplicates
     def checkForDuplicateKeys(self, otherTree: "Tree"):
@@ -820,62 +667,68 @@ class Tree:
         :type nodeID: str
         :type MAX_DEPTH: int
         """
-        
-        node: Node = self._nodes.get(nodeID)
-
-        coin = random.choice(['OP', 'TERM']) == 'TERM'  # flip a coin & decide OP or TERM
+        try:
+            node: Node = self._nodes.get(nodeID)
     
-        # *************************** A Terminal was Chosen *************************** #
-        # NOTE: check depth-1 because we will create children
-        # print(f'Grow Node ID: {node.ID}, ID Passed {nodeID}')  # ! debugging
-        if coin == 'TERM' or (self.getDepth(node.ID) == MAX_DEPTH - 1):  # if we need to add terminals
+            coin = random.choice(['OP', 'TERM']) == 'TERM'  # flip a coin & decide OP or TERM
         
-            # pick the needed amount of terminals
-            terms: typ.List[int] = random.choices(TERMINALS[classId], k=NUM_TERMINALS[node.data])
+            # *************************** A Terminal was Chosen *************************** #
+            # NOTE: check depth-1 because we will create children
+            # print(f'Grow Node ID: {node.ID}, ID Passed {nodeID}')  # ! debugging
+            if coin == 'TERM' or (self.getDepth(node.ID, self.root.ID) == MAX_DEPTH - 1):  # if we need to add terminals
+            
+                # pick the needed amount of terminals
+                terms: typ.List[int] = random.choices(TERMINALS[classId], k=NUM_TERMINALS[node.data])
+            
+                if NUM_TERMINALS[node.data] == 2:  # if the OP needs 2 children
+                    self.addLeft(parentID=node.ID, data=terms.pop(0))  # create a new left node & add it
+                    self.addRight(parentID=node.ID, data=terms.pop(0))  # create a new left node & add it
+                
+                    return
+            
+                elif NUM_TERMINALS[node.data] == 3:  # if the OP needs 3 children
+                    self.addLeft(parentID=node.ID, data=terms.pop(0))  # create a new left node & add it
+                    self.addRight(parentID=node.ID, data=terms.pop(0))  # create a new right node & add it
+                    self.addMiddle(parentID=node.ID, data=terms.pop(0))  # create a new middle node & add it
+                
+                    return
+            
+                else:  # if NUM_TERMINALS was not 2 or 3
+                    raise IndexError("Grow could not find the number of terminals need")
         
-            if NUM_TERMINALS[node.data] == 2:  # if the OP needs 2 children
-                self.addLeft(parentID=node.ID, data=terms.pop(0))  # create a new left node & add it
-                self.addRight(parentID=node.ID, data=terms.pop(0))  # create a new left node & add it
+            # *************************** A Operation was Chosen *************************** #
+            else:  # if we chose to add an operation
             
-                return
-        
-            elif NUM_TERMINALS[node.data] == 3:  # if the OP needs 3 children
-                self.addLeft(parentID=node.ID, data=terms.pop(0))  # create a new left node & add it
-                self.addRight(parentID=node.ID, data=terms.pop(0))  # create a new right node & add it
-                self.addMiddle(parentID=node.ID, data=terms.pop(0))  # create a new middle node & add it
+                if NUM_TERMINALS[node.data] == 2:  # if the number of terminals needed by node is two
+                    ops: typ.List[str] = random.choices(OPS, k=2)  # pick the needed amount of OPs
+                
+                    leftID: str = self.addLeft(parentID=node.ID, data=ops.pop(0))  # add the new left node
+                    rightID: str = self.addRight(parentID=node.ID, data=ops.pop(0))  # add the new right node
+                
+                    self.grow(classId, leftID, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS)  # call grow on left to set it's children
+                    self.grow(classId, rightID, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS)  # call grow on right to set it's children
+                    return
+                
+                elif NUM_TERMINALS[node.data] == 3:  # if the number of terminals needed by node is three
+                    ops: typ.List[str] = random.choices(OPS, k=3)  # pick the needed amount of OPs
+                
+                    left: str = self.addLeft(parentID=node.ID, data=ops.pop(0))  # create & add the new left node to the tree
+                    right: str = self.addRight(parentID=node.ID, data=ops.pop(0))  # create & add the new right node to the tree
+                    middle: str = self.addMiddle(parentID=node.ID, data=ops.pop(0))  # create & add the new middle node to the tree
+                
+                    self.grow(classId, left, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS)  # call grow on left to set it's children
+                    self.grow(classId, right, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS)  # call grow on right to set it's children
+                    self.grow(classId, middle, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS)  # call grow on middle to set it's children
+                    return
             
-                return
-        
-            else:  # if NUM_TERMINALS was not 2 or 3
-                raise IndexError("Grow could not find the number of terminals need")
-    
-        # *************************** A Operation was Chosen *************************** #
-        else:  # if we chose to add an operation
-        
-            if NUM_TERMINALS[node.data] == 2:  # if the number of terminals needed by node is two
-                ops: typ.List[str] = random.choices(OPS, k=2)  # pick the needed amount of OPs
-            
-                leftID: str = self.addLeft(parentID=node.ID, data=ops.pop(0))  # add the new left node
-                rightID: str = self.addRight(parentID=node.ID, data=ops.pop(0))  # add the new right node
-            
-                self.grow(classId, leftID, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS)  # call grow on left to set it's children
-                self.grow(classId, rightID, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS)  # call grow on right to set it's children
-                return
-            
-            elif NUM_TERMINALS[node.data] == 3:  # if the number of terminals needed by node is three
-                ops: typ.List[str] = random.choices(OPS, k=3)  # pick the needed amount of OPs
-            
-                left: str = self.addLeft(parentID=node.ID, data=ops.pop(0))  # create & add the new left node to the tree
-                right: str = self.addRight(parentID=node.ID, data=ops.pop(0))  # create & add the new right node to the tree
-                middle: str = self.addMiddle(parentID=node.ID, data=ops.pop(0))  # create & add the new middle node to the tree
-            
-                self.grow(classId, left, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS)  # call grow on left to set it's children
-                self.grow(classId, right, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS)  # call grow on right to set it's children
-                self.grow(classId, middle, MAX_DEPTH=MAX_DEPTH, TERMINALS=TERMINALS)  # call grow on middle to set it's children
-                return
-        
-            else:  # if NUM_TERMINALS was not 1 or 2
-                raise IndexError("Grow could not find the number of terminals need")
+                else:  # if NUM_TERMINALS was not 1 or 2
+                    raise IndexError("Grow could not find the number of terminals need")
+        except RecursionError as err:
+            lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+            print(f'{str(err)}, line = {lineNm}')
+            print(f'Node ID: {nodeID},\nDepth: {self.getDepth(nodeID, self.root.ID)}')
+            # self.__print_tree_simple()
+            sys.exit(-1)  # exit on error; recovery not possible
 
     def full(self, classId: int, nodeID: str, MAX_DEPTH: int, TERMINALS: typ.Dict[int, typ.List[int]]):
         """
@@ -901,7 +754,7 @@ class Tree:
             node: Node = self._nodes[nodeID]
             
             # *************************** Max Depth Reached *************************** #
-            if self.getDepth(node.ID) == (MAX_DEPTH - 1):
+            if self.getDepth(node.ID, self.root.ID) == (MAX_DEPTH - 1):
 
                 # pick the needed amount of terminals
                 terms: typ.List[int] = random.choices(TERMINALS[classId], k=NUM_TERMINALS[node.data])
@@ -950,7 +803,8 @@ class Tree:
         except RecursionError as err:
             lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
             print(f'{str(err)}, line = {lineNm}')
-            print(f'Node ID: {nodeID},\nDepth: {self.getDepth(nodeID)}')
+            print(f'Node ID: {nodeID},\nDepth: {self.getDepth(nodeID, self.root.ID)}')
+            # self.__print_tree()
             sys.exit(-1)  # exit on error; recovery not possible
 
 
