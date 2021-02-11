@@ -1080,8 +1080,8 @@ def evolve(population: Population, passedElite: Hypothesis, bar) -> Population:
         # bar()
     
         # ***************** Mutate ***************** #
-        # if probability < MUTATION_RATE:            # if probability is less than mutation rate, mutate
-        if False:  # ! debugging
+        if probability < MUTATION_RATE:            # if probability is less than mutation rate, mutate
+            # if False:  # ! debugging
             bar.text('mutating...')                # update user
             newHypoth = mutate()                   # perform mutation
             # add the new hypoth to the population
