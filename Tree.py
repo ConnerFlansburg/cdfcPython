@@ -8,8 +8,6 @@ import logging as log
 import traceback
 from formatting import printError
 import pprint
-from copy import copy as cpy
-from copy import deepcopy
 from io import StringIO
 from contextlib import redirect_stdout
 # from copy import copy as cpy
@@ -108,43 +106,46 @@ class Tree:
 
     def __rPrint(self, nodeID: str, indent: str, isLast: bool):
     
-        if nodeID is None:
-            return
-    
-        node: Node = self.getNode(nodeID)
-    
+        node: Node = self._nodes.get(nodeID)
+        
+        # This should print an error if nodeID was invalid
+        if node is None:
+            thisNode = '\u2612'
+        else:
+            thisNode: str = str(node)
+        
         isLeaf: bool = node.isLeaf()
     
         if nodeID == self.root.ID:  # if this is the root of a tree
-            print(f'{indent}{str(node)}')  # print this node
+            print(f'{indent}{thisNode}')  # print this node
             indent += "   "
             print(f"{indent}\u2503")
         elif isLast:  # if this is the last child of a node
-            print(f'{indent}\u2517\u2501{str(node)}')  # print this node
+            print(f'{indent}\u2517\u2501{thisNode}')  # print this node
             indent += "   "
             if isLeaf:  # if it is a leaf, don't print the extra bar
                 print(f"{indent}")
             else:
                 print(f"{indent}\u2503")
         else:  # if this is not the last child
-            print(f'{indent}\u2523\u2501{str(node)}')  # print this node
+            print(f'{indent}\u2523\u2501{thisNode}')  # print this node
             indent += "\u2503   "
             if isLeaf:  # if it is a leaf, don't print the extra bar
                 print(f"{indent}")
             else:
                 print(f"{indent}\u2503")
-    
+
         children = ('left', 'middle', 'right')
     
         for child in children:
-            if child == 'left' and (node.left is not None):
+            if child == 'left':
                 self.__rPrint(node.left, indent, False)
-            elif child == 'middle' and (node.left is not None):
+            elif child == 'middle':
                 self.__rPrint(node.middle, indent, False)
-            elif child == 'right' and (node.left is not None):
+            elif child == 'right':
                 self.__rPrint(node.right, indent, True)
         return
-
+    
     # *** ID *** #
     @property
     def ID(self):
@@ -444,24 +445,37 @@ class Tree:
         self.__rDelete(currentID, rootID, copy)
     
     def __rDelete(self, currentID: str, rootID: str, makeCopy: bool = False):
-        """ This can be used to delete a subtree or copy it  """
+        """
+        This will delete a subtree from the original tree
+        (storing it in copyDictionary if requested).
         
+        NOTE: __rDelete has been tested & works as expected
+        """
+        current: Node = self._nodes.get(currentID)  # get the current Node
+        
+        if current is None:  # if get failed
+            return
+        
+        # * If This is the Subtree's Root, Deal with Parents Still in Tree * #
         if currentID == rootID:  # if we are looking at the root of the subtree
-            # delete the parents reference to it
-            current: Node = self.getNode(currentID)  # get the current Node
-            parentID: str = current.parent           # get the parents ID
-            parent: Node = self.getNode(parentID)    # get the parent Node
-            branch: str = current.branch             # get what branch of parent current is on
-            
-            # set the parent's reference to the subtree root to be None
-            if branch == 'left':
-                parent.left = None
-            elif branch == 'right':
-                parent.right = None
-            elif branch == 'middle':
-                parent.middle = None
-            else:
-                raise InvalidBranchError(f'__rDelete found an invalid branch for Node ID {currentID}')
+            branch: str = current.branch  # get what branch of parent current is on
+            parentID: str = current.parent            # get the parents ID
+            parent: Node = self._nodes.get(parentID)  # get the parent Node
+
+            # if parent IS None they this is root so don't mess with parents
+            if parent is not None:
+                
+                current.branch = None  # * Root is Not on a Branch so Set to Null * #
+                
+                # * Deal with Parent's Left/Right/Middle Value * #
+                if branch == 'left':
+                    parent.left = None
+                elif branch == 'right':
+                    parent.right = None
+                elif branch == 'middle':
+                    parent.middle = None
+                else:
+                    raise InvalidBranchError(f'__rDelete found an invalid branch for Node ID {currentID}')
         
         if self._nodes.get(currentID):  # if the current node is in the tree
     
@@ -480,25 +494,12 @@ class Tree:
             # *** Copy *** #
             if makeCopy:  # if we are creating a subtree
                 # this should not raise a key error because of the earlier IF statement
-                # TODO: experiment with these 3 options & decide on one
-                # + So dictionaries copying a dictionary would require using copy, but we
-                # +     aren't copying a dictionary, but a Node. Does a Node need a copy call?
-                # +     Custom objects typically need copy calls. Deepcopy is needed for nest objects,
-                # +     so a tree would require deepcopy, but a node just needs copy?
+                # NOTE: don't use copy as that will generate new nodes & change node IDs
                 self._copyDictionary[currentID] = self._nodes[currentID]
             # *** End of Copy *** #
-    
-            # *** Delete *** #
-            # NOTE: we don't want to set the parent to point to None.
-            # This is because we want to copy their structure into subtree
-            
-            # check that children have been deleted, if not raise error
-            # if self._nodes[currentID].hasChildren:
-            #     printError('Recursive delete attempt to delete a parent who\'s children were not None')
-            #     raise Exception
-            
-            del self._nodes[currentID]  # delete the current node from the original tree
-            # *** End of Delete *** #
+
+            # *** Delete Current Node from Original Tree *** #
+            del self._nodes[currentID]
 
         # if we have hit the bottom of the tree, or node didn't have child
         elif currentID is None:
@@ -515,8 +516,8 @@ class Tree:
                 printError(''.join(traceback.format_stack()))  # print stack trace
                 sys.exit(-1)  # exit on error; recovery not possible
 
-    # ! BUG: currently the subtree this creates has a different ID than the original & the children aren't added
     def removeSubtree(self, newRootID: str) -> ("Tree", str, str):
+        # NOTE: removeSubtree has been tested & works
         
         # if the node is in the tree
         if self._nodes.get(newRootID):
@@ -529,29 +530,17 @@ class Tree:
                 printError('Parent Stored in Node was stored as None')
                 raise MissingNodeError(role='Parent', ID=newRootID)
             
-            # set the new root to be a root
-            self._nodes[newRootID].parent = None
-            self._nodes[newRootID].branch = None
+            # *** Create/Get the New Root *** #
+            rt = self._nodes[newRootID]  # get the root of the subtree
             
-            self._copyDictionary = {}                 # make sure the copy dictionary is empty
-            rt = self._nodes[newRootID]               # get the root of the subtree
+            # *** Create a Copy of the Tree Below the Root, Starting with Root *** #
+            self._copyDictionary = {}    # make sure the copy dictionary is empty
             self.__rDelete(newRootID, rootID=newRootID, makeCopy=True)  # copy the subtree & delete it from original
             
-            # set the parent to point to None, remove the now invalid id from searches
-            if orphanBranch == 'left':
-                self._nodes[parentOfSubtreeID].left = None
-            elif orphanBranch == 'right':
-                self._nodes[parentOfSubtreeID].right = None
-            elif orphanBranch == 'middle':
-                self._nodes[parentOfSubtreeID].middle = None
-            else:  # print warning, but attempt to continue
-                printError('WARNING: removeSubTree in Tree.py was given an invalid branch')
-            
-            # copyDictionary now contains the subtree, so build the new subtree using a copy
-            # of copyDictionary (we set ID to self so we can check that it isn't added back to the same tree )
-            subtree: Tree = Tree(root=rt, nodes=deepcopy(self._copyDictionary), ID=self.ID)
-            
-            self._copyDictionary = {}             # reset the value of copyDictionary
+            # *** Build a new Subtree Using the Copy *** #
+            # NOTE: we set ID to self so we can check that it isn't added back to the same tree
+            subtree: Tree = Tree(root=rt, nodes=self._copyDictionary, ID=self.ID)
+            self._copyDictionary = {}  # empty copyDictionary
 
             return subtree, parentOfSubtreeID, orphanBranch
     

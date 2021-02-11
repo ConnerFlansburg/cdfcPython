@@ -24,9 +24,9 @@ class Node:
     def __str__(self):
         # + verbose v2
         if self.hasChildren:
-            out: str = f'[{self.data} | {self._ID} | L:{self._left}, M:{self.middle}, R:{self.right} ]'
+            out: str = f'[{self.data} | {self._ID} | L:{self._left}, M:{self.middle}, R:{self.right}]'
         else:
-            out: str = f'[{self.data} | {self._ID} ]'
+            out: str = f'[{self.data} | {self._ID}]'
         # + verbose v1
         # out: str = f'[ID: {self._ID} | Data: {self.data}]'
         # + condensed

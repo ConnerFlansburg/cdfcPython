@@ -170,17 +170,42 @@ def create_tree2() -> Tree:
 
 
 # ********************* Remove ********************* #
-def remove_from_tree(test_tree: Tree, test_node: Node) -> Tree:
+def check_remove_from_tree(test_tree: Tree, test_node: Node = None) -> Tree:
     """ Removes a subtree from the passed tree & returns it """
+
+    # * Get the Root Node of the Subtree
+    if test_node is None:  # if a node was not provided use a default
+        # Do Root, Left, Left to get the node TIMES -Left-> 12; -Right-> ADD
+        test_node: Node = test_tree.getLeft(test_tree.root.ID)
+        test_node = test_tree.getRight(test_node.ID)
+    
+    # * Perform the Removal * #
     subtree: Tree
-    subtree, _, _ = test_tree.removeSubtree(test_node.ID)
-    print(f'Removed Node\'s ID: {test_node.ID}')
+    subtree, _, _ = test_tree.removeSubtree(test_node.ID)  # ! BUG: NotInTreeError thrown here (ID is None)
+    
+    # * Report the Results to the Console * #
+    print(f'Removed Node ID: {test_node.ID}')
     print('Tree after subtree removal:')
     print_init(test_tree)
     print('Subtree Removed:')
     print_init(subtree)
     
     return subtree
+
+
+def check_rDelete(test_tree: Tree):
+    # * Get the Node to delete
+    # Do Root, Left, Left to get the node TIMES -Left-> 12; -Right-> ADD
+    node: Node = test_tree.getLeft(test_tree.root.ID)
+    node = test_tree.getRight(node.ID)
+    
+    # * Preform the Recursive Delete * #
+    test_tree.testDelete(node.ID, rootID=node.ID, copy=True)
+    print(f'Tree after rDelete:\n{test_tree}')
+    
+    # * Create Subtree * #
+    subtree: Tree = Tree(root=node, nodes=test_tree.copyDictionary, ID=test_tree.ID)
+    print(f'Subtree Created:\n{subtree}')
 # *************************************************** #
 
 
@@ -201,39 +226,23 @@ def check_cross(test_tree1: Tree, test_tree2: Tree):
     # tree1_node should be ADD -Left-> 4, -Right-> 9
     parent_of_node1: Node = test_tree1.getRight(test_tree1.root.ID)  # go left
     tree1_node: Node = test_tree1.getRight(parent_of_node1.ID)       # go left
-    print(f'Tree 1, parent: {parent_of_node1}')
-    print(f'Tree 1, node 1: {tree1_node}')
+    # print(f'Tree 1, parent: {parent_of_node1}')
+    # print(f'Tree 1, node 1: {tree1_node}')
     
     # tree2_node should be TERMINAL 16
     parent_of_node2: Node = test_tree2.getLeft(test_tree2.root.ID)  # go left
     tree2_node: Node = test_tree2.getRight(parent_of_node2.ID)      # go right
-    print(f'Tree 2, parent: {parent_of_node2}')
-    print(f'Tree 2, node 2: {tree2_node}')
+    # print(f'Tree 2, parent: {parent_of_node2}')
+    # print(f'Tree 2, node 2: {tree2_node}')
     
     # * Remove two Subtrees * #
-    subtree_of_tree1: Tree = remove_from_tree(test_tree1, tree1_node)
-    subtree_of_tree2: Tree = remove_from_tree(test_tree2, tree2_node)
+    subtree_of_tree1: Tree = check_remove_from_tree(test_tree1, tree1_node)
+    subtree_of_tree2: Tree = check_remove_from_tree(test_tree2, tree2_node)
     
     # * Perform Swap * #
-    cross_tree(test_tree1, subtree_of_tree2, parent_of_node1.ID, 'left')
+    cross_tree(test_tree1, subtree_of_tree2, parent_of_node1.ID, 'right')
     cross_tree(test_tree2, subtree_of_tree1, parent_of_node2.ID, 'right')
 # *************************************************** #
-
-
-def check_rDelete(test_tree: Tree):
-    
-    # * Get the Node to delete
-    # Do Root, Left, Left to get the node TIMES -Left-> 12; -Right-> ADD
-    node: Node = test_tree.getLeft(test_tree.root.ID)
-    node = test_tree.getRight(node.ID)
-    
-    # * Preform the Recursive Delete * #
-    test_tree.testDelete(node.ID, rootID=node.ID, copy=True)
-    print(f'Tree after rDelete:\n{test_tree}')
-    
-    # * Create Subtree * #
-    subtree: Tree = Tree(root=node, nodes=test_tree.copyDictionary, ID=test_tree.ID)
-    print(f'Subtree Created:\n{subtree}')
 
 
 def print_init(tree: Tree):
@@ -303,6 +312,7 @@ def test_main():
         test_tree2 = create_tree2()  # create tree 2
 
         # check_rDelete(test_tree1)  # * Test __rDelete * #
+        # check_remove_from_tree(test_tree1)  # * Test removeFromTree * #
         check_cross(test_tree1, test_tree2)  # * Test Crossover * #
 
     except KeyError as err:
