@@ -72,9 +72,8 @@ class Tree:
     def __str__(self):
         out: str
         try:  # attempt to use better print method
-            out = f'Tree ID {self.ID}\n'
             # call recursive print starting with root
-            out += self.__print_tree()
+            out = self.__print_tree()
         # if we aren't able to use the nicer print, use simple
         except Exception as err:
             printError(f'Encountered an error while printing tree: {str(err)}')
@@ -289,16 +288,51 @@ class Tree:
             return None
 
     # *** Values *** #
-    def getDepth(self, targetID, currentID, depth=0) -> int:
+    def getDepth(self, targetID: str, currentID: str, depth=0) -> int:
     
         # * If the Current Node is Root Return Depth * #
         if currentID == self.root.ID:
             return depth
         
         # * Get the Current Node * #
-        current: Node = self._nodes.get(currentID)
-        if current is None:  # if the Node could not be indexed
-            raise NotInTreeError(f'newSearch could not find Node with ID {currentID}')
+        try:
+            if currentID is None:  # if the ID is None
+                raise AssertionError('getDepth was given a currentID of None')
+            
+            current: Node = self._nodes[currentID]  # this might raise a key error
+            
+            if current is None:  # if the Node could not be indexed
+                raise NullNodeError(currentID)
+            
+        except AssertionError:
+            lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+            msg: str = f"geDepth was passed a currentID of None: line {lineNm}"
+            log.error(msg)
+            printError(msg)
+            printError(f'ID is of Type: {type(currentID)}')
+            print(f"\n{self}")
+            printError(''.join(traceback.format_stack()))  # print stack trace
+            sys.exit(-1)  # exit on error; recovery not possible
+
+        except KeyError:
+            lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+            msg: str = f"geDepth was passed a currentID not in the Tree: line {lineNm}\nID: {currentID}"
+            log.error(msg)
+            printError(msg)
+            printError(f'ID is of Type: {type(currentID)}')
+            print(f"\n{self}")
+            printError(''.join(traceback.format_stack()))  # print stack trace
+            sys.exit(-1)  # exit on error; recovery not possible
+
+        except NotInTreeError:
+            lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+            msg: str = f'getDepth found that the Node with ID {currentID} was None: line {lineNm}'
+            log.error(msg)
+            printError(msg)
+            printError(f'ID is of Type: {type(currentID)}')
+            print(f"\n{self}")
+            printError(''.join(traceback.format_stack()))  # print stack trace
+            sys.exit(-1)  # exit on error; recovery not possible
 
         # * Get the Parent of the Current Node * #
         parent = self._nodes.get(current.parent)
@@ -340,13 +374,6 @@ class Tree:
         self._nodes[nodeID].left = None
         self._nodes[nodeID].right = None
         self._nodes[nodeID].middle = None
-
-        # !!! debugging only !!! #
-        # self.checkForDuplicateKeys(subtree)  # ! debugging
-        # print('removeChildren is checking for missing IDs...')
-        # self.checkForMissingKeys()
-        # print('No missing keys detected\n')
-        # !!! debugging only !!! #
         
         return
     
@@ -455,8 +482,17 @@ class Tree:
             return subtree, parentOfSubtreeID, orphanBranch
     
         else:  # if the key is bad, raise an error
-            raise NotInTreeError(newRootID)
-
+            try:
+                raise NotInTreeError(newRootID)
+            except NotInTreeError:
+                lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+                printError(f'NotInTreeError encountered by removeSubtree on line {lineNm} of Tree.py')
+                printError(f'Node with ID {newRootID} could not be found in tree by removeSubtree')
+                print(self)  # print the tree
+                print('\n')
+                printError(''.join(traceback.format_stack()))  # print stack trace
+                sys.exit(-1)  # exit on error; recovery not possible
+                
     # ! call this after crossover `& use it to hut down what's causing the duplicates
     def checkForDuplicateKeys(self, otherTree: "Tree"):
         """ Given two trees, check them for duplicate keys """

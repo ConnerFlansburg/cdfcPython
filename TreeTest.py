@@ -6,8 +6,7 @@ import traceback
 from formatting import printError
 
 
-# TODO: test tree search methods
-# TODO: test getDepth
+# TODO: Test removeChildren
 # TODO: Convert to better proper test class
 
 MAX_DEPTH: int = 4
@@ -24,7 +23,7 @@ def create_tree1() -> Tree:
     test_tree.ID = 'TREE_1'
 
     # * Create a New Root Node * #
-    root: Node = Node(tag='root: add', data='add')  # create a root node for the tree
+    root: Node = Node(data='add')  # create a root node for the tree
     rootID = root.ID  # get the root ID  (this will be tested later)
     
     # * Override the Old Root in the Tree * #
@@ -112,7 +111,7 @@ def create_tree2() -> Tree:
     test_tree.ID = 'TREE_2'
     
     # * Create a New Root Node * #
-    root: Node = Node(tag='root: add', data='add')  # create a root node for the tree
+    root: Node = Node(data='add')  # create a root node for the tree
     rootID = root.ID  # get the root ID  (this will be tested later)
     
     # * Override the Old Root in the Tree * #

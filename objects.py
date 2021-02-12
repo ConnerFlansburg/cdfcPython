@@ -117,3 +117,5 @@ class cdfcInstance:
     def __array__(self) -> np.array:
         """Converts an Instance to an Numpy array."""
         return np.array([float(self.className)] + self.vList)
+    
+
