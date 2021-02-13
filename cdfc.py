@@ -300,6 +300,17 @@ class Hypothesis:
     
         return strValue
     
+    def print_inside_population(self) -> str:
+        """ Used to print inside of Population """
+        strValue: str = ''
+        for k in self.features.keys():  # for each key
+            strValue += f'\tClass {k} CFs:\n'  # print the key
+        
+            for ftr in self.features[k]:  # loop over the feature list
+                strValue += f'\t\t{ftr}\n'  # convert each CF
+    
+        return strValue
+    
     def __repr__(self):
         return self.__str__()
 
@@ -696,15 +707,32 @@ class Population:
         self.elite: typ.Optional[Hypothesis] = None
 
     def __str__(self) -> str:
-        out: str = f'Population, Generation {self.generation}\n'
-        out += f'\tElite:      {self.elite.ID} | Fitness: {self.elite.fitness}\n'
-        for h in self.candidateHypotheses:
-            out += f'\tHypothesis: {h.ID} | Fitness: {h.fitness}\n'
+        # + Print Default
+        # out: str = self.__print_basic()
+        # + Print Verbose (prints Hypothesis details)
+        out: str = self.__print_verbose()
         
         return out
         
     def __repr__(self) -> str:
         return self.__str__()
+
+    def __print_verbose(self):
+        out: str = f'Population\n'
+        out += f'\tElite:      {self.elite.ID} | Fitness: {self.elite.fitness}\n'
+        for h in self.candidateHypotheses:
+            out += f'\tHypothesis: {h.ID} | Fitness: {h.fitness}\n'
+            out += f'\t{h.print_inside_population()}\n'
+    
+        return out
+    
+    def __print_basic(self):
+        out: str = f'Population\n'
+        out += f'\tElite:      {self.elite.ID} | Fitness: {self.elite.fitness}\n'
+        for h in self.candidateHypotheses:
+            out += f'\tHypothesis: {h.ID} | Fitness: {h.fitness}\n'
+    
+        return out
 
     def __tournament(self) -> Hypothesis:  # ! check for reference issues here
         """
@@ -724,6 +752,13 @@ class Population:
             randomIndex: int = random.choice(positions)  # choose a random index in p.candidateHypotheses
         
             candidate: Hypothesis = self.candidateHypotheses[randomIndex]  # get the hypothesis at the random index
+            
+            # ! Remove Elite Test ! #
+            if self.elite is not None:
+                while candidate.ID == self.elite.ID:
+                    randomIndex: int = random.choice(positions)  # get a new random index
+                    candidate: Hypothesis = self.candidateHypotheses[randomIndex]  # get another Hypoth
+            # ! ! ! ! ! ! ! ! ! ! ! #
         
             positions.remove(randomIndex)  # remove the chosen value from the list of indexes (avoids duplicates)
             fitness = candidate.fitness  # get that hypothesis's fitness score
@@ -770,6 +805,14 @@ class Population:
         
             randomIndex: int = random.choice(positions)  # choose a random index in p.candidateHypotheses
             candidate: Hypothesis = self.candidateHypotheses[randomIndex]  # get the hypothesis at the random index
+            
+            # ! Remove Elite Test ! #
+            if self.elite is not None:
+                while candidate.ID == self.elite.ID:
+                    randomIndex: int = random.choice(positions)  # get a new random index
+                    candidate: Hypothesis = self.candidateHypotheses[randomIndex]  # get another Hypoth
+            # ! ! ! ! ! ! ! ! ! ! ! #
+            
             positions.remove(randomIndex)  # remove the chosen value from the list of indexes (avoids duplicates)
             fitness = candidate.fitness  # get that hypothesis's fitness score
         
@@ -793,6 +836,14 @@ class Population:
         
             randomIndex: int = random.choice(positions)  # choose a random index in p.candidateHypotheses
             candidate: Hypothesis = self.candidateHypotheses[randomIndex]  # get the hypothesis at the random index
+            
+            # ! Remove Elite Test ! #
+            if self.elite is not None:
+                while candidate.ID == self.elite.ID:
+                    randomIndex: int = random.choice(positions)  # get a new random index
+                    candidate: Hypothesis = self.candidateHypotheses[randomIndex]  # get another Hypoth
+            # ! ! ! ! ! ! ! ! ! ! ! #
+            
             positions.remove(randomIndex)  # remove the chosen value from the list of indexes (avoids duplicates)
             fitness = candidate.fitness  # get that hypothesis's fitness score
         
@@ -1259,7 +1310,6 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
             currentPopulation.generation += 1  # update the generation number
             # !!!!!!!!!!!!!!!!!!!!!!! Debugging Only !!!!!!!!!!!!!!!!!!!!!!! #
             # check_for_cf_copies(currentPopulation)
-            print('Printing Current Population...')
             print(str(currentPopulation))
             log.debug(str(currentPopulation))
             # print('Calling CF Number Check...')
