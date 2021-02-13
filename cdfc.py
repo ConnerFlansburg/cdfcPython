@@ -304,10 +304,10 @@ class Hypothesis:
         """ Used to print inside of Population """
         strValue: str = ''
         for k in self.features.keys():  # for each key
-            strValue += f'\tClass {k} CFs:\n'  # print the key
+            strValue += f'\t\tClass {k} CFs:\n'  # print the key
         
             for ftr in self.features[k]:  # loop over the feature list
-                strValue += f'\t\t{ftr}\n'  # convert each CF
+                strValue += f'\t\t\t{ftr}\n'  # convert each CF
     
         return strValue
     
@@ -722,7 +722,7 @@ class Population:
         out += f'\tElite:      {self.elite.ID} | Fitness: {self.elite.fitness}\n'
         for h in self.candidateHypotheses:
             out += f'\tHypothesis: {h.ID} | Fitness: {h.fitness}\n'
-            out += f'\t{h.print_inside_population()}\n'
+            out += f'{h.print_inside_population()}\n'
     
         return out
     
