@@ -604,7 +604,7 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], mType: str, useNormali
 
     # TODO: change pickle name so that it won't read in "pickles" from different data sets
     # *** Open the Pickle Jar file *** #
-    pth = Path.cwd() / 'jar' / 'features'  # create the file path
+    pth = Path.cwd() / 'features'  # create the file path
     try:
 
         if os.path.isfile(str(pth)):           # if the file does exist

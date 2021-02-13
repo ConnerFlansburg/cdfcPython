@@ -539,7 +539,7 @@ class Tree:
         if self._nodes.get(newParent) is None:
             raise MissingNodeError(msg=f'addSubtree could not find it\'s new parent')
         # check that we aren't adding the subtree back onto it's original tree
-        if self.ID == subtree.ID:  # ! Some how they are being added back into their own tree
+        if self.ID == subtree.ID:
             printError(f'AddSubtree attempted to add itself back to it\'s original tree')
             raise AssertionError
         # *** End of Error Checking *** #

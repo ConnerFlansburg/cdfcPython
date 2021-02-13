@@ -45,8 +45,8 @@ CROSSOVER_RATE: typ.Final = 0.8               # CROSSOVER_RATE is the chance tha
 ELITISM_RATE: typ.Final = 1                   # ELITISM_RATE is the elitism rate
 GENERATIONS: typ.Final = 50                   # GENERATIONS is the number of generations the GP should run for
 # GENERATIONS: typ.Final = 25                    # ! value for testing/debugging to increase speed
-# MAX_DEPTH: typ.Final = 8                      # MAX_DEPTH is the max depth trees are allowed to be & is used in grow/full
-MAX_DEPTH: typ.Final = 3                      # ! value for testing/debugging to make trees more readable
+MAX_DEPTH: typ.Final = 8                      # MAX_DEPTH is the max depth trees are allowed to be & is used in grow/full
+# MAX_DEPTH: typ.Final = 3                      # ! value for testing/debugging to make trees more readable
 MUTATION_RATE: typ.Final = 0.2                # MUTATION_RATE is the chance that a candidate will be mutated
 # ! changes here must also be made in the tree object, and the grow & full functions ! #
 OPS: typ.Final = ['add', 'subtract',          # OPS is the list of valid operations on the tree
@@ -1087,11 +1087,12 @@ def check_for_cf_copies(pop: Population):
                 ids[ID] = hyp
             # if it is not None they it is a duplicate so throw an error
             else:
+                printError('Check for CF Copies Failed')
                 printError(f'Error: Duplicate Feature ID found during check, ID {ID}')
                 print(hyp)  # print this hypoth
                 print(ids.get(ID))  # print the hypoth with the duplicate
                 sys.exit(-1)
-    print('Initial Pop Check Passed!')
+    print('Check for CF Copies Passed!')
     return
 
 
@@ -1171,7 +1172,7 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
         for gen in range(GENERATIONS):  # iterate as usual
             
             currentPopulation.evolve(bar)  # * Update the Population in Place * #
-            check_for_cf_copies(currentPopulation)  # ! Debugging Only !
+            # check_for_cf_copies(currentPopulation)  # ! Debugging Only !
 
             bar()  # update bar now that a generation is finished
     # ***************************************************************** #
