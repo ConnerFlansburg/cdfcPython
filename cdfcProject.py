@@ -108,7 +108,7 @@ def parseFile(train: np.ndarray) -> typ.Dict[any, any]:
             if np.isnan(name):  # if it isn't a number
                 raise Exception(f'ERROR: Parser expected an integer, got a NaN of value:{line[0]}')
             elif not (type(name) is int):  # if it is a number, but not an integer
-                log.debug(f'Parser expected an integer class ID, got a float: {line[0]}')
+                # log.debug(f'Parser expected an integer class ID, got a float: {line[0]}')
                 name = int(name)  # caste to int
         except ValueError:  # if casting failed
             lineNm = sys.exc_info()[-1].tb_lineno  # print line number error occurred on

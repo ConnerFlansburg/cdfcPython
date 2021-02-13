@@ -9,9 +9,10 @@ Github Repo: https://github.com/brom94/cdfcPython.git
 import collections as collect
 import logging as log
 import math
+# import pprint
 import random
 import sys
-# import traceback
+import traceback
 import typing as typ
 import warnings
 from pathlib import Path
@@ -77,9 +78,10 @@ SYSOUT = sys.stdout
 # ++++++++++++++++++++++++ configurations & file paths ++++++++++++++++++++++++ #
 sys.setrecursionlimit(10000)                                  # set the recursion limit for the program
 
-np.seterr(divide='ignore')                                    # suppress divide by zero warnings from numpy
-suppressMessage = 'invalid value encountered in true_divide'  # suppress the divide by zero error from Python
-warnings.filterwarnings('ignore', message=suppressMessage)
+# np.seterr(divide='ignore')                                    # suppress divide by zero warnings from numpy
+np.seterr(all='ignore')
+# suppressMessage = 'invalid value encountered in true_divide'  # suppress the divide by zero error from Python
+# warnings.filterwarnings('ignore', message=suppressMessage)
 suppressMessage2 = 'RuntimeWarning: overflow encountered in float_power'
 warnings.filterwarnings('ignore', message=suppressMessage2)
 
@@ -153,7 +155,7 @@ class ConstructedFeature:
         Takes an instance, transforms it using the decision tree, and return the value computed.
         
         :param instance: Instance to be transformed.
-        :type instance: Instance
+        :type instance: WrapperInstance
         
         :return: The new value computed by running the tree's operations on the provided instance.
         :rtype: float
@@ -263,17 +265,43 @@ class Hypothesis:
         return self.fitness >= hyp2.fitness
     
     def __str__(self) -> str:
-        strValue: str = f'Hypothesis\n'
-        # strValue += f'\tFitness: {self.fitness}\n'    # print fitness
-        for k in self.features.keys():                # for each key
-            strValue += f'\tClass {k}:\n'             # print the key
-            for ftr in self.features[k]:              # loop over the feature list
-                strValue += f'\t\t{ftr}\n'            # convert each CF
-        strValue += f'\tCF List:\n'
-        for cf in self.cfList:  # loop over the cf list
-            strValue += f'\t\t{cf}\n'  # print the cf
+        
+        # + Default Print
+        strValue: str = self.__print_basic()
+        # + Verbose Print (includes cfList)
+        # strValue: str = self.__print_verbose()
         
         return strValue
+    
+    def __print_basic(self) -> str:
+        strValue: str = f'Hypothesis {self.ID}\n'
+        # strValue += f'\tFitness: {self.fitness}\n'    # print fitness
+        for k in self.features.keys():  # for each key
+            strValue += f'\tClass {k} CFs:\n'  # print the key
+        
+            for ftr in self.features[k]:  # loop over the feature list
+                strValue += f'\t\t{ftr}\n'  # convert each CF
+    
+        return strValue
+    
+    def __print_verbose(self) -> str:
+        strValue: str = f'Hypothesis\n'
+        # strValue += f'\tFitness: {self.fitness}\n'    # print fitness
+        for k in self.features.keys():  # for each key
+            strValue += f'\tClass {k}:\n'  # print the key
+        
+            for ftr in self.features[k]:  # loop over the feature list
+                strValue += f'\t\t{ftr}\n'  # convert each CF
+    
+        strValue += f'\tCF List:\n'
+    
+        for cf in self.cfList:  # loop over the cf list
+            strValue += f'\t\t{cf}\n'  # print the cf
+    
+        return strValue
+    
+    def __repr__(self):
+        return self.__str__()
 
     def getFeatures(self, classId: int) -> typ.Tuple[ConstructedFeature]:
         """ Gets a list of CFs for a given class"""
@@ -667,6 +695,17 @@ class Population:
         # this will store the elite
         self.elite: typ.Optional[Hypothesis] = None
 
+    def __str__(self) -> str:
+        out: str = f'Population, Generation {self.generation}\n'
+        out += f'\tElite:      {self.elite.ID} | Fitness: {self.elite.fitness}\n'
+        for h in self.candidateHypotheses:
+            out += f'\tHypothesis: {h.ID} | Fitness: {h.fitness}\n'
+        
+        return out
+        
+    def __repr__(self) -> str:
+        return self.__str__()
+
     def __tournament(self) -> Hypothesis:  # ! check for reference issues here
         """
         Used by evolution to selection the parent(s)
@@ -894,7 +933,7 @@ class Population:
         # Get the Subtree from CF2. This will be move to CF1 (nodeF2 will be root)
         treeFromFeature2, p2, branch2 = tree2.removeSubtree(nodeID_2)
         # **************************************************************************** #
-        
+
         # ************************** swap the two subtrees ************************** #
         # Add the Subtree from CF2 to the tree in CF1 (in the same location that the subtree1 was cut out)
         tree1.addSubtree(subtree=treeFromFeature2, newParent=p1, orphanBranch=branch1)
@@ -923,18 +962,20 @@ class Population:
         # If one of the changed Hypotheses has a better fitness than elite, update it
         elif better.fitness > self.elite.fitness:
             self.elite = deepcopy(better)
-        
+
         return
 
     def evolve(self, bar):
+        
+        bar.text('Starting new generation')
         
         for pop in range(POPULATION_SIZE):  # ? should this be self.hypotheses?
             
             probability = random.uniform(0, 1)  # get a random number between 0 & 1
 
             # ***************** Mutate ***************** #
-            if True:  # !! Debugging Only !!
-            # if probability < MUTATION_RATE:  # if probability is less than mutation rate, mutate
+            # if True:  # !! Debugging Only !!
+            if probability < MUTATION_RATE:  # if probability is less than mutation rate, mutate
                 bar.text('mutating...')      # update user
                 self.mutate()                # perform mutation
             # ************* End of Mutation ************* #
@@ -943,6 +984,7 @@ class Population:
                 bar.text('crossing...')      # update user
                 self.crossover()             # perform crossover operation
             # ************* End of Crossover ************* #
+        bar.text('Generation complete')
         return
     # ***************** End of Namespaces/Structs & Objects ******************* #
 
@@ -1096,6 +1138,45 @@ def check_for_cf_copies(pop: Population):
     return
 
 
+def check_CF_number(hypoths: typ.List[Hypothesis]):
+    
+    result: typ.List[bool] = []
+    badHypoths: typ.List[Hypothesis] = []
+    
+    # for each hypothesis: if the number of CFs is correct
+    # add true, otherwise add false
+    for h in hypoths:
+        # get the keys of the dictionary storing the features as a list &
+        # take the value in the first index
+        index: int = list(h.features.keys())[0]
+        # then use that index to access one of the feature lists for a class
+        if len(h.features[index]) == M:
+            result.append(True)
+        else:
+            result.append(False)
+            badHypoths.append(h)
+    
+    # if there was a Hypoth with the wrong number of CFs
+    if False in result:
+        # get the the number of times a wrong size Hypoth was found
+        occurs: int = result.count(False)
+        try:
+            raise AssertionError
+        except AssertionError:
+            msg: str = f"CF number check failed! Number of Hypotheses with incorrect size: {occurs}\n"
+            printError(msg)
+            log.error(msg)
+            print(f"M = {M}")
+            for h in badHypoths:  # print the incorrect hypoths
+                print(h)
+            
+            printError(''.join(traceback.format_stack()))  # print stack trace
+            sys.exit(-1)  # exit on error; recovery not possible
+    else:
+        print('CF number check passed!')
+        return
+
+
 def check_hypotheses(h1: Hypothesis, h2: Hypothesis):
     if h1.ID == h2.ID:
         printError("check Hypotheses found duplicates after Crossover!")
@@ -1162,8 +1243,11 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
     
     # *********************** Run the Algorithm *********************** #
     # print('creating initial pop')  # ! debugging only!
-    currentPopulation = createInitialPopulation()     # run initialPop/create the initial population
+    currentPopulation: Population = createInitialPopulation()     # run initialPop/create the initial population
+
     # check_for_cf_copies(currentPopulation)  # ! Debugging Only !
+    check_CF_number(currentPopulation.candidateHypotheses)  # ! Debugging Only !
+    
     SYSOUT.write(NO_OVERWRITE + ' Initial population generated '.ljust(50, '-') + SUCCESS)
     
     # loop, evolving each generation. This is where most of the work is done
@@ -1172,7 +1256,15 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
         for gen in range(GENERATIONS):  # iterate as usual
             
             currentPopulation.evolve(bar)  # * Update the Population in Place * #
-            # check_for_cf_copies(currentPopulation)  # ! Debugging Only !
+            currentPopulation.generation += 1  # update the generation number
+            # !!!!!!!!!!!!!!!!!!!!!!! Debugging Only !!!!!!!!!!!!!!!!!!!!!!! #
+            # check_for_cf_copies(currentPopulation)
+            print('Printing Current Population...')
+            print(str(currentPopulation))
+            log.debug(str(currentPopulation))
+            # print('Calling CF Number Check...')
+            # check_CF_number(currentPopulation.candidateHypotheses)
+            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
 
             bar()  # update bar now that a generation is finished
     # ***************************************************************** #

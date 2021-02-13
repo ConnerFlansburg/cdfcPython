@@ -34,26 +34,11 @@ class Node:
     
     def __repr__(self):
         return self.__str__()
-    
-    def __copy__(self) -> "Node":
-        """ This tells copy.copy() how a node should be copied """
-        new: Node = Node(self._data, self._tag, self._parent, self._branch,
-                         self._left, self._right, self._middle)
-        return new
         
     # *** ID *** #
     @property
     def ID(self):
         return self._ID
-
-    # *** Tag *** #
-    @property
-    def tag(self):
-        return self._tag
-
-    @tag.setter
-    def tag(self, newTag):
-        self._tag = newTag
 
     # *** Data *** #
     @property
