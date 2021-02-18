@@ -265,13 +265,17 @@ class Hypothesis:
         return self.fitness >= hyp2.fitness
     
     def __str__(self) -> str:
-        
+        # + Sparse Print
+        # strValue: str = self.__print_sparse()
         # + Default Print
         strValue: str = self.__print_basic()
         # + Verbose Print (includes cfList)
         # strValue: str = self.__print_verbose()
         
         return strValue
+    
+    def __print_sparse(self):
+        return f'Hypothesis: {self.ID} | Fitness: {self.fitness}'
     
     def __print_basic(self) -> str:
         strValue: str = f'Hypothesis {self.ID}\n'
@@ -319,10 +323,10 @@ class Hypothesis:
         return tuple(self.features[classId])
 
     @property
-    def size(self):
+    def size(self) -> int:
         return self._size
     
-    def updateSize(self):
+    def updateSize(self) -> None:
         size: int = 0
         for cf in self.cfList:
             size += cf.size
@@ -708,9 +712,9 @@ class Population:
 
     def __str__(self) -> str:
         # + Print Default
-        # out: str = self.__print_basic()
+        out: str = self.__print_basic()
         # + Print Verbose (prints Hypothesis details)
-        out: str = self.__print_verbose()
+        # out: str = self.__print_verbose()
         
         return out
         
@@ -718,7 +722,7 @@ class Population:
         return self.__str__()
 
     def __print_verbose(self):
-        out: str = f'Population\n'
+        out: str = f'Population {self.generation}\n'
         out += f'\tElite:      {self.elite.ID} | Fitness: {self.elite.fitness}\n'
         for h in self.candidateHypotheses:
             out += f'\tHypothesis: {h.ID} | Fitness: {h.fitness}\n'
@@ -869,7 +873,7 @@ class Population:
         return one, two
         # ************ End of Tournament Selection ************* #
 
-    def mutate(self):
+    def mutate(self) -> None:
         """
         Finds a random node and builds a new sub-tree starting at it. Currently mutate
         uses the same grow & full methods as the initial population generation without
@@ -922,7 +926,7 @@ class Population:
     
         return
     
-    def crossover(self):
+    def crossover(self) -> None:
         """Performs the crossover operation on two trees"""
 
         # ********** Get Two Random Hypotheses ********** #
@@ -1016,7 +1020,7 @@ class Population:
 
         return
 
-    def evolve(self, bar):
+    def evolve(self, bar) -> None:
         
         bar.text('Starting new generation')
         
@@ -1297,7 +1301,7 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
     currentPopulation: Population = createInitialPopulation()     # run initialPop/create the initial population
 
     # check_for_cf_copies(currentPopulation)  # ! Debugging Only !
-    check_CF_number(currentPopulation.candidateHypotheses)  # ! Debugging Only !
+    # check_CF_number(currentPopulation.candidateHypotheses)  # ! Debugging Only !
     
     SYSOUT.write(NO_OVERWRITE + ' Initial population generated '.ljust(50, '-') + SUCCESS)
     
