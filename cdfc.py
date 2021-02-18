@@ -724,6 +724,12 @@ class Population:
     def __print_verbose(self):
         out: str = f'Population {self.generation}\n'
         out += f'\tElite:      {self.elite.ID} | Fitness: {self.elite.fitness}\n'
+        
+        # create a line under the Elite & before the Hypotheses
+        line_length = len(out) + 4
+        out += ('\u2500' * line_length)
+        out += '\n'
+        
         for h in self.candidateHypotheses:
             out += f'\tHypothesis: {h.ID} | Fitness: {h.fitness}\n'
             out += f'{h.print_inside_population()}\n'
@@ -756,13 +762,6 @@ class Population:
             randomIndex: int = random.choice(positions)  # choose a random index in p.candidateHypotheses
         
             candidate: Hypothesis = self.candidateHypotheses[randomIndex]  # get the hypothesis at the random index
-            
-            # ! Remove Elite Test ! #
-            if self.elite is not None:
-                while candidate.ID == self.elite.ID:
-                    randomIndex: int = random.choice(positions)  # get a new random index
-                    candidate: Hypothesis = self.candidateHypotheses[randomIndex]  # get another Hypoth
-            # ! ! ! ! ! ! ! ! ! ! ! #
         
             positions.remove(randomIndex)  # remove the chosen value from the list of indexes (avoids duplicates)
             fitness = candidate.fitness  # get that hypothesis's fitness score
@@ -810,13 +809,6 @@ class Population:
             randomIndex: int = random.choice(positions)  # choose a random index in p.candidateHypotheses
             candidate: Hypothesis = self.candidateHypotheses[randomIndex]  # get the hypothesis at the random index
             
-            # ! Remove Elite Test ! #
-            if self.elite is not None:
-                while candidate.ID == self.elite.ID:
-                    randomIndex: int = random.choice(positions)  # get a new random index
-                    candidate: Hypothesis = self.candidateHypotheses[randomIndex]  # get another Hypoth
-            # ! ! ! ! ! ! ! ! ! ! ! #
-            
             positions.remove(randomIndex)  # remove the chosen value from the list of indexes (avoids duplicates)
             fitness = candidate.fitness  # get that hypothesis's fitness score
         
@@ -840,13 +832,6 @@ class Population:
         
             randomIndex: int = random.choice(positions)  # choose a random index in p.candidateHypotheses
             candidate: Hypothesis = self.candidateHypotheses[randomIndex]  # get the hypothesis at the random index
-            
-            # ! Remove Elite Test ! #
-            if self.elite is not None:
-                while candidate.ID == self.elite.ID:
-                    randomIndex: int = random.choice(positions)  # get a new random index
-                    candidate: Hypothesis = self.candidateHypotheses[randomIndex]  # get another Hypoth
-            # ! ! ! ! ! ! ! ! ! ! ! #
             
             positions.remove(randomIndex)  # remove the chosen value from the list of indexes (avoids duplicates)
             fitness = candidate.fitness  # get that hypothesis's fitness score
@@ -893,7 +878,6 @@ class Population:
         nodeID: str = randCF.tree.getRandomNode()  # get a random node ID from the CF's tree
         node: Node = tree.getNode(nodeID)          # use the ID to get the Node object
 
-        # TODO: Check remove children
         # * Remove the Children of the Node * #
         tree.removeChildren(nodeID)  # make sure the IDs of the children get deleted
         
@@ -1285,7 +1269,7 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
     DISTANCE_FUNCTION = distanceFunction
     DISTANCE_FUNCTION = ['DISTANCE_FUNCTION']
     # POPULATION_SIZE = values['POPULATION_SIZE']
-    POPULATION_SIZE = 10
+    POPULATION_SIZE = 100
     INSTANCES_NUMBER = values['INSTANCES_NUMBER']
     LABEL_NUMBER = values['LABEL_NUMBER']
     M = values['M']
