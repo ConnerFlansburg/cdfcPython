@@ -249,7 +249,7 @@ class Hypothesis:
     def __lt__(self, hyp2: "Hypothesis"):
         return self.fitness < hyp2.fitness
 
-    def __le__(self, hyp2):
+    def __le__(self, hyp2: "Hypothesis"):
         return self.fitness <= hyp2.fitness
 
     def __eq__(self, hyp2: "Hypothesis"):
@@ -737,7 +737,7 @@ class Population:
         return out
     
     def __print_basic(self):
-        out: str = f'Population\n'
+        out: str = f'Population {self.generation}\n'
         out += f'\tElite:      {self.elite.ID} | Fitness: {self.elite.fitness}\n'
         for h in self.candidateHypotheses:
             out += f'\tHypothesis: {h.ID} | Fitness: {h.fitness}\n'
@@ -1311,5 +1311,7 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
 
     bestHypothesis: Hypothesis = max(currentPopulation.candidateHypotheses)
     bestHypothesis = max([bestHypothesis, currentPopulation.elite])
+
+    log.debug(f'Hypothesis choosen as best is: \n\t{str(bestHypothesis)}')  # ! Debugging Only !
 
     return bestHypothesis  # return the best hypothesis generated
