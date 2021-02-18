@@ -742,6 +742,8 @@ def __buildModel(buckets: typ.List[typ.List[np.ndarray]], mType: str, useNormali
             SYSOUT.write(f'{mType} Accuracy is: {percentScore}%\n')
             SYSOUT.flush()
         
+        log.debug(f'Accuracy: {percentScore}%')
+        
         iteration += 1  # update iteration
     
     if not wasPickle:  # if there wasn't a saved object, save
