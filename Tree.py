@@ -155,6 +155,46 @@ class Tree:
     @ID.setter
     def ID(self, newID):
         self._ID = newID
+        
+    # TODO: check this & generateNewNodeIDs
+    def generateNewIDs(self):
+        
+        # * Update the Tree's ID
+        self._ID = str(uuid.uuid4())
+        
+        # * Update the IDs of the Nodes * #
+        self._generateNewNodeIDs(self.root.ID)
+        
+    def _generateNewNodeIDs(self, currentID: str):
+    
+        # get the node needing to be updated
+        current: Node = self._nodes.get(currentID)
+        
+        if current is None:
+            raise AssertionError
+        
+        # generate a new ID for current node
+        current.ID = str(uuid.uuid4())
+        newID: str = current.ID
+        
+        # get the children
+        left: Node = self._nodes.get(current.left)
+        middle: Node = self._nodes.get(current.middle)
+        right: Node = self._nodes.get(current.right)
+        
+        # if the child exists, update it's parent ID and
+        # call generateNewNodeID on it
+        if left:
+            left.parent = newID
+            self._generateNewNodeIDs(current.left)
+            
+        if middle:
+            middle.parent = newID
+            self._generateNewNodeIDs(current.middle)
+
+        if right:
+            right.parent = newID
+            self._generateNewNodeIDs(current.right)
 
     # *** Copy Dictionary *** #
     @property

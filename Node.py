@@ -40,6 +40,10 @@ class Node:
     def ID(self):
         return self._ID
 
+    @ID.setter
+    def ID(self, newID: str):
+        self._ID = newID
+
     # *** Data *** #
     @property
     def data(self):

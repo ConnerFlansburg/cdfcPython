@@ -10,6 +10,7 @@ import collections as collect
 import logging as log
 import math
 # import pprint
+import pprint
 import random
 import sys
 import traceback
@@ -149,6 +150,14 @@ class ConstructedFeature:
     @property
     def ID(self):
         return self._ID
+    
+    def generateNewID(self):
+        # * Update the CF's ID * #
+        self._ID = str(uuid.uuid4())
+        # * Update the Tree's IDs * #
+        self.tree.generateNewIDs()
+        
+        
 
     def transform(self, instance: Instance) -> float:
         """
@@ -245,30 +254,51 @@ class Hypothesis:
     @property
     def ID(self):
         return self._ID
+    
+    def generateNewID(self):
+        
+        # * create a new ID for the hypothesis * #
+        self._ID = str(uuid.uuid4())
+        
+        # * create a new ID for each CF * #
+        for cf in self.cfList:
+            cf.generateNewID()
 
     def __lt__(self, hyp2: "Hypothesis"):
+        if hyp2 is None:
+            printError('Comparison was passed a None Object')
         return self.fitness < hyp2.fitness
 
     def __le__(self, hyp2: "Hypothesis"):
+        if hyp2 is None:
+            printError('Comparison was passed a None Object')
         return self.fitness <= hyp2.fitness
 
     def __eq__(self, hyp2: "Hypothesis"):
+        if hyp2 is None:
+            printError('Comparison was passed a None Object')
         return self.fitness == hyp2.fitness
 
     def __ne__(self, hyp2: "Hypothesis"):
+        if hyp2 is None:
+            printError('Comparison was passed a None Object')
         return self.fitness != hyp2.fitness
 
     def __gt__(self, hyp2: "Hypothesis"):
+        if hyp2 is None:
+            printError('Comparison was passed a None Object')
         return self.fitness > hyp2.fitness
 
     def __ge__(self, hyp2: "Hypothesis"):
+        if hyp2 is None:
+            printError('Comparison was passed a None Object')
         return self.fitness >= hyp2.fitness
     
     def __str__(self) -> str:
         # + Sparse Print
-        # strValue: str = self.__print_sparse()
+        strValue: str = self.__print_sparse()
         # + Default Print
-        strValue: str = self.__print_basic()
+        # strValue: str = self.__print_basic()
         # + Verbose Print (includes cfList)
         # strValue: str = self.__print_verbose()
         
@@ -708,7 +738,19 @@ class Population:
         # this is the number of this generation
         self.generation = generationNumber
         # this will store the elite
-        self.elite: typ.Optional[Hypothesis] = None
+        self._elite: typ.Optional[Hypothesis] = None
+        # self._elite: typ.Optional[Hypothesis] = max(self.candidateHypotheses)
+
+    @property
+    def elite(self):
+        if self._elite is None:
+            # if the elite is not set, set it
+            self._elite = max(self.candidateHypotheses)
+        return self._elite
+    
+    @elite.setter
+    def elite(self, newElite: Hypothesis):
+        self._elite = newElite
 
     def __str__(self) -> str:
         # + Print Default
@@ -858,7 +900,7 @@ class Population:
         return one, two
         # ************ End of Tournament Selection ************* #
 
-    def mutate(self) -> None:
+    def mutate(self) -> Hypothesis:
         """
         Finds a random node and builds a new sub-tree starting at it. Currently mutate
         uses the same grow & full methods as the initial population generation without
@@ -899,18 +941,10 @@ class Population:
     
         # * Force an Update of the Fitness Score * #
         parent.updateFitness()
+        
+        return parent
     
-        # * Handle Elitism * #
-        # NOTE: because Hypothesis might be changed in place later, Elite must store a copy
-        if self.elite is None:
-            self.elite = deepcopy(parent)
-        # if the the new Hypothesis has a better fitness, update Elite
-        elif self.elite.fitness < parent.fitness:
-            self.elite = deepcopy(parent)
-    
-        return
-    
-    def crossover(self) -> None:
+    def crossover(self) -> typ.Tuple[Hypothesis, Hypothesis]:
         """Performs the crossover operation on two trees"""
 
         # ********** Get Two Random Hypotheses ********** #
@@ -988,41 +1022,74 @@ class Population:
         parent2.updateSize()  # force an update of size & fitness
         parent2.updateFitness()
         # **************************************************************************** #
- 
-        # * Deal with Elitism * #
-        # Figure out which of the two changed Hypotheses has a higher fitness
-        if parent1.fitness >= parent2.fitness:
-            better: Hypothesis = parent1
-        else:
-            better: Hypothesis = parent2
         
-        if self.elite is None:  # if elite hasn't been set yet, set it
-            self.elite = deepcopy(better)
-        # If one of the changed Hypotheses has a better fitness than elite, update it
-        elif better.fitness > self.elite.fitness:
-            self.elite = deepcopy(better)
-
-        return
+        return parent1, parent2
 
     def evolve(self, bar) -> None:
         
         bar.text('Starting new generation')
-        
-        for pop in range(POPULATION_SIZE):  # ? should this be self.hypotheses?
+
+        # this will hold the new hypoths that are generated
+        new_generation: typ.List[Hypothesis] = [self.elite]
+        new_generation = list(filter(None, new_generation))  # remove any Nones
+
+        # this will tell us when we need to generate new IDs
+        used_IDs: typ.List[str] = []
+
+        # + Mutate adds 1, Crossover adds 2 so the size of the list depends on which have been performed,
+        # +   so this has to be a While loop instead of a For loop
+        while len(new_generation) < POPULATION_SIZE:
             
             probability = random.uniform(0, 1)  # get a random number between 0 & 1
 
             # ***************** Mutate ***************** #
-            # if True:  # !! Debugging Only !!
-            if probability < MUTATION_RATE:  # if probability is less than mutation rate, mutate
-                bar.text('mutating...')      # update user
-                self.mutate()                # perform mutation
+            if probability < MUTATION_RATE:              # if probability is less than mutation rate, mutate
+                bar.text('mutating...')                  # update user
+                mutant: Hypothesis = self.mutate()
+                new_generation.append(mutant)     # create a new hypothesis using mutation
+
+                # Check for duplicate IDs
+                if mutant.ID in used_IDs:         # if we already have something with this ID,
+                    mutant.generateNewID()        # generate new IDs
+                else:                             # if we don't have the ID in used_IDs, add it
+                    used_IDs.append(mutant.ID)
             # ************* End of Mutation ************* #
             # **************** Crossover **************** #
-            else:                            # if probability is greater than mutation rate, use crossover
-                bar.text('crossing...')      # update user
-                self.crossover()             # perform crossover operation
+            else:                                     # if probability is greater than mutation rate, use crossover
+                bar.text('crossing...')               # update user
+                new: typ.Tuple[Hypothesis, Hypothesis]
+                new = self.crossover()                # perform crossover operation
+                child_one: Hypothesis = new[0]
+                child_two: Hypothesis = new[1]
+                new_generation.append(child_one)      # add the new two new hypotheses
+                new_generation.append(child_two)      # to the next generation
+                
+                # Check for duplicate IDs
+                if child_one.ID in used_IDs:         # if we already have something with this ID,
+                    child_one.generateNewID()        # generate new IDs
+                else:                                # if we don't have the ID in used_IDs, add it
+                    used_IDs.append(child_one.ID)
+
+                # Check for duplicate IDs
+                if child_two.ID in used_IDs:         # if we already have something with this ID,
+                    child_two.generateNewID()        # generate new IDs
+                else:                                # if we don't have the ID in used_IDs, add it
+                    used_IDs.append(child_two.ID)
             # ************* End of Crossover ************* #
+
+        # !!! Debugging !!! #
+        # new_generation = list(filter(None, new_generation))  # remove any Nones
+        # if len(new_generation) < POPULATION_SIZE:
+        #     printError('New generation was created with a None, removing it makes it too short')
+        #     sys.exit(-1)
+
+        # ************ Handle Elitism ************ #
+        self.elite = max(new_generation, key=lambda hyp: hyp.fitness)
+
+        # * Update the List of Candidates to the New Generation * #
+        self.candidateHypotheses = new_generation  # change the list
+        self.generation += 1                       # update the generation number
+        
         bar.text('Generation complete')
         return
     # ***************** End of Namespaces/Structs & Objects ******************* #
@@ -1091,17 +1158,14 @@ def createInitialPopulation() -> Population:
 
     hypothesis: typ.List[Hypothesis] = []
 
-    # print(f'Class IDs: {CLASS_IDS}')  # ! debugging
     with alive_bar(POPULATION_SIZE, title="Initial Population") as bar:  # declare your expected total
         # creat a number hypotheses equal to pop size
         for p in range(POPULATION_SIZE):           # iterate as usual
             hypothesis.append(createHypothesis())  # create & add the new hypothesis to the list
             bar()                                  # update progress bar
 
+    # print('Finding Elite...')
     pop = Population(hypothesis, 0)
-    # print(pop.candidateHypotheses[2].cfList[1].tree)  # ! debugging only
-    # sanityCheckPopReference(pop)  # ! testing purposes only!
-    # sanityCheckPop(hypothesis)  # ! testing purposes only!
     return pop
 
 
@@ -1269,7 +1333,7 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
     DISTANCE_FUNCTION = distanceFunction
     DISTANCE_FUNCTION = ['DISTANCE_FUNCTION']
     # POPULATION_SIZE = values['POPULATION_SIZE']
-    POPULATION_SIZE = 100
+    POPULATION_SIZE = 10  # ! This is for Testing Only. Change back when running "in production"
     INSTANCES_NUMBER = values['INSTANCES_NUMBER']
     LABEL_NUMBER = values['LABEL_NUMBER']
     M = values['M']
@@ -1295,7 +1359,6 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
         for gen in range(GENERATIONS):  # iterate as usual
             
             currentPopulation.evolve(bar)  # * Update the Population in Place * #
-            currentPopulation.generation += 1  # update the generation number
             # !!!!!!!!!!!!!!!!!!!!!!! Debugging Only !!!!!!!!!!!!!!!!!!!!!!! #
             # check_for_cf_copies(currentPopulation)
             print(str(currentPopulation))
