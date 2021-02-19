@@ -1,3 +1,5 @@
+import pprint
+
 from Tree import Tree, NotInTreeError
 from Node import Node
 import sys
@@ -333,19 +335,35 @@ def print_tree(tree: Tree, nodeID: str, indent: str, isLast: bool):
     return
 
 
+def test_id_gen(test_tree1: Tree):
+
+    print(f'Old Root: {test_tree1.root}')
+    print(f'Old IDs for Tree {test_tree1.ID}:')
+    IDs = list(test_tree1._nodes.keys())
+    pprint.pprint(IDs)
+    print('\n')
+    test_tree1.generateNewIDs()
+    print('\n')
+    print(f'New Root: {test_tree1.root}')
+    print(f'New IDs for Tree {test_tree1.ID}:')
+    IDs = list(test_tree1._nodes.keys())
+    pprint.pprint(IDs)
+
+
 def test_main():
 
     try:
         # * Create the Test Trees * #
         test_tree1 = create_tree1()  # create tree 1
-        # test_tree2 = create_tree2()  # create tree 2
+        test_tree2 = create_tree2()  # create tree 2
 
         # check_rDelete(test_tree1)  # * Test __rDelete * #
         # check_remove_from_tree(test_tree1)  # * Test removeFromTree * #
         # check_cross(test_tree1, test_tree2)  # * Test Crossover * #
         
-        test_search(test_tree1)  # * Test __rSearch * #
-
+        # test_search(test_tree1)  # * Test __rSearch * #
+        test_id_gen(test_tree1)
+        
     except KeyError as err:
         lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
         message: str = ''.join(traceback.format_stack())  # traceback to message

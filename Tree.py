@@ -38,10 +38,9 @@ class Tree:
         self._nodes: typ.Dict[str, Node] = nodes
         
         # * Set the Root Node * #
-        if root is None:  # create a root if none was provided
-            self.__addRoot()
-        else:
+        if root is not None:  # create a root if none was provided
             self._root = root
+            self._root.isRoot = True
         
         # the values below are used by methods & should not be set
         # this dictionary is used when copying a subtree 8 should never be used elsewhere
@@ -155,8 +154,7 @@ class Tree:
     @ID.setter
     def ID(self, newID):
         self._ID = newID
-        
-    # TODO: check this & generateNewNodeIDs
+
     def generateNewIDs(self):
         
         # * Update the Tree's ID
@@ -165,19 +163,64 @@ class Tree:
         # * Update the IDs of the Nodes * #
         self._generateNewNodeIDs(self.root.ID)
         
+        try:
+            # if the Root ID is still in the tree
+            if self.root.ID in self._nodes.keys():
+                return
+            else:
+                raise ValueError
+        except ValueError:
+            printError('Error: GenerateNewIDs corrupted root')
+            log.error('Error: GenerateNewIDs corrupted root')
+            printError(''.join(traceback.format_stack()))  # print stack trace
+            log.error(''.join(traceback.format_stack()))
+            print(f'Root Node: {self.root}')
+            log.error(f'Root Node: {self.root}')
+            print('Tree:')
+            log.error('Tree:')
+            print(self.__print_tree_simple())  # print tree
+            log.error(self.__print_tree_simple())
+            sys.exit(-1)
+        
     def _generateNewNodeIDs(self, currentID: str):
     
-        # get the node needing to be updated
+        # * get the node needing to be updated * #
         current: Node = self._nodes.get(currentID)
         
-        if current is None:
+        if current is None:  # if the Node is not in the tree
             raise AssertionError
         
-        # generate a new ID for current node
+        if current.ID != currentID:
+            raise AssertionError
+
+        # * generate a new ID for current node * #
         current.ID = str(uuid.uuid4())
         newID: str = current.ID
+        oldID: str = currentID
         
-        # get the children
+        # * Update the Dictionary so the Node is keyed by the new ID value * #
+        self._nodes.pop(oldID)  # remove the old entry
+        # add the Node back into the tree using the new ID
+        self._nodes[newID] = current
+
+        # * Update the Parent to Point to the New Node ID * #
+        if current.parent:  # if there is a parent, update it's child ID
+            
+            parent: Node = self._nodes.get(current.parent)  # get the parent
+            if parent is None:  # if the parent could not be found, raise error
+                raise AssertionError
+            
+            # use branch to determine which field the ID should be added to
+            if current.branch == 'left':
+                parent.left = newID
+                
+            if current.branch == 'right':
+                parent.right = newID
+                
+            if current.branch == 'middle':
+                parent.middle = newID
+            
+        # * get the children * #
         left: Node = self._nodes.get(current.left)
         middle: Node = self._nodes.get(current.middle)
         right: Node = self._nodes.get(current.right)
@@ -210,22 +253,36 @@ class Tree:
         return self._root
 
     @root.setter
-    def root(self, newRoot):
+    def root(self, newRoot: Node):
+        
+        if self._root:  # if there is an old root
+            del self._nodes[self._root.ID]  # remove the old root
+        
+        # set the Root parameter
         self._root = newRoot
+        # update the dictionary
+        self._nodes[newRoot.ID] = newRoot
+        # inform the Node that it is Root
+        self._root.isRoot = True
     
-    def __addRoot(self) -> str:
+    def addRoot(self) -> str:
         """Adds a root node to the tree"""
         op = random.choice(OPS)
         new: Node = Node(data=op)  # create a root node for the tree
-        self._nodes[new.ID] = new                     # add to the node dictionary
-        self._root = new                              # set the root
+        
+        self._nodes[new.ID] = new  # add to the node dictionary
+        
+        self._root = new           # set the root
+        self._root.isRoot = True
+        # print(new)
         return self._root.ID
     
     def overrideRoot(self, new_root: Node):
         """ This should only be used to test the Tree object """
         self._nodes[new_root.ID] = new_root  # add the new root to dict
         self._root = new_root                # update the root property
-    
+        self._root.isRoot = True             # tell the Node it is Root
+
     # *** Size *** #
     @property
     def size(self):
@@ -388,8 +445,15 @@ class Tree:
     # *** Operations *** #
     def getRandomNode(self) -> str:
         """ Get a random node from the tree (leaves are allowed)"""
-        options: typ.List[str] = list(self._nodes.keys())
-        options.remove(self._root.ID)
+        try:
+            options: typ.List[str] = list(self._nodes.keys())
+            options.remove(self._root.ID)
+        except ValueError as err:
+            lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
+            printError(f'GetRandomNode encountered an error on line {lineNm}: {str(err)}')
+            printError(''.join(traceback.format_stack()))  # print stack trace
+            print(self.__print_tree_simple())  # print tree
+            sys.exit(-1)
         
         return random.choice(options)
     
@@ -480,7 +544,7 @@ class Tree:
             return
         else:  # if the node is not in the tree, raise an error
             try:
-                raise NotInTreeError(currentID)  # BUG: this is getting raised
+                raise NotInTreeError(currentID)
             except NotInTreeError:
                 lineNm = sys.exc_info()[-1].tb_lineno  # get the line number of error
                 printError(f'NotInTreeError encountered on line {lineNm} of Tree.py')
@@ -532,12 +596,10 @@ class Tree:
                 print('\n')
                 printError(''.join(traceback.format_stack()))  # print stack trace
                 sys.exit(-1)  # exit on error; recovery not possible
-                
-    # ! call this after crossover `& use it to hut down what's causing the duplicates
+
     def checkForDuplicateKeys(self, otherTree: "Tree"):
         """ Given two trees, check them for duplicate keys """
 
-        # ! duplicate nodes are being found after initial pop generation
         # check that there aren't any duplicate keys
         duplicates = []
         for key1 in otherTree._nodes.keys():  # for every key in subtree,
@@ -600,6 +662,7 @@ class Tree:
         # set the subtree's branch
         subtree._root.branch = orphanBranch
         
+        subtree._root.isRoot = False  # this is no longer a root Node
         # check for duplicate nodes
         # self.checkForDuplicateKeys(subtree)
         
@@ -746,11 +809,13 @@ class Tree:
         NOTE:
         During testing whatever calls grow should use the sanity check sanityCheckTree(newTree)
 
+        :param depth: Used internally for recursion, should be passed as 0
         :param classId: ID of the class that the tree should identify.
         :param nodeID: The root node of the subtree __grow will create.
         :param MAX_DEPTH: Max tree depth allowed
         :param TERMINALS: Terminals for the class
 
+        :type depth: int
         :type classId: int
         :type nodeID: str
         :type MAX_DEPTH: int

@@ -29,6 +29,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeClassifier
 from tqdm import tqdm
+from tee import StdoutTee  # used to print console to file & console
 
 from cdfc import cdfc
 from formatting import *
@@ -46,6 +47,7 @@ SEED = 498
 # ********************************************* Constants used by Logger ********************************************* #
 # create the file path for the log file & configure the logger
 logPath = str(Path.cwd() / 'logs' / 'cdfc.log')
+log.basicConfig(level=log.DEBUG, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
 # log.basicConfig(level=log.ERROR, filename=logPath, filemode='w', format='%(levelname)s - %(lineno)d: %(message)s')
 # ******************************************** Constants used for Writing ******************************************** #
 HDR = '*' * 6
@@ -939,6 +941,6 @@ def run(fnc: str, mdl: str) -> None:
 if __name__ == "__main__":
     
     start = time.time()        # get the start time
-    run("cosine", 'KNN')    # run CDFC
+    run("cosine", 'KNN')       # run CDFC
     end = time.time() - start  # get the elapsed
     print(f'Elapsed Time: {time.strftime("%H:%M:%S", time.gmtime(end))}')  # print the elapsed time

@@ -7,6 +7,7 @@ Github Repo: https://github.com/brom94/cdfcPython.git
 """
 
 import collections as collect
+import copy
 import logging as log
 import math
 # import pprint
@@ -29,7 +30,7 @@ from Tree import Tree
 from Node import Node
 from objects import cdfcInstance as Instance
 import uuid
-from copy import deepcopy
+# from copy import deepcopy
 
 # ! Next Steps
 # TODO fix accuracy issue
@@ -156,8 +157,6 @@ class ConstructedFeature:
         self._ID = str(uuid.uuid4())
         # * Update the Tree's IDs * #
         self.tree.generateNewIDs()
-        
-        
 
     def transform(self, instance: Instance) -> float:
         """
@@ -259,7 +258,6 @@ class Hypothesis:
         
         # * create a new ID for the hypothesis * #
         self._ID = str(uuid.uuid4())
-        
         # * create a new ID for each CF * #
         for cf in self.cfList:
             cf.generateNewID()
@@ -740,6 +738,14 @@ class Population:
         # this will store the elite
         self._elite: typ.Optional[Hypothesis] = None
         # self._elite: typ.Optional[Hypothesis] = max(self.candidateHypotheses)
+        self._IDs = None
+        
+        self.HypothDictionary = {hyp.ID: hyp for hyp in self.candidateHypotheses}
+        
+    @property
+    def IDs(self):
+        """ Get the list of Hypothesis IDs in the Population """
+        return [hyp.ID for hyp in self.candidateHypotheses]
 
     @property
     def elite(self):
@@ -786,7 +792,7 @@ class Population:
     
         return out
 
-    def __tournament(self) -> Hypothesis:  # ! check for reference issues here
+    def __tournament(self) -> Hypothesis:
         """
         Used by evolution to selection the parent(s)
 
@@ -799,8 +805,11 @@ class Population:
         positions: typ.List[int] = list(range(len(self.candidateHypotheses)))
         first: typ.Optional[Hypothesis] = None  # the tournament winner
         score = 0  # the winning score
-        for i in range(TOURNEY):  # compare TOURNEY number of random hypothesis
         
+        iterations = 0  # ! debugging only !
+        
+        for i in range(TOURNEY):  # compare TOURNEY number of random hypothesis
+            iterations += 1
             randomIndex: int = random.choice(positions)  # choose a random index in p.candidateHypotheses
         
             candidate: Hypothesis = self.candidateHypotheses[randomIndex]  # get the hypothesis at the random index
@@ -814,7 +823,10 @@ class Population:
             elif score < fitness:  # if first is set, but knight is more fit,
                 first = candidate  # then update it,
                 score = fitness  # update the score to higher fitness,
-    
+        
+        print(f'Tourney looped {iterations} times')   # ! debugging only !
+        print(f'After tournament Pop:\n{self}')   # ! debugging only !
+        
         try:
             if first is None:
                 raise Exception(f'ERROR: Tournament could not set first correctly, first = {first}')
@@ -910,6 +922,7 @@ class Population:
     
         # * Get a Random Hypothesis using Tournament * #
         parent: Hypothesis = self.__tournament()
+        log.debug(f'Tournament gave mutation Hypothesis {parent.ID}')  # ! Debugging Only !
         
         # * From the Hypothesis, Get a Random CF * #
         randIndex: int = random.randint(0, M - 1)  # get a random index that's valid in cfList
@@ -941,6 +954,8 @@ class Population:
     
         # * Force an Update of the Fitness Score * #
         parent.updateFitness()
+        
+        print('Mutation Complete')
         
         return parent
     
@@ -977,6 +992,13 @@ class Population:
                 raise AssertionError('In crossover, Tree1 is Tree2')
         except AssertionError as err:
             printError(str(err))
+            log.error(err)
+            log.error(f'Parent 1 ID: {parent1.ID}')
+            log.error(f'Parent 2 ID: {parent2.ID}')
+            log.error(f'Feature 1: {feature1}')
+            log.error(f'Feature 2: {feature2}')
+            log.error(f'Tree 1:\n{tree1}')
+            log.error(f'Tree 2:\n{tree2}')
             print(f'Parent 1 ID: {parent1.ID}')
             print(f'Parent 2 ID: {parent2.ID}')
             print(f'Feature 1: {feature1}')
@@ -1032,27 +1054,44 @@ class Population:
         # this will hold the new hypoths that are generated
         new_generation: typ.List[Hypothesis] = [self.elite]
         new_generation = list(filter(None, new_generation))  # remove any Nones
+        
+        print('New Generation Initialized as:')  # ! Debugging Only !
+        pprint.pprint(new_generation)  # ! Debugging Only !
+        log.debug(f'New Generation Initialized as:\n\t{pprint.pformat(new_generation, indent=1)}')  # ! Debugging Only !
 
         # this will tell us when we need to generate new IDs
-        used_IDs: typ.List[str] = []
+        used_IDs: typ.List[str] = [self.elite.ID]
+        used_IDs = list(filter(None, used_IDs))  # remove any Nones
 
         # + Mutate adds 1, Crossover adds 2 so the size of the list depends on which have been performed,
         # +   so this has to be a While loop instead of a For loop
-        while len(new_generation) < POPULATION_SIZE:
+        while len(new_generation) <= POPULATION_SIZE:
             
             probability = random.uniform(0, 1)  # get a random number between 0 & 1
 
             # ***************** Mutate ***************** #
-            if probability < MUTATION_RATE:              # if probability is less than mutation rate, mutate
+            if True:
+            # if probability < MUTATION_RATE:              # if probability is less than mutation rate, mutate
                 bar.text('mutating...')                  # update user
+            
+                # !!!!!!!!!!!!!!!!!!!!!!!!!!!! ERROR !!!!!!!!!!!!!!!!!!!!!!!!! #
+                # ! The problem is that mutant is a reference, so whenever   ! #
+                # ! it's changed, all the things that refer to it change to. ! #
+                # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
+            
                 mutant: Hypothesis = self.mutate()
-                new_generation.append(mutant)     # create a new hypothesis using mutation
-
+                log.debug(f'Hypothesis Mutated: {mutant.ID}')  # ! Debugging Only !
+                
                 # Check for duplicate IDs
                 if mutant.ID in used_IDs:         # if we already have something with this ID,
+                    log.debug(f'Generate New IDs called on Hypothesis {mutant.ID}')  # ! Debugging Only !
                     mutant.generateNewID()        # generate new IDs
                 else:                             # if we don't have the ID in used_IDs, add it
                     used_IDs.append(mutant.ID)
+
+                new_generation.append(mutant)  # create a new hypothesis using mutation
+                log.debug(f'New Generation After Appending Mutant:\n\t{pprint.pformat(new_generation)}')  # ! Debugging Only !
+                log.debug(f'Used IDs:\n\t{pprint.pformat(used_IDs)}\n')  # ! Debugging Only !
             # ************* End of Mutation ************* #
             # **************** Crossover **************** #
             else:                                     # if probability is greater than mutation rate, use crossover
@@ -1066,12 +1105,14 @@ class Population:
                 
                 # Check for duplicate IDs
                 if child_one.ID in used_IDs:         # if we already have something with this ID,
+                    log.debug(f'Generate New IDs called on Hypothesis {child_one.ID}')
                     child_one.generateNewID()        # generate new IDs
                 else:                                # if we don't have the ID in used_IDs, add it
                     used_IDs.append(child_one.ID)
 
                 # Check for duplicate IDs
                 if child_two.ID in used_IDs:         # if we already have something with this ID,
+                    log.debug(f'Generate New IDs called on Hypothesis {child_two.ID}')
                     child_two.generateNewID()        # generate new IDs
                 else:                                # if we don't have the ID in used_IDs, add it
                     used_IDs.append(child_two.ID)
@@ -1083,10 +1124,15 @@ class Population:
         #     printError('New generation was created with a None, removing it makes it too short')
         #     sys.exit(-1)
 
+        print('New Generation Finalized as:')  # ! Debugging Only !
+        pprint.pprint(new_generation)          # ! Debugging Only !
+        log.debug(f'New Generation Finalized as:\n\t{pprint.pformat(new_generation, indent=1)}')  # ! Debugging Only !
+
         # ************ Handle Elitism ************ #
         self.elite = max(new_generation, key=lambda hyp: hyp.fitness)
 
         # * Update the List of Candidates to the New Generation * #
+        # ! This is the only place that this is set outside of init
         self.candidateHypotheses = new_generation  # change the list
         self.generation += 1                       # update the generation number
         
@@ -1125,6 +1171,7 @@ def createInitialPopulation() -> Population:
             for k in range(M):  # loop M times so M CFs are created
                 
                 tree = Tree()   # create an empty tree
+                tree.addRoot()
                 
                 if random.choice([True, False]):         # *** use grow *** #
                     # print('Grow chosen')  # ! debugging
@@ -1164,8 +1211,9 @@ def createInitialPopulation() -> Population:
             hypothesis.append(createHypothesis())  # create & add the new hypothesis to the list
             bar()                                  # update progress bar
 
-    # print('Finding Elite...')
     pop = Population(hypothesis, 0)
+    print(pop)  # ! Debugging Only !
+    log.debug(f'{pop}\n')  # ! Debugging Only !
     return pop
 
 

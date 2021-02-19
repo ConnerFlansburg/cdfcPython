@@ -18,14 +18,19 @@ class Node:
         self._right: typ.Optional[str] = right     # the id string of right child
         self._middle: typ.Optional[str] = middle   # the id string of middle child
         
+        if parent:
+            self._isRoot: bool = False  # is this Node a root node?
+        else:
+            self._isRoot: bool = True
+        
         return
     
     def __str__(self):
         # + verbose v2
         if self.hasChildren:
-            out: str = f'[{self.data} | {self._ID} | L:{self._left}, M:{self.middle}, R:{self.right}]'
+            out: str = f'[{self.data} | {self._ID} | {self.isRoot} | L:{self._left}, M:{self.middle}, R:{self.right}]'
         else:
-            out: str = f'[{self.data} | {self._ID}]'
+            out: str = f'[{self.data} | {self.isRoot} | {self._ID}]'
         # + verbose v1
         # out: str = f'[ID: {self._ID} | Data: {self.data}]'
         # + condensed
@@ -34,7 +39,16 @@ class Node:
     
     def __repr__(self):
         return self.__str__()
-        
+    
+    # *** Root *** #
+    @property
+    def isRoot(self):
+        return self._isRoot
+
+    @isRoot.setter
+    def isRoot(self, newValue: bool):
+        self._isRoot = newValue
+    
     # *** ID *** #
     @property
     def ID(self):
@@ -120,12 +134,6 @@ class Node:
             return False
 
     # *** Methods *** #
-    def isRoot(self):
-        if self._parent is None:
-            return True
-        else:
-            return False
-    
     def isLeaf(self):
         if self.hasChildren is False:
             return True
