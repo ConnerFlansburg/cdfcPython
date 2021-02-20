@@ -1407,8 +1407,8 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
     CLASS_IDS = values['CLASS_IDS']
     DISTANCE_FUNCTION = distanceFunction
     DISTANCE_FUNCTION = ['DISTANCE_FUNCTION']
-    POPULATION_SIZE = values['POPULATION_SIZE']
-    # POPULATION_SIZE = 10  # ! This is for Testing Only. Change back when running "in production"
+    # POPULATION_SIZE = values['POPULATION_SIZE']
+    POPULATION_SIZE = 100  # ! This is for Testing Only. Change back when running "in production"
     INSTANCES_NUMBER = values['INSTANCES_NUMBER']
     LABEL_NUMBER = values['LABEL_NUMBER']
     M = values['M']

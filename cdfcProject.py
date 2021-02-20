@@ -29,7 +29,6 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeClassifier
 from tqdm import tqdm
-from tee import StdoutTee  # used to print console to file & console
 
 from cdfc import cdfc
 from formatting import *
