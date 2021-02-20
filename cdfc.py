@@ -10,10 +10,8 @@ import collections as collect
 import copy
 import logging as log
 import math
-# import pprint
 import pprint
 import random
-import sys
 import traceback
 import typing as typ
 import warnings
@@ -22,15 +20,13 @@ import Distances as Dst
 import numpy as np
 from alive_progress import alive_bar, config_handler
 from decimal import Decimal
-# from pyitlib import discrete_random_variable as drv
-# import pprint
 from formatting import printError
 from _collections import defaultdict
 from Tree import Tree
 from Node import Node
 from objects import cdfcInstance as Instance
 import uuid
-# from copy import deepcopy
+import sys
 
 # ! Next Steps
 # TODO fix accuracy issue
@@ -740,8 +736,6 @@ class Population:
         # self._elite: typ.Optional[Hypothesis] = max(self.candidateHypotheses)
         self._IDs = None
         
-        self.HypothDictionary = {hyp.ID: hyp for hyp in self.candidateHypotheses}
-        
     @property
     def IDs(self):
         """ Get the list of Hypothesis IDs in the Population """
@@ -792,260 +786,15 @@ class Population:
     
         return out
 
-    def __tournament(self) -> Hypothesis:
-        """
-        Used by evolution to selection the parent(s)
-
-        :return: The best hypothesis that tournament found.
-        :rtype: Hypothesis
-        """
-    
-        # **************** Tournament Selection **************** #
-        # get a list including every valid index in candidateHypotheses
-        positions: typ.List[int] = list(range(len(self.candidateHypotheses)))
-        first: typ.Optional[Hypothesis] = None  # the tournament winner
-        score = 0  # the winning score
+    def find_hypothesis(self, target_ID: str) -> Hypothesis:
         
-        iterations = 0  # ! debugging only !
-        
-        for i in range(TOURNEY):  # compare TOURNEY number of random hypothesis
-            iterations += 1
-            randomIndex: int = random.choice(positions)  # choose a random index in p.candidateHypotheses
-        
-            candidate: Hypothesis = self.candidateHypotheses[randomIndex]  # get the hypothesis at the random index
-        
-            positions.remove(randomIndex)  # remove the chosen value from the list of indexes (avoids duplicates)
-            fitness = candidate.fitness  # get that hypothesis's fitness score
-        
-            if first is None:  # if first has not been set,
-                first = candidate  # then  set it
-        
-            elif score < fitness:  # if first is set, but knight is more fit,
-                first = candidate  # then update it,
-                score = fitness  # update the score to higher fitness,
-        
-        print(f'Tourney looped {iterations} times')   # ! debugging only !
-        print(f'After tournament Pop:\n{self}')   # ! debugging only !
-        
-        try:
-            if first is None:
-                raise Exception(f'ERROR: Tournament could not set first correctly, first = {first}')
-        except Exception as err2:
-            lineNm2 = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-            log.error(f'Tournament could not set first correctly, first = {first}, line number = {lineNm2}')
-            print(f'{str(err2)}, line = {lineNm2}')
-            sys.exit(-1)  # exit on error; recovery not possible
-    
-        # log.debug('Finished Tournament method')
-    
-        # print('Tournament Finished')  # ! for debugging only!
-    
-        return first
-        # ************ End of Tournament Selection ************* #
-
-    def __crossoverTournament(self) -> typ.Tuple[Hypothesis, Hypothesis]:
-        """
-        Used by crossover to selection the parents. It differs from the normal tournament
-        because it will return two unique hypotheses.
-
-        :return: Two hypothesis that tournament found.
-        :rtype: typ.Tuple[Hypothesis, Hypothesis]
-        """
-    
-        # **************** Tournament Selection **************** #
-        # get a list including every valid index in candidateHypotheses
-        positions: typ.List[int] = list(range(len(self.candidateHypotheses)))
-        first = None  # the tournament winner
-        firstIndex = None  # the index of the winner
-        score = 0  # the winning score
-        for i in range(TOURNEY):  # compare TOURNEY number of random hypothesis
-        
-            randomIndex: int = random.choice(positions)  # choose a random index in p.candidateHypotheses
-            candidate: Hypothesis = self.candidateHypotheses[randomIndex]  # get the hypothesis at the random index
-            
-            positions.remove(randomIndex)  # remove the chosen value from the list of indexes (avoids duplicates)
-            fitness = candidate.fitness  # get that hypothesis's fitness score
-        
-            if (first is None) or (score < fitness):  # if first has not been set, or candidate if more fit
-                first = candidate  # then update it
-                score = fitness  # then update the score to higher fitness
-                firstIndex = randomIndex  # finally update the index of the winner
-    
-        positions = list(range(len(self.candidateHypotheses)))
-        try:
-            positions.remove(firstIndex)  # remove the last winner from consideration
-        except ValueError as err:
-            print(str(err))
-            print(f'index is {firstIndex}\nlist of positions is {positions}')
-            sys.exit(-1)  # exit on error; recovery not possible
-    
-        second = None  # the 2nd tournament winner
-        secondIndex = None  # the index of the winner
-        score = 0  # the winning score
-        for i in range(TOURNEY):  # compare TOURNEY number of random hypothesis
-        
-            randomIndex: int = random.choice(positions)  # choose a random index in p.candidateHypotheses
-            candidate: Hypothesis = self.candidateHypotheses[randomIndex]  # get the hypothesis at the random index
-            
-            positions.remove(randomIndex)  # remove the chosen value from the list of indexes (avoids duplicates)
-            fitness = candidate.fitness  # get that hypothesis's fitness score
-        
-            if (second is None) or (score < fitness):  # if 2nd has not been set, or candidate is more fit
-                second = candidate  # then update it
-                score = fitness  # then update the score to higher fitness
-                secondIndex = randomIndex  # get the index of the winner
-    
-        try:
-            if first is None or second is None:
-                raise Exception(f'ERROR: Tournament could not set first or second correctly, first = {first}')
-        except Exception as err2:
-            lineNm2 = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
-            log.error(f'Tournament could not set first correctly, first = {first}, line number = {lineNm2}')
-            print(f'{str(err2)}, line = {lineNm2}')
-            sys.exit(-1)  # exit on error; recovery not possible
-    
-        # log.debug('Finished Tournament method')
-        one: Hypothesis = self.candidateHypotheses[firstIndex]
-        two = self.candidateHypotheses[secondIndex]
-        if one.ID == two.ID:
-            printError('CrossoverTournament failed to send to unique Hyptheses,\ninstead sent to duplicates')
-        return one, two
-        # ************ End of Tournament Selection ************* #
-
-    def mutate(self) -> Hypothesis:
-        """
-        Finds a random node and builds a new sub-tree starting at it. Currently mutate
-        uses the same grow & full methods as the initial population generation without
-        an offset. This means that mutate trees will still obey the max depth rule.
-        This will create a new CF and overwrite the one it chose to mutate.
-        """
-    
-        # * Get a Random Hypothesis using Tournament * #
-        parent: Hypothesis = self.__tournament()
-        log.debug(f'Tournament gave mutation Hypothesis {parent.ID}')  # ! Debugging Only !
-        
-        # * From the Hypothesis, Get a Random CF * #
-        randIndex: int = random.randint(0, M - 1)  # get a random index that's valid in cfList
-        randCF: ConstructedFeature = parent.cfList[randIndex]  # use it to get a random CF
-        
-        # * From the CF, Get a Random Node * #
-        tree: Tree = randCF.tree                   # get the tree from the CF
-        nodeID: str = randCF.tree.getRandomNode()  # get a random node ID from the CF's tree
-        node: Node = tree.getNode(nodeID)          # use the ID to get the Node object
-
-        # * Remove the Children of the Node * #
-        tree.removeChildren(nodeID)  # make sure the IDs of the children get deleted
-        
-        # * Perform Mutation on the Selected Node * #
-        # if we are at max depth or choose TERM, place an index of a relevant feature
-        if random.choice(['OPS', 'TERM']) == 'TERM' or tree.getDepth(nodeID, tree.root.ID) == MAX_DEPTH:
-            terminals = randCF.relevantFeatures   # get the indexes of the relevant features
-            node.data = random.choice(terminals)  # place a random index in the Node
-            
-        # if we are not at the max depth & have chosen OP, add a random operation & generate subtree
-        else:
-            node.data = random.choice(OPS)  # put a random operation in the node
-    
-            # randomly decide (50/50) which method to use to construct the new tree (grow or full)
-            if random.choice(['Grow', 'Full']) == 'Grow':  # * Grow * #
-                tree.grow(randCF.className, nodeID, MAX_DEPTH, TERMINALS, 0)
-            else:                                          # * Full * #
-                tree.full(randCF.className, nodeID, MAX_DEPTH, TERMINALS, 0)
-    
-        # * Force an Update of the Fitness Score * #
-        parent.updateFitness()
-        
-        print('Mutation Complete')
-        
-        return parent
-    
-    def crossover(self) -> typ.Tuple[Hypothesis, Hypothesis]:
-        """Performs the crossover operation on two trees"""
-
-        # ********** Get Two Random Hypotheses ********** #
-        parent1: Hypothesis
-        parent2: Hypothesis
-        parent1, parent2 = self.__crossoverTournament()
-        # *********************************************** #
-        
-        # ************************ Get a Random Class & Index ************************ #
-        randIndex = random.randint(0, M - 1)  # get a random index that's valid in cfList
-        classID = random.choice(CLASS_IDS)  # choose a random class
-        # **************************************************************************** #
-        
-        # * Use the Random Class & Index to get a CF from each Hypothesis * #
-        # + Feature 1
-        feature1: ConstructedFeature = parent1.getFeatures(classID)[randIndex]
-        tree1: Tree = feature1.tree  # get the tree
-        # + Feature 2
-        feature2: ConstructedFeature = parent2.getFeatures(classID)[randIndex]
-        tree2: Tree = feature2.tree  # get the tree
-        # ***************************************************************** #
-    
-        # * Check that the Hypotheses, Features, and Trees are not Duplicates * #
-        try:
-            if parent1.ID == parent2.ID:  # if the Hypotheses are the same
-                raise AssertionError('In Crossover, parent 1 is parent 2')
-            if feature1.ID == feature2.ID:  # if the Features are the same
-                raise AssertionError('In Crossover, feature 1 is feature 2')
-            if tree1 == tree2:  # if the Trees are the same
-                raise AssertionError('In crossover, Tree1 is Tree2')
-        except AssertionError as err:
-            printError(str(err))
-            log.error(err)
-            log.error(f'Parent 1 ID: {parent1.ID}')
-            log.error(f'Parent 2 ID: {parent2.ID}')
-            log.error(f'Feature 1: {feature1}')
-            log.error(f'Feature 2: {feature2}')
-            log.error(f'Tree 1:\n{tree1}')
-            log.error(f'Tree 2:\n{tree2}')
-            print(f'Parent 1 ID: {parent1.ID}')
-            print(f'Parent 2 ID: {parent2.ID}')
-            print(f'Feature 1: {feature1}')
-            print(f'Feature 2: {feature2}')
-            print(f'Tree 1:\n{tree1}')
-            print(f'Tree 2:\n{tree2}')
-            sys.exit(-1)
-        # ********************************************************************** #
-    
-        # ***** Get a Random Node from each Tree ***** #
-        nodeID_1: str = tree1.getRandomNode()
-        nodeID_2: str = tree2.getRandomNode()
-        # ******************************************** #
-        
-        # *************** Use the Random Nodes to Create Two Subtrees *************** #
-        branch1: str
-        p1: str
-        treeFromFeature1: Tree
-        # Get the Branch & Parent of the Subtree from CF1. This will tell use where to add it in CF 2
-        # Get the Subtree from CF1. This will be move to CF2 (nodeF1 will be root)
-        treeFromFeature1, p1, branch1 = tree1.removeSubtree(nodeID_1)
-
-        branch2: str
-        p2: str
-        treeFromFeature2: Tree
-        # Get the Branch & Parent of the Subtree from CF1. This will tell use where to add it in CF 2
-        # Get the Subtree from CF2. This will be move to CF1 (nodeF2 will be root)
-        treeFromFeature2, p2, branch2 = tree2.removeSubtree(nodeID_2)
-        # **************************************************************************** #
-
-        # ************************** swap the two subtrees ************************** #
-        # Add the Subtree from CF2 to the tree in CF1 (in the same location that the subtree1 was cut out)
-        tree1.addSubtree(subtree=treeFromFeature2, newParent=p1, orphanBranch=branch1)
-        # Add the Subtree from CF1 to the tree in CF2 (in the same location that the subtree2 was cut out)
-        tree2.addSubtree(subtree=treeFromFeature1, newParent=p2, orphanBranch=branch2)
-        # **************************************************************************** #
-    
-        # *************** Force the Hypotheses to Update their Values *************** #
-        # + Parent 1
-        parent1.updateSize()  # force an update of size & fitness
-        parent1.updateFitness()
-        # + Parent 2
-        parent2.updateSize()  # force an update of size & fitness
-        parent2.updateFitness()
-        # **************************************************************************** #
-        
-        return parent1, parent2
+        # loop over all the candidate Hypoths looking
+        # for the Hypoth with the target ID
+        for cf in self.candidateHypotheses:
+            if cf.ID == target_ID:
+                return cf
+        printError(f'ERROR: Population could not Hypothesis with ID {target_ID}')
+        raise KeyError
 
     def evolve(self, bar) -> None:
         
@@ -1055,8 +804,6 @@ class Population:
         new_generation: typ.List[Hypothesis] = [self.elite]
         new_generation = list(filter(None, new_generation))  # remove any Nones
         
-        print('New Generation Initialized as:')  # ! Debugging Only !
-        pprint.pprint(new_generation)  # ! Debugging Only !
         log.debug(f'New Generation Initialized as:\n\t{pprint.pformat(new_generation, indent=1)}')  # ! Debugging Only !
 
         # this will tell us when we need to generate new IDs
@@ -1070,8 +817,8 @@ class Population:
             probability = random.uniform(0, 1)  # get a random number between 0 & 1
 
             # ***************** Mutate ***************** #
-            if True:
             # if probability < MUTATION_RATE:              # if probability is less than mutation rate, mutate
+            if True:
                 bar.text('mutating...')                  # update user
             
                 # !!!!!!!!!!!!!!!!!!!!!!!!!!!! ERROR !!!!!!!!!!!!!!!!!!!!!!!!! #
@@ -1079,7 +826,7 @@ class Population:
                 # ! it's changed, all the things that refer to it change to. ! #
                 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! #
             
-                mutant: Hypothesis = self.mutate()
+                mutant: Hypothesis = mutate(self)
                 log.debug(f'Hypothesis Mutated: {mutant.ID}')  # ! Debugging Only !
                 
                 # Check for duplicate IDs
@@ -1124,8 +871,6 @@ class Population:
         #     printError('New generation was created with a None, removing it makes it too short')
         #     sys.exit(-1)
 
-        print('New Generation Finalized as:')  # ! Debugging Only !
-        pprint.pprint(new_generation)          # ! Debugging Only !
         log.debug(f'New Generation Finalized as:\n\t{pprint.pformat(new_generation, indent=1)}')  # ! Debugging Only !
 
         # ************ Handle Elitism ************ #
@@ -1139,6 +884,288 @@ class Population:
         bar.text('Generation complete')
         return
     # ***************** End of Namespaces/Structs & Objects ******************* #
+
+
+# ******************************* Evolution Methods ******************************* #
+def tournament(current_population: Population) -> Hypothesis:
+    """
+    Used by evolution to selection the parent(s)
+
+    :return: The best hypothesis that tournament found.
+    :rtype: Hypothesis
+    """
+
+    # **************** Tournament Selection **************** #
+    # get a list including every valid index in candidateHypotheses
+    ids: typ.List[str] = copy.copy(current_population.IDs)  # get the list of IDs in the current pop
+    # the Hypoth with the best fitness that's been found so far
+    best: typ.Optional[Hypothesis] = None
+    score = 0  # the fitness of first
+
+    iterations = 0  # ! debugging only !
+
+    for i in range(TOURNEY):  # compare TOURNEY number of random hypothesis
+        iterations += 1  # ! debugging only !
+        
+        # * Get a Random Hypothesis Using a Random ID * #
+        candidate_hypoth: Hypothesis  # using a random ID from IDs, get a random Hypoth
+        candidate_hypoth = current_population.find_hypothesis(random.choice(ids))
+    
+        # * Remove the Chosen Hypothesis so Tournament Doesn't find it Again * #
+        ids.remove(candidate_hypoth.ID)  # removes it just for this tournament though
+    
+        # * Get the Fitness of the New Candidate * #
+        fitness = candidate_hypoth.fitness  # get the hypoths fitness score
+
+        # if this is our first iteration, set Best to the current candidate
+        if best is None:
+            best = candidate_hypoth
+            score = fitness
+    
+        # if this candidate has a higher fitness than the current Best, update Best
+        elif score < fitness:
+            best = candidate_hypoth
+            score = fitness
+
+    try:
+        if best is None:
+            raise Exception(f'ERROR: Tournament could not set first correctly, first = {best}')
+    except Exception as err2:
+        lineNm2 = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+        log.error(f'Tournament could not set first correctly, first = {best}, line number = {lineNm2}')
+        print(f'{str(err2)}, line = {lineNm2}')
+        sys.exit(-1)  # exit on error; recovery not possible
+
+    return copy.deepcopy(best)
+    # ************ End of Tournament Selection ************* #
+
+
+def crossoverTournament(current_population: Population) -> typ.Tuple[Hypothesis, Hypothesis]:
+    """
+    Used by crossover to selection the parents. It differs from the normal tournament
+    because it will return two unique hypotheses.
+
+    :return: Two hypothesis that tournament found.
+    :rtype: typ.Tuple[Hypothesis, Hypothesis]
+    """
+
+    # **************** Tournament Selection for Parent 1 **************** #
+    ids: typ.List[str] = copy.copy(current_population.IDs)  # get the list of IDs in the current pop
+    # the Hypoth with the best fitness that's been found so far
+    parent_1: typ.Optional[Hypothesis] = None
+    score = 0  # the fitness of first
+
+    for i in range(TOURNEY):  # compare TOURNEY number of random hypothesis
+    
+        # * Get a Random Hypothesis Using a Random ID * #
+        candidate_hypoth: Hypothesis
+        candidate_hypoth = current_population.find_hypothesis(random.choice(ids))
+    
+        # * Remove the Chosen Hypothesis so Tournament Doesn't find it Again * #
+        ids.remove(candidate_hypoth.ID)  # removes it just for this tournament though
+    
+        # * Get the Fitness of the New Candidate * #
+        fitness = candidate_hypoth.fitness  # get the hypoths fitness score
+    
+        # if this is our first iteration, set Best to the current candidate
+        if parent_1 is None:
+            parent_1 = candidate_hypoth
+            score = fitness
+    
+        # if this candidate has a higher fitness than the current Best, update Best
+        elif score < fitness:
+            parent_1 = candidate_hypoth
+            score = fitness
+
+    # **************** Tournament Selection for Parent 2 **************** #
+    ids = copy.copy(current_population.IDs)  # get fresh copy of the IDs
+    ids.remove(parent_1.ID)  # remove the other parent from the possible options
+    
+    # the Hypoth with the best fitness that's been found so far
+    parent_2: typ.Optional[Hypothesis] = None
+    score = 0  # reset the score
+
+    for i in range(TOURNEY):  # compare TOURNEY number of random hypothesis
+    
+        # * Get a Random Hypothesis Using a Random ID * #
+        candidate_hypoth = current_population.find_hypothesis(random.choice(ids))
+    
+        # * Remove the Chosen Hypothesis so Tournament Doesn't find it Again * #
+        ids.remove(candidate_hypoth.ID)  # removes it just for this tournament though
+    
+        # * Get the Fitness of the New Candidate * #
+        fitness = candidate_hypoth.fitness  # get the hypoths fitness score
+    
+        # if this is our first iteration, set Best to the current candidate
+        if parent_2 is None:
+            parent_2 = candidate_hypoth
+            score = fitness
+    
+        # if this candidate has a higher fitness than the current Best, update Best
+        elif score < fitness:
+            parent_2 = candidate_hypoth
+            score = fitness
+  
+    try:
+        if parent_1 is None or parent_2 is None:
+            raise Exception(f'ERROR: Tournament could not set parents correctly, \n\tp1 = {parent_1}\n\tp2 = {parent_2}')
+    except Exception as err:
+        lineNm2 = sys.exc_info()[-1].tb_lineno  # print line number error occurred on
+        msg: str = f'{str(err)}, line number = {lineNm2}'
+        log.error(msg)
+        print(msg)
+        sys.exit(-1)  # exit on error; recovery not possible
+
+    one: Hypothesis = current_population.find_hypothesis(parent_1.ID)
+    two: Hypothesis = current_population.find_hypothesis(parent_2.ID)
+    
+    if one.ID == two.ID:
+        printError('CrossoverTournament failed to send to unique Hyptheses,\ninstead sent to duplicates')
+
+    # NOTE: the value returned here (best) is a reference to a Hypothesis in current_population.
+    # NOTE:   It is NOT a copy, and must be copied later by Mutate/Crossover
+    return one, two
+    # ************ End of Tournament Selection ************* #
+
+
+# TODO: Mutate & Crossover should not be done in place & should create entirely new Hypotheses each time
+# ! WARNING: The current Hypotheses that they return are just references to Hypoths still in the population, this is creating major issues
+def mutate(current_pop: Population) -> Hypothesis:
+    """
+    Finds a random node and builds a new sub-tree starting at it. Currently mutate
+    uses the same grow & full methods as the initial population generation without
+    an offset. This means that mutate trees will still obey the max depth rule.
+    This will create a new CF and overwrite the one it chose to mutate.
+    """
+
+    # * Get a Random Hypothesis using Tournament * #
+    parent: Hypothesis = tournament(current_pop)  # ! This Hypoth is a reference
+    
+    log.debug(f'Tournament gave mutation Hypothesis {parent.ID}')  # ! Debugging Only !
+
+    # * From the Hypothesis, Get a Random CF * #
+    randIndex: int = random.randint(0, M - 1)  # get a random index that's valid in cfList
+    randCF: ConstructedFeature = parent.cfList[randIndex]  # use it to get a random CF
+
+    # * From the CF, Get a Random Node * #
+    tree: Tree = randCF.tree  # get the tree from the CF
+    nodeID: str = randCF.tree.getRandomNode()  # get a random node ID from the CF's tree
+    node: Node = tree.getNode(nodeID)  # use the ID to get the Node object
+
+    # * Remove the Children of the Node * #
+    tree.removeChildren(nodeID)  # make sure the IDs of the children get deleted
+
+    # * Perform Mutation on the Selected Node * #
+    # if we are at max depth or choose TERM, place an index of a relevant feature
+    if random.choice(['OPS', 'TERM']) == 'TERM' or tree.getDepth(nodeID, tree.root.ID) == MAX_DEPTH:
+        terminals = randCF.relevantFeatures  # get the indexes of the relevant features
+        node.data = random.choice(terminals)  # place a random index in the Node
+
+    # if we are not at the max depth & have chosen OP, add a random operation & generate subtree
+    else:
+        node.data = random.choice(OPS)  # put a random operation in the node
+    
+        # randomly decide (50/50) which method to use to construct the new tree (grow or full)
+        if random.choice(['Grow', 'Full']) == 'Grow':  # * Grow * #
+            tree.grow(randCF.className, nodeID, MAX_DEPTH, TERMINALS, 0)
+        else:  # * Full * #
+            tree.full(randCF.className, nodeID, MAX_DEPTH, TERMINALS, 0)
+
+    # * Force an Update of the Fitness Score * #
+    parent.updateFitness()
+
+    log.debug('Mutation Complete')
+
+    return parent
+
+
+def crossover(current_pop: Population) -> typ.Tuple[Hypothesis, Hypothesis]:
+    """Performs the crossover operation on two trees"""
+
+    # ********** Get Two Random Hypotheses ********** #
+    parent1: Hypothesis
+    parent2: Hypothesis
+    parent1, parent2 = crossoverTournament(current_pop)
+    # *********************************************** #
+
+    # ************************ Get a Random Class & Index ************************ #
+    randIndex = random.randint(0, M - 1)  # get a random index that's valid in cfList
+    classID = random.choice(CLASS_IDS)  # choose a random class
+    # **************************************************************************** #
+
+    # * Use the Random Class & Index to get a CF from each Hypothesis * #
+    # + Feature 1
+    feature1: ConstructedFeature = parent1.getFeatures(classID)[randIndex]
+    tree1: Tree = feature1.tree  # get the tree
+    # + Feature 2
+    feature2: ConstructedFeature = parent2.getFeatures(classID)[randIndex]
+    tree2: Tree = feature2.tree  # get the tree
+    # ***************************************************************** #
+
+    # * Check that the Hypotheses, Features, and Trees are not Duplicates * #
+    try:
+        if parent1.ID == parent2.ID:  # if the Hypotheses are the same
+            raise AssertionError('In Crossover, parent 1 is parent 2')
+        if feature1.ID == feature2.ID:  # if the Features are the same
+            raise AssertionError('In Crossover, feature 1 is feature 2')
+        if tree1 == tree2:  # if the Trees are the same
+            raise AssertionError('In crossover, Tree1 is Tree2')
+    except AssertionError as err:
+        printError(str(err))
+        log.error(err)
+        log.error(f'Parent 1 ID: {parent1.ID}')
+        log.error(f'Parent 2 ID: {parent2.ID}')
+        log.error(f'Feature 1: {feature1}')
+        log.error(f'Feature 2: {feature2}')
+        log.error(f'Tree 1:\n{tree1}')
+        log.error(f'Tree 2:\n{tree2}')
+        print(f'Parent 1 ID: {parent1.ID}')
+        print(f'Parent 2 ID: {parent2.ID}')
+        print(f'Feature 1: {feature1}')
+        print(f'Feature 2: {feature2}')
+        print(f'Tree 1:\n{tree1}')
+        print(f'Tree 2:\n{tree2}')
+        sys.exit(-1)
+    # ********************************************************************** #
+
+    # ***** Get a Random Node from each Tree ***** #
+    nodeID_1: str = tree1.getRandomNode()
+    nodeID_2: str = tree2.getRandomNode()
+    # ******************************************** #
+
+    # *************** Use the Random Nodes to Create Two Subtrees *************** #
+    branch1: str
+    p1: str
+    treeFromFeature1: Tree
+    # Get the Branch & Parent of the Subtree from CF1. This will tell use where to add it in CF 2
+    # Get the Subtree from CF1. This will be move to CF2 (nodeF1 will be root)
+    treeFromFeature1, p1, branch1 = tree1.removeSubtree(nodeID_1)
+
+    branch2: str
+    p2: str
+    treeFromFeature2: Tree
+    # Get the Branch & Parent of the Subtree from CF1. This will tell use where to add it in CF 2
+    # Get the Subtree from CF2. This will be move to CF1 (nodeF2 will be root)
+    treeFromFeature2, p2, branch2 = tree2.removeSubtree(nodeID_2)
+    # **************************************************************************** #
+
+    # ************************** swap the two subtrees ************************** #
+    # Add the Subtree from CF2 to the tree in CF1 (in the same location that the subtree1 was cut out)
+    tree1.addSubtree(subtree=treeFromFeature2, newParent=p1, orphanBranch=branch1)
+    # Add the Subtree from CF1 to the tree in CF2 (in the same location that the subtree2 was cut out)
+    tree2.addSubtree(subtree=treeFromFeature1, newParent=p2, orphanBranch=branch2)
+    # **************************************************************************** #
+
+    # *************** Force the Hypotheses to Update their Values *************** #
+    # + Parent 1
+    parent1.updateSize()  # force an update of size & fitness
+    parent1.updateFitness()
+    # + Parent 2
+    parent2.updateSize()  # force an update of size & fitness
+    parent2.updateFitness()
+    # **************************************************************************** #
+
+    return parent1, parent2
 
 
 def createInitialPopulation() -> Population:
@@ -1212,7 +1239,7 @@ def createInitialPopulation() -> Population:
             bar()                                  # update progress bar
 
     pop = Population(hypothesis, 0)
-    print(pop)  # ! Debugging Only !
+    # print(pop)  # ! Debugging Only !
     log.debug(f'{pop}\n')  # ! Debugging Only !
     return pop
 
@@ -1380,8 +1407,8 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
     CLASS_IDS = values['CLASS_IDS']
     DISTANCE_FUNCTION = distanceFunction
     DISTANCE_FUNCTION = ['DISTANCE_FUNCTION']
-    # POPULATION_SIZE = values['POPULATION_SIZE']
-    POPULATION_SIZE = 10  # ! This is for Testing Only. Change back when running "in production"
+    POPULATION_SIZE = values['POPULATION_SIZE']
+    # POPULATION_SIZE = 10  # ! This is for Testing Only. Change back when running "in production"
     INSTANCES_NUMBER = values['INSTANCES_NUMBER']
     LABEL_NUMBER = values['LABEL_NUMBER']
     M = values['M']
@@ -1409,7 +1436,7 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
             currentPopulation.evolve(bar)  # * Update the Population in Place * #
             # !!!!!!!!!!!!!!!!!!!!!!! Debugging Only !!!!!!!!!!!!!!!!!!!!!!! #
             # check_for_cf_copies(currentPopulation)
-            print(str(currentPopulation))
+            # print(str(currentPopulation))
             log.debug(str(currentPopulation))
             # print('Calling CF Number Check...')
             # check_CF_number(currentPopulation.candidateHypotheses)
