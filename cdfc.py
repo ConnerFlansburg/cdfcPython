@@ -724,7 +724,7 @@ class Population:
     :type generationNumber: int
     """
 
-    def __init__(self, candidateHypotheses: typ.List[Hypothesis], generationNumber: int) -> None:
+    def __init__(self, candidateHypotheses: typ.List[Hypothesis], generationNumber: int, isInitial: bool = False) -> None:
         """Constructor for the Population object"""
         
         # a list of all the candidate hypotheses
@@ -735,6 +735,12 @@ class Population:
         self._elite: typ.Optional[Hypothesis] = None
         # self._elite: typ.Optional[Hypothesis] = max(self.candidateHypotheses)
         self._IDs = None
+
+        if isInitial:
+            with alive_bar(title='Calculating Initial Fitness', total=len(candidateHypotheses)) as bar:
+                for hyp in self.candidateHypotheses:
+                    hyp.updateFitness()
+                    bar()
         
     @property
     def IDs(self):
@@ -817,8 +823,7 @@ class Population:
             probability = random.uniform(0, 1)  # get a random number between 0 & 1
 
             # ***************** Mutate ***************** #
-            # if probability < MUTATION_RATE:              # if probability is less than mutation rate, mutate
-            if True:
+            if probability < MUTATION_RATE:              # if probability is less than mutation rate, mutate
                 bar.text('mutating...')                  # update user
             
                 # !!!!!!!!!!!!!!!!!!!!!!!!!!!! ERROR !!!!!!!!!!!!!!!!!!!!!!!!! #
@@ -844,7 +849,7 @@ class Population:
             else:                                     # if probability is greater than mutation rate, use crossover
                 bar.text('crossing...')               # update user
                 new: typ.Tuple[Hypothesis, Hypothesis]
-                new = self.crossover()                # perform crossover operation
+                new = crossover(self)                # perform crossover operation
                 child_one: Hypothesis = new[0]
                 child_two: Hypothesis = new[1]
                 new_generation.append(child_one)      # add the new two new hypotheses
@@ -1016,8 +1021,8 @@ def crossoverTournament(current_population: Population) -> typ.Tuple[Hypothesis,
         print(msg)
         sys.exit(-1)  # exit on error; recovery not possible
 
-    one: Hypothesis = current_population.find_hypothesis(parent_1.ID)
-    two: Hypothesis = current_population.find_hypothesis(parent_2.ID)
+    one: Hypothesis = copy.deepcopy(current_population.find_hypothesis(parent_1.ID))
+    two: Hypothesis = copy.deepcopy(current_population.find_hypothesis(parent_2.ID))
     
     if one.ID == two.ID:
         printError('CrossoverTournament failed to send to unique Hyptheses,\ninstead sent to duplicates')
@@ -1039,7 +1044,8 @@ def mutate(current_pop: Population) -> Hypothesis:
     """
 
     # * Get a Random Hypothesis using Tournament * #
-    parent: Hypothesis = tournament(current_pop)  # ! This Hypoth is a reference
+    # This Hypothesis is a copy & should not effect the original
+    parent: Hypothesis = tournament(current_pop)
     
     log.debug(f'Tournament gave mutation Hypothesis {parent.ID}')  # ! Debugging Only !
 
@@ -1235,10 +1241,13 @@ def createInitialPopulation() -> Population:
     with alive_bar(POPULATION_SIZE, title="Initial Population") as bar:  # declare your expected total
         # creat a number hypotheses equal to pop size
         for p in range(POPULATION_SIZE):           # iterate as usual
-            hypothesis.append(createHypothesis())  # create & add the new hypothesis to the list
+            hyp: Hypothesis = createHypothesis()   # create a new hypothesis
+            hyp.updateFitness()                    # calculate the new hypothesis's fitness
+            hypothesis.append(hyp)                 # create & add the new hypothesis to the list
             bar()                                  # update progress bar
 
     pop = Population(hypothesis, 0)
+    
     # print(pop)  # ! Debugging Only !
     log.debug(f'{pop}\n')  # ! Debugging Only !
     return pop
@@ -1384,6 +1393,8 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
     :return: Hypothesis with the highest fitness score.
     :rtype: Hypothesis
     """
+    
+    log.debug('\n\nStarting New Fold')  # ! Debugging Only !
 
     values = dataIn[0]
     
@@ -1408,7 +1419,7 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
     DISTANCE_FUNCTION = distanceFunction
     DISTANCE_FUNCTION = ['DISTANCE_FUNCTION']
     # POPULATION_SIZE = values['POPULATION_SIZE']
-    POPULATION_SIZE = 100  # ! This is for Testing Only. Change back when running "in production"
+    POPULATION_SIZE = 10  # ! This is for Testing Only. Change back when running "in production"
     INSTANCES_NUMBER = values['INSTANCES_NUMBER']
     LABEL_NUMBER = values['LABEL_NUMBER']
     M = values['M']
@@ -1433,10 +1444,13 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
 
         for gen in range(GENERATIONS):  # iterate as usual
             
+            log.debug('\nStarting New Generation\n')
+            
             currentPopulation.evolve(bar)  # * Update the Population in Place * #
             # !!!!!!!!!!!!!!!!!!!!!!! Debugging Only !!!!!!!!!!!!!!!!!!!!!!! #
             # check_for_cf_copies(currentPopulation)
             # print(str(currentPopulation))
+            log.debug(f'\nPopulation Generation {gen}')
             log.debug(str(currentPopulation))
             # print('Calling CF Number Check...')
             # check_CF_number(currentPopulation.candidateHypotheses)
@@ -1450,6 +1464,7 @@ def cdfc(dataIn, distanceFunction) -> Hypothesis:
     bestHypothesis: Hypothesis = max(currentPopulation.candidateHypotheses)
     bestHypothesis = max([bestHypothesis, currentPopulation.elite])
 
-    log.debug(f'Hypothesis choosen as best is: \n\t{str(bestHypothesis)}')  # ! Debugging Only !
+    log.debug(f'Best {str(bestHypothesis)}')  # ! Debugging Only !
+    log.debug('End of Fold\n')
 
     return bestHypothesis  # return the best hypothesis generated
